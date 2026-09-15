@@ -5,19 +5,22 @@ exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 exec $SENTIENTS --no-color create module blog-manager
 exec sh -c 'mkdir -p public/assets/blog-manager'
 exec sh -c 'echo "logo" > public/assets/blog-manager/logo.txt'
+exec sh -c 'mkdir -p src/app/blog-manager'
+exec sh -c 'echo "page" > src/app/blog-manager/page.tsx'
 
-# TC-009 — `pack` d'un module existant, archive .smp produite.
+# TC-009 — `pack` of an existing module, produces the .smp archive.
 exec $SENTIENTS --no-color pack blog-manager
-stdout '✓ Archive créée avec succès'
-stdout 'Module : blog-manager v0.1.0'
-exists .sentients/build/blog-manager-0.1.0.smp
+stdout '✓ Archive created successfully'
+stdout 'Module : blog-manager v1.0.0'
+exists .sentients/build/blog-manager-1.0.0.smp
 
-# TC-010 — l'archive contient le manifest et les assets du module.
-exec sh -c 'unzip -l .sentients/build/blog-manager-0.1.0.smp | grep -q "external_modules/blog-manager/manifest.json"'
-exec sh -c 'unzip -l .sentients/build/blog-manager-0.1.0.smp | grep -q "public/assets/blog-manager/logo.txt"'
+# TC-010 — the archive contains the module manifest, app sources and assets.
+exec sh -c 'unzip -l .sentients/build/blog-manager-1.0.0.smp | grep -q "external_modules/blog-manager/manifest.json"'
+exec sh -c 'unzip -l .sentients/build/blog-manager-1.0.0.smp | grep -q "src/app/blog-manager/page.tsx"'
+exec sh -c 'unzip -l .sentients/build/blog-manager-1.0.0.smp | grep -q "public/assets/blog-manager/logo.txt"'
 
-# Module inexistant : exit 3 (ExitModuleNotFound).
+# Missing module: exit 3 (ExitModuleNotFound).
 ! exec $SENTIENTS --no-color pack missing
-stderr 'n.existe pas dans external_modules'
+stderr 'does not exist in external_modules'
 exec sh -c '"$SENTIENTS" --no-color pack missing >/dev/null 2>&1; echo $?'
 stdout '^3$'

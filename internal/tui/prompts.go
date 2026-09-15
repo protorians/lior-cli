@@ -1,13 +1,15 @@
 package tui
 
 import (
-	"fmt"
+	"errors"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
 // inputModel is a Bubble Tea model wrapping a text input.
@@ -15,7 +17,6 @@ type inputModel struct {
 	title  string
 	input  textinput.Model
 	secret bool
-	focus  bool
 	result string
 	cancel bool
 }
@@ -25,6 +26,12 @@ func (m inputModel) Init() tea.Cmd {
 }
 
 func (m inputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// textinput ignores every keystroke while unfocused, and Init/View receive
+	// copies of the model (their mutations are discarded), so focus must be
+	// applied here, on the model that will be returned.
+	if !m.input.Focused() {
+		m.input.Focus()
+	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -42,23 +49,18 @@ func (m inputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m inputModel) View() string {
-	if !m.focus {
-		m.input.Focus()
-		m.focus = true
-	}
 	if m.secret {
 		m.input.EchoMode = textinput.EchoPassword
 		m.input.EchoCharacter = '•'
 	}
-	title := NewStyles().Accent.Render("? ")
-	title += NewStyles().Info.Render(m.title)
-	return title + " : " + m.input.View() + "\n"
+	s := NewStyles()
+	return s.questionMark() + " " + s.SubHeader.Render(m.title) + " : " + m.input.View() + "\n"
 }
 
 // askInput runs an interactive text input prompt.
 func askInput(title, placeholder string, secret bool) (string, bool, error) {
 	if !IsInteractive() {
-		return "", true, RequireInteractive("La saisie")
+		return "", true, RequireInteractive(i18n.T("tui.input"))
 	}
 	s := NewStyles()
 	input := textinput.New()
@@ -67,8 +69,9 @@ func askInput(title, placeholder string, secret bool) (string, bool, error) {
 	input.Width = 48
 	input.Prompt = ""
 	input.PromptStyle = s.Accent
-	input.PlaceholderStyle = s.Muted
-	input.TextStyle = s.Info
+	input.PlaceholderStyle = s.Hint
+	input.TextStyle = s.Value
+	input.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(s.palette.accent))
 
 	m := inputModel{title: title, input: input, secret: secret}
 	p := tea.NewProgram(m)
@@ -78,7 +81,7 @@ func askInput(title, placeholder string, secret bool) (string, bool, error) {
 	}
 	fm, ok := final.(inputModel)
 	if !ok {
-		return "", false, fmt.Errorf("prompt terminé de manière inattendue")
+		return "", false, errors.New(i18n.T("tui.error.input_unexpected"))
 	}
 	if fm.cancel {
 		return "", true, nil
@@ -93,7 +96,7 @@ func AskText(title, placeholder string) (string, error) {
 		return "", err
 	}
 	if cancelled {
-		return "", fmt.Errorf("opération annulée")
+		return "", errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return value, nil
 }
@@ -105,7 +108,7 @@ func AskSecret(title string) (string, error) {
 		return "", err
 	}
 	if cancelled {
-		return "", fmt.Errorf("opération annulée")
+		return "", errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return value, nil
 }
@@ -153,20 +156,29 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m selectModel) View() string {
+	s := NewStyles()
+	var b strings.Builder
 	if m.title != "" {
-		return NewStyles().Accent.Render("? "+m.title) + "\n" + m.list.View() + "\n"
+		b.WriteString(s.questionMark())
+		b.WriteString(" ")
+		b.WriteString(s.DimTitle.Render(m.title))
+		b.WriteString("\n\n")
 	}
-	return m.list.View() + "\n"
+	b.WriteString(m.list.View())
+	b.WriteString("\n")
+	b.WriteString(s.NavBar())
+	b.WriteString("\n")
+	return b.String()
 }
 
 // Select presents a menu of options and returns the selected label.
 // An empty item list is an error.
 func Select(title string, items []string) (string, error) {
 	if !IsInteractive() {
-		return "", RequireInteractive("La sélection")
+		return "", RequireInteractive(i18n.T("tui.selection"))
 	}
 	if len(items) == 0 {
-		return "", fmt.Errorf("aucune option disponible")
+		return "", errors.New(i18n.T("tui.error.no_options"))
 	}
 
 	raw := make([]list.Item, 0, len(items))
@@ -186,10 +198,16 @@ func Select(title string, items []string) (string, error) {
 	delegate.ShowDescription = false
 	delegate.Styles = list.NewDefaultItemStyles()
 	s := NewStyles()
-	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(lipgloss.Color(s.palette.accent)).Bold(true)
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(s.palette.accent)).
+		Background(lipgloss.Color(s.palette.soft)).
+		Bold(true).
+		PaddingLeft(1)
 	delegate.Styles.SelectedDesc = delegate.Styles.SelectedTitle
-	delegate.Styles.NormalTitle = lipgloss.NewStyle()
+	delegate.Styles.NormalTitle = lipgloss.NewStyle().PaddingLeft(1).Foreground(lipgloss.Color(s.palette.text))
 	delegate.Styles.NormalDesc = delegate.Styles.NormalTitle
+	delegate.Styles.DimmedTitle = lipgloss.NewStyle().PaddingLeft(1).Foreground(lipgloss.Color(s.palette.muted))
+	delegate.Styles.DimmedDesc = delegate.Styles.DimmedTitle
 
 	l := list.New(raw, delegate, min(maxWidth+12, 80), len(items)+2)
 	l.SetShowHelp(false)
@@ -204,10 +222,10 @@ func Select(title string, items []string) (string, error) {
 	}
 	fm, ok := final.(selectModel)
 	if !ok {
-		return "", fmt.Errorf("sélection terminée de manière inattendue")
+		return "", errors.New(i18n.T("tui.error.selection_unexpected"))
 	}
 	if fm.cancel {
-		return "", fmt.Errorf("opération annulée")
+		return "", errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return fm.result, nil
 }
@@ -246,12 +264,28 @@ func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m confirmModel) View() string {
-	dflt := "Oui"
+	dflt := i18n.T("tui.confirm.yes")
 	if !m.defYes {
-		dflt = "Non"
+		dflt = i18n.T("tui.confirm.no")
 	}
 	s := NewStyles()
-	return s.Accent.Render("? "+m.title) + " (oui/non) [" + s.Info.Render(dflt) + "] : \n"
+	yes := i18n.T("tui.confirm.yes")
+	no := i18n.T("tui.confirm.no")
+	hints := "(" + s.Info.Render(strings.ToLower(yes)) + "/" +
+		s.Info.Render(strings.ToLower(no)) + ")"
+	return s.questionMark() + " " + s.SubHeader.Render(m.title) + " " + s.Hint.Render(hints) +
+		" [" + s.Focus.Render(dflt) + "] :\n"
+}
+
+// questionMark renders the interactive badge used by every prompt.
+func (s *Styles) questionMark() string {
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(s.palette.accent)).
+		Foreground(lipgloss.Color(s.palette.soft)).
+		Bold(true).
+		Padding(0, 1).
+		SetString("?").
+		Render()
 }
 
 // ConfirmYesEnv forces confirmations to succeed in non-interactive runs
@@ -260,13 +294,13 @@ const ConfirmYesEnv = "SENTIENT_CLI_YES"
 
 // Confirm asks a yes/no question. defYes is the answer given by pressing
 // strictly <enter>. In non-interactive runs the answer comes from
-// `SENTIENT_CLI_YES` (truthy → oui, empty → erreur explicite).
+// `SENTIENT_CLI_YES` (truthy → yes, empty → explicit error).
 func Confirm(title string, defYes bool) (bool, error) {
 	if !IsInteractive() {
 		if os.Getenv(ConfirmYesEnv) != "" {
 			return true, nil
 		}
-		return false, RequireInteractive("La confirmation")
+		return false, RequireInteractive(i18n.T("tui.confirmation"))
 	}
 	m := confirmModel{title: title, defYes: defYes}
 	p := tea.NewProgram(m)
@@ -276,10 +310,10 @@ func Confirm(title string, defYes bool) (bool, error) {
 	}
 	fm, ok := final.(confirmModel)
 	if !ok {
-		return false, fmt.Errorf("confirmation terminée de manière inattendue")
+		return false, errors.New(i18n.T("tui.error.confirm_unexpected"))
 	}
 	if fm.cancel {
-		return false, fmt.Errorf("opération annulée")
+		return false, errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return fm.result, nil
 }

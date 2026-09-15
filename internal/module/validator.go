@@ -3,12 +3,13 @@ package module
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
 
@@ -73,7 +74,7 @@ func count(findings []Finding, level string) int {
 func (v *Validator) ValidateModule(name string) (*Result, error) {
 	moduleDir := filepath.Join(v.Root, config.ExternalModulesDir, name)
 	if !pkg.DirExists(moduleDir) {
-		return nil, fmt.Errorf("module %q introuvable dans %s", name, moduleDir)
+		return nil, errors.New(i18n.Tf("val.module_not_found", name, moduleDir))
 	}
 
 	res := &Result{Module: name}
@@ -89,27 +90,27 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	}
 
 	// id
-	add(res, "manifest.json", "id", manifest.ID != "", "id présent")
+	add(res, "manifest.json", "id", manifest.ID != "", "id present")
 	// name
-	add(res, "manifest.json", "name", manifest.Name != "", "name présent")
+	add(res, "manifest.json", "name", manifest.Name != "", "name present")
 	// version (semver)
-	add(res, "manifest.json", "version", isSemver(manifest.Version), "version SemVer valide")
+	add(res, "manifest.json", "version", isSemver(manifest.Version), "valid SemVer version")
 	// token (UUID)
-	add(res, "manifest.json", "token", pkg.IsUUID(manifest.Token), "token UUID valide")
+	add(res, "manifest.json", "token", pkg.IsUUID(manifest.Token), "valid UUID token")
 	// entry exists
 	entryPath := filepath.Join(moduleDir, manifest.Entry)
-	add(res, "manifest.json", "entry", pkg.FileExists(entryPath), "fichier d'entrée présent")
-	// domain format warning
-	expectedDomain := "mod.sentients." + name
+	add(res, "manifest.json", "entry", pkg.FileExists(entryPath), "entry file present")
+	// domain format warning (canonical format uses concatenated lower name)
+	expectedDomain := "mod.sentients." + lowerName(name)
 	addLevel(res, "manifest.json", "domain", manifest.Domain == expectedDomain,
-		"domain au format mod.sentients.<name>", LevelWarning)
+		"domain in mod.sentients.<lowerName> format", LevelWarning)
 	// permissions must be an array (spec rule, WARNING severity)
 	addLevel(res, "manifest.json", "permissions", rawPermissionsIsArray(manifestPath),
-		"permissions est un tableau", LevelWarning)
+		"permissions is an array", LevelWarning)
 	// entry default export present in index.tsx
 	indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
 	addLevel(res, "index.tsx", "export", pkg.FileExists(indexPath) && containsDefaultExport(indexPath),
-		"fichier index.tsx avec export par défaut", LevelError)
+		"index.tsx file with default export", LevelError)
 
 	return res, nil
 }
@@ -119,7 +120,7 @@ func add(res *Result, category, rule string, ok bool, okMsg string) {
 	msg := okMsg
 	if !ok {
 		sev = LevelError
-		msg = rule + " invalide"
+		msg = rule + " invalid"
 	}
 	res.Findings = append(res.Findings, Finding{Category: category, Rule: rule, Severity: sev, Message: msg})
 }
@@ -129,7 +130,7 @@ func addLevel(res *Result, category, rule string, ok bool, okMsg string, warning
 	msg := okMsg
 	if !ok {
 		sev = warningSev
-		msg = rule + " non conforme"
+		msg = rule + " not compliant"
 	}
 	res.Findings = append(res.Findings, Finding{Category: category, Rule: rule, Severity: sev, Message: msg})
 }

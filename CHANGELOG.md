@@ -3,6 +3,31 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.1.0] - 2026-09-15
+
+### Added
+- **Internationalisation (i18n)** — interface bilingue `en-US` (défaut) / `fr-FR` : aide, descriptions, prompts, flags et erreurs sont traduits. La langue est résolue dans l'ordre `--lang` → `SENTIENT_CLI_LANG` → `cli.lang` de `sentients.config.json` → locale de l'OS (`LC_ALL`/`LC_MESSAGES`/`LANG`), avec repli sur `en-US`.
+- **Registre d'applications embarqué** — `app.config.json` est compilé dans le binaire (`//go:embed`) : chaque commande résout l'URL de base et le timeout des API (`sentient-auth`, `sentient-store`) depuis le registre, surchargeable par un `app.config.json` local remonté des répertoires ou par `SENTIENT_AUTH_API`.
+- **`create module` depuis le mockup hello-world** — le module est généré depuis un module de référence embarqué (Clean Architecture : `application/`, `domain/`, `infrastructure/`, `presentation/`, `manifest.json`, `index.tsx`), renommé avec le nom du module ; une page `src/app/<name>/page.tsx` est aussi scaffolée quand le manifest déclare une `uri`/`url`. Surcharges `SENTIENT_MODULE_MOCKUP` et `SENTIENT_PAGE_MOCKUP`.
+- **`init` par canal de release** — téléchargement du ZIP de release du template `protorians/sentients-socle` (au lieu d'un clone git) avec `--channel alpha|beta|rc|stable` (stable par défaut) ; les dossiers existants non vides ne sont plus écrasés sans accord explicite.
+- **`audit --output table|json`** — sortie machine (JSON) ou tableau pour les audits de modules.
+- **`unlink --sync-remote`** — synchronisation des métadonnées locales (nom, type, description) vers le produit distant avant le déliage.
+- **Scripts de développement** — `scripts/dev-uninstall.sh` ; `dev-install.sh` gagne `--build-only`, `--install-only` et `--prefix`.
+- **TUI** — aide thématisée (wordmark, sections teintées) et composants/styles cohérents, avec repli `--no-color` stable pour les tests E2E.
+
+### Changed
+- **Authentification sentient-auth** — la base URL n'est plus codée en dur : résolution `SENTIENT_AUTH_API` → registre workspace → registre embarqué ; le champ `device` devient une chaîne ; timeouts configurés par application (`api.timeout`).
+- **Configuration JSON** — `sentients.config.json` remplace le TOML (`.sentient-cli.toml`) avec des clés camelCase ; le parser TOML est retiré.
+- **User-Agent standardisé** `Protorians/5.0 (…) Senteints/<version>` sur toutes les requêtes HTTP de la CLI et de l'installeur npm.
+- **`pack`** inclut désormais `src/app/<module.url>/` dans l'archive `.smp`.
+
+### Removed
+- `scripts/release.sh` — le release passe par les tags git et les workflows CI/GoReleaser.
+
+### Docs
+- `docs/specs/sentient.md` réalignée sur le code (i18n FR-025/NFR-007, registre `app.config.json` TECH-009, FR-002/004/008/010/012/014/015) ; `docs/rapport-implementation.md` et `README.md` mis à jour (nouvelle config JSON, commandes et variables d'environnement).
+
+
 ## [v0.0.9] - 2026-09-12
 
 ### Changed
@@ -120,7 +145,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **init** — Cloner `protorians/sentient-cms` + installer les dépendances (détection bun/pnpm/yarn/npm)
+- **init** — Cloner `protorians/sentients-socle` + installer les dépendances (détection bun/pnpm/yarn/npm)
 - **create module** — Créer un module standardisé dans `external_modules/`
 - **connect** — Authentification via sentient-connect (email + mot de passe, MFA TOTP / backup codes)
 - **disconnect** — Invalider le token côté serveur et supprimer les credentials

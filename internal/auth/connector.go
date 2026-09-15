@@ -2,26 +2,23 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"os"
-	"path/filepath"
+	"time"
 
+	"github.com/protorians/sentient-cli/internal/appconfig"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
 
-// DefaultConnectAPI is the production base URL of the sentient-connect API.
-const DefaultConnectAPI = "https://connect.sentient.protorians.com"
-
-// EnvAPIBase overrides the default API base URL.
-const EnvAPIBase = "SENTIENT_CONNECT_API"
+// EnvAPIBase overrides the resolved API base URL.
+const EnvAPIBase = "SENTIENT_AUTH_API"
 
 // API paths (global `/api` prefix, Raiton envelope responses).
 const (
-	APISignInPage   = "/api/auth/sign-in"
-	APILogoutPage   = "/api/auth/logout"
-	APIRefreshPage  = "/api/auth/sessions/refresh"
-	APIChallengePage = "/api/mfa/challenge"
-	APITOTPVerify   = "/api/mfa/totp/verify"
+	APISignInPage     = "/api/auth/sign-in"
+	APILogoutPage     = "/api/auth/logout"
+	APIRefreshPage    = "/api/auth/sessions/refresh"
+	APIChallengePage  = "/api/mfa/challenge"
+	APITOTPVerify     = "/api/mfa/totp/verify"
 	APIRecoveryVerify = "/api/mfa/recovery/verify"
 )
 
@@ -57,12 +54,6 @@ func (u User) normalized() User {
 	return u
 }
 
-// Device identifies the connected device session.
-type Device struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
-}
-
 // SignInRequest is the payload for POST /api/auth/sign-in.
 type SignInRequest struct {
 	Email    string `json:"email,omitempty"`
@@ -75,7 +66,7 @@ type SignInRequest struct {
 type SignInResponse struct {
 	User          User           `json:"user"`
 	Token         string         `json:"token"`
-	Device        Device         `json:"device"`
+	Device        string         `json:"device"`
 	Organizations []Organization `json:"organizations,omitempty"`
 }
 
@@ -130,55 +121,51 @@ type VerifyResponse struct {
 	MFAToken    string `json:"mfaToken,omitempty"`
 }
 
-// Connector talks to the sentient-connect API.
+// Connector talks to the sentient-auth API.
 type Connector struct {
 	Client *pkg.Client
 }
 
-// apiBaseURL resolves the sentient-connect base URL. Resolution order:
-//  1. `SENTIENT_CONNECT_API` environment variable,
-//  2. `app.config.json` (sentient-connect.api.baseUrl) when present in the
-//     current working directory,
-//  3. the production default.
+// apiBaseURL resolves the sentient-auth base URL. Resolution order:
+//  1. `SENTIENT_AUTH_API` environment variable,
+//  2. workspace `app.config.json` (walked up from the current directory),
+//  3. the `app.config.json` registry embedded in the binary.
+//
+// The URL always comes from the API-side configuration of `sentient-auth`
+// (the `api.baseUrl` entry of `app.config.json`) — never a hardcoded domain.
 func apiBaseURL() string {
 	if v := os.Getenv(EnvAPIBase); v != "" {
 		return v
 	}
-	if base, ok := appConfigBaseURL(); ok {
-		return base
-	}
-	return DefaultConnectAPI
+	base, _ := appconfig.Resolved("").BaseURL(appconfig.AuthAppID)
+	return base
 }
 
-// appConfigBaseURL reads the workspace `app.config.json` when available and
-// returns the sentient-connect `api.baseUrl`.
-func appConfigBaseURL() (string, bool) {
-	path := filepath.Join(".", "app.config.json")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
+// apiTimeout resolves the sentient-auth API timeout from `app.config.json`
+// (`api.timeout`, milliseconds), falling back to the CLI default.
+func apiTimeout() time.Duration {
+	return appconfig.Resolved("").Timeout(appconfig.AuthAppID)
+}
+
+// DebugInfo returns the resolved API base URL and the configuration source
+// used to resolve it (env override, workspace file or embedded registry).
+func DebugInfo() (baseURL, source string) {
+	source = "none"
+	if v := os.Getenv(EnvAPIBase); v != "" {
+		return v, "env:" + EnvAPIBase
 	}
-	var cfg struct {
-		Applications map[string]struct {
-			API struct {
-				BaseURL string `json:"baseUrl"`
-			} `json:"api"`
-		} `json:"applications"`
+	cfg := appconfig.Resolved("")
+	base, ok := cfg.BaseURL(appconfig.AuthAppID)
+	if ok {
+		source = cfg.Source()
 	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return "", false
-	}
-	app, ok := cfg.Applications["sentient-connect"]
-	if !ok || app.API.BaseURL == "" {
-		return "", false
-	}
-	return app.API.BaseURL, true
+	return base, source
 }
 
 // NewConnector builds a connector against the resolved API base URL.
 func NewConnector() *Connector {
 	return &Connector{
-		Client: pkg.NewClient(apiBaseURL()),
+		Client: pkg.NewClientWithTimeout(apiBaseURL(), apiTimeout()),
 	}
 }
 

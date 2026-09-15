@@ -32,10 +32,19 @@ func TestCreateModuleStructure(t *testing.T) {
 	expected := []string{
 		"manifest.json",
 		"index.tsx",
+		"package.json",
 		"README.md",
-		"components/.gitkeep",
-		"hooks/.gitkeep",
-		"services/.gitkeep",
+		"application/service/blog-manager-api-service.ts",
+		"domain/blog-manager.interface.ts",
+		"domain/enums/blog-manager-status.enum.ts",
+		"infrastructure/routines/blog-manager-analytics.routine.ts",
+		"presentation/components/blog-manager-columns.tsx",
+		"presentation/components/blog-manager-data-grid.tsx",
+		"presentation/components/blog-manager-details-sheet.tsx",
+		"presentation/components/create-blog-manager-dialog.tsx",
+		"presentation/providers/blog-manager-header.provider.tsx",
+		"presentation/views/blog-manager.view.tsx",
+		"presentation/widgets/blog-manager.widget.tsx",
 	}
 	for _, rel := range expected {
 		p := filepath.Join(root, "external_modules", "blog-manager", filepath.FromSlash(rel))
@@ -43,6 +52,24 @@ func TestCreateModuleStructure(t *testing.T) {
 			t.Errorf("fichier attendu manquant : %s (%v)", p, err)
 		}
 	}
+
+	// The declaration declares a uri → the matching page is scaffolded.
+	page := filepath.Join(root, "src", "app", "blog-manager", "page.tsx")
+	if !pkg.FileExists(page) {
+		t.Errorf("page attendue manquante : %s", page)
+	}
+
+	// No mockup spelling must survive the rename.
+	dir := filepath.Join(root, "external_modules", "blog-manager")
+	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if strings.Contains(path, "hello-world") {
+			t.Errorf("résidu du mockup dans le chemin : %s", path)
+		}
+		return nil
+	})
 }
 
 func TestCreateModuleDescriptionInIndex(t *testing.T) {
@@ -55,7 +82,7 @@ func TestCreateModuleDescriptionInIndex(t *testing.T) {
 		t.Fatalf("lecture index.tsx: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, `description: "Gestion de blog et d'articles"`) {
+	if !strings.Contains(content, `description: 'Gestion de blog et d\'articles',`) {
 		t.Errorf("index.tsx doit contenir la description fournie:\n%s", content)
 	}
 }
@@ -83,6 +110,15 @@ func TestArchiveStructure(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(assetPath, []byte("<svg/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// app src dir (spec FR-010)
+	appSrcPath := filepath.Join(root, "src", "app", "blog-manager", "page.tsx")
+	if err := os.MkdirAll(filepath.Dir(appSrcPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(appSrcPath, []byte("<div/>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -121,6 +157,7 @@ func TestArchiveStructure(t *testing.T) {
 	for _, want := range []string{
 		"external_modules/blog-manager/manifest.json",
 		"external_modules/blog-manager/index.tsx",
+		"src/app/blog-manager/page.tsx",
 		"public/assets/blog-manager/logo.svg",
 	} {
 		if !strings.Contains(joined, want) {
@@ -253,8 +290,10 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	if m.Description != "Gestion de blog et d'articles" {
 		t.Errorf("Description = %q, want Gestion de blog et d'articles", m.Description)
 	}
-	if m.Publisher.ID != "dev_42" || m.Publisher.Name != "Jane Doe" {
-		t.Errorf("Publisher = %+v, want dev_42/Jane Doe", m.Publisher)
+	// Publisher comes from the reference mockup (present locally), so the
+	// remote publisher (dev_42) must NOT overwrite it.
+	if m.Publisher.ID != "sentient" || m.Publisher.Name != "Sentient Workspace" {
+		t.Errorf("Publisher = %+v, want sentient/Sentient Workspace (valeur locale préservée)", m.Publisher)
 	}
 
 	// Existing local metadata must NOT be overwritten.

@@ -19,9 +19,17 @@ func createTestModule(t *testing.T, root, name string) {
 	if _, err := creator.Create(name, "Test module"); err != nil {
 		t.Fatalf("Creator.Create(%q): %v", name, err)
 	}
-	sdkDir := filepath.Join(root, "node_modules", "@sentients", "sdk")
-	if err := os.MkdirAll(sdkDir, 0o755); err != nil {
-		t.Fatalf("création de node_modules/@sentients/sdk: %v", err)
+	// Stub every declared dependency in node_modules/ so the module audits
+	// cleanly, mirroring an installed project.
+	manifest, err := module.LoadManifest(filepath.Join(root, config.ExternalModulesDir, name, config.ManifestFileName))
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	for dep := range manifest.Dependencies {
+		depDir := filepath.Join(root, "node_modules", filepath.FromSlash(dep))
+		if err := os.MkdirAll(depDir, 0o755); err != nil {
+			t.Fatalf("création de node_modules/%s: %v", dep, err)
+		}
 	}
 }
 
@@ -112,6 +120,9 @@ func TestAuditArchitectureComponentsImportServices(t *testing.T) {
 
 	// Write a component that imports from services
 	compDir := filepath.Join(root, config.ExternalModulesDir, "bad-module", "components")
+	if err := os.MkdirAll(compDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	compFile := filepath.Join(compDir, "Widget.tsx")
 	if err := os.WriteFile(compFile, []byte(`import { fetchData } from "../services/api";`), 0o644); err != nil {
 		t.Fatal(err)
@@ -141,6 +152,9 @@ func TestAuditArchitectureServicesJSX(t *testing.T) {
 
 	// Write a service file containing JSX
 	svcDir := filepath.Join(root, config.ExternalModulesDir, "jsx-service", "services")
+	if err := os.MkdirAll(svcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	svcFile := filepath.Join(svcDir, "api.ts")
 	if err := os.WriteFile(svcFile, []byte(`// @jsx react
 const el = <div>hello</div>;
@@ -358,33 +372,33 @@ func TestAuditResultTotals(t *testing.T) {
 	}
 }
 
-func TestAuditIndexAsyncRender(t *testing.T) {
+func TestAuditIndexMissingDeclaration(t *testing.T) {
 	root := setupAuditProject(t)
-	createTestModule(t, root, "no-async")
+	createTestModule(t, root, "no-declaration")
 
-	// Overwrite index.tsx to remove async
-	indexPath := filepath.Join(root, config.ExternalModulesDir, "no-async", "index.tsx")
+	// Overwrite index.tsx so it no longer declares a module (no identifier/widgets).
+	indexPath := filepath.Join(root, config.ExternalModulesDir, "no-declaration", "index.tsx")
 	if err := os.WriteFile(indexPath, []byte(`export default { name: "test" };`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("no-async")
+	result, err := auditor.AuditModules("no-declaration")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
 
 	found := false
 	for _, f := range result.Modules[0].Findings {
-		if f.Category == "index.tsx" && f.Rule == "render" {
+		if f.Category == "index.tsx" && f.Rule == "declaration" {
 			found = true
 			if f.Severity != module.LevelError {
-				t.Errorf("render non async doit être ERROR, reçu %s", f.Severity)
+				t.Errorf("déclaration manquante doit être ERROR, reçu %s", f.Severity)
 			}
 			break
 		}
 	}
 	if !found {
-		t.Error("finding pour render async attendu")
+		t.Error("finding pour déclaration de module attendu")
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/protorians/sentient-cli/internal/auth"
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/store"
@@ -17,14 +18,14 @@ import (
 
 var linkCmd = &cobra.Command{
 	Use:   "link [module] [token]",
-	Short: "Lier un module local à un module distant",
-	Long: `Lie un module créé dans sentient-connect avec le module local (via son token).
+	Short: "Link a local module to a remote module",
+	Long: `Links a module created in sentient-connect with the local module (via its token).
 
-Vérifie l'authentification, liste les modules en ligne, et associe
-le module local choisi au token distant fourni.
+Checks authentication, lists the online modules, and associates
+the chosen local module with the provided remote token.
 
-En mode non interactif (CI), fournissez le module local et le token
-distant en arguments : link <module> <token>.`,
+In non-interactive (CI) mode, provide the local module and the remote
+token as arguments: link <module> <token>.`,
 	Args: cobra.MaximumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runLink(cmd, args)
@@ -33,13 +34,13 @@ distant en arguments : link <module> <token>.`,
 
 var unlinkCmd = &cobra.Command{
 	Use:   "unlink [module]",
-	Short: "Délier un module local de sentient-connect",
-	Long: `Délie un module local de son correspondant dans sentient-connect.
-Le token du manifest.json est remplacé par un nouveau token UUID local.
+	Short: "Unlink a local module from sentient-connect",
+	Long: `Unlinks a local module from its counterpart in sentient-connect.
+The manifest.json token is replaced with a new local UUID token.
 
---sync-remote synchronise d'abord les métadonnées locales (nom, type,
-description) vers le produit distant via PUT /api/developer-store/modules/:id
-(best-effort, nécessite d'être connecté).`,
+--sync-remote first syncs the local metadata (name, type,
+description) to the remote product via PUT /api/developer-store/modules/:id
+(best-effort, requires being connected).`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runUnlink(cmd, args)
@@ -50,7 +51,9 @@ var flagUnlinkSyncRemote bool
 
 func init() {
 	unlinkCmd.Flags().BoolVar(&flagUnlinkSyncRemote, "sync-remote", false,
-		"mettre à jour les métadonnées du module distant avant la déliaison")
+		i18n.T("flag.sync_remote"))
+	i18nHelp(linkCmd, "cmd.link.short", "cmd.link.long")
+	i18nHelp(unlinkCmd, "cmd.unlink.short", "cmd.unlink.long")
 }
 
 func runLink(cmd *cobra.Command, args []string) error {
@@ -62,16 +65,16 @@ func runLink(cmd *cobra.Command, args []string) error {
 	// Check auth
 	sess, err := auth.LoadSession(auth.NewStore())
 	if err != nil || sess == nil || !sess.IsAuthenticated() {
-		return pkg.NewErrorWithFix("Authentification",
-			"vous devez être connecté pour lier un module",
-			"Exécutez 'sentients connect' d'abord.", pkg.ExitAuth)
+		return pkg.NewErrorWithFix(i18n.T("cat.authentication"),
+			i18n.T("link.error.not_connected"),
+			i18n.T("publish.error.connect.fix"), pkg.ExitAuth)
 	}
 
 	// Non-interactive: module + token supplied as arguments.
 	if !tui.IsInteractive() && len(args) < 2 {
-		return pkg.NewErrorWithFix("Sélection",
-			"le mode non interactif exige le module local et le token distant",
-			"Utilisez 'sentients link <module> <token>'.", pkg.ExitError)
+		return pkg.NewErrorWithFix(i18n.T("cat.selection"),
+			i18n.T("link.error.non_interactive"),
+			i18n.T("link.error.non_interactive.fix"), pkg.ExitError)
 	}
 
 	// Select local module
@@ -88,18 +91,18 @@ func runLink(cmd *cobra.Command, args []string) error {
 	client := store.NewClient()
 	client.SetToken(sess.AccessToken)
 
-	remoteModules, err := tui.RunWithSpinner("Récupération des modules distants…", func() ([]store.RemoteModule, error) {
+	remoteModules, err := tui.RunWithSpinner(i18n.T("link.spinner.fetch"), func() ([]store.RemoteModule, error) {
 		return client.ListModules(context.Background())
 	})
 	if err != nil {
-		return pkg.NewErrorWithFix("Store", err.Error(),
-			"Vérifiez votre connexion et votre authentification.", pkg.ExitNetwork)
+		return pkg.NewErrorWithFix(i18n.T("cat.store"), err.Error(),
+			i18n.T("link.error.fetch.fix"), pkg.ExitNetwork)
 	}
 
 	if len(remoteModules) == 0 && len(args) < 2 {
-		return pkg.NewErrorWithFix("Store",
-			"aucun module trouvé dans sentient-connect",
-			"Publiez d'abord un module avec 'sentients publish', ou fournissez le token en argument : 'sentients link <module> <token>'.",
+		return pkg.NewErrorWithFix(i18n.T("cat.store"),
+			i18n.T("link.error.no_modules"),
+			i18n.T("link.error.no_modules.fix"),
 			pkg.ExitError)
 	}
 
@@ -112,24 +115,24 @@ func runLink(cmd *cobra.Command, args []string) error {
 		for _, m := range remoteModules {
 			items = append(items, fmt.Sprintf("%s — %s v%s", m.Token, m.Name, m.Version))
 		}
-		selected, err := tui.Select("Module distant à lier", items)
+		selected, err := tui.Select(i18n.T("link.prompt.remote"), items)
 		if err != nil {
 			return err
 		}
 		remoteToken = strings.Split(selected, " — ")[0]
 	} else {
-		return pkg.NewError("Sélection",
-			"fournissez le token du module distant en argument",
+		return pkg.NewError(i18n.T("cat.selection"),
+			i18n.T("link.error.no_token"),
 			pkg.ExitError)
 	}
 
 	// Validate remote module
-	remote, err := tui.RunWithSpinner("Vérification du module distant…", func() (*store.RemoteModuleResponse, error) {
+	remote, err := tui.RunWithSpinner(i18n.T("link.spinner.verify"), func() (*store.RemoteModuleResponse, error) {
 		return client.GetModule(context.Background(), remoteToken)
 	})
 	if err != nil {
-		return pkg.NewErrorWithFix("Store", err.Error(),
-			"Le token distant est invalide ou le module n'existe pas.", pkg.ExitError)
+		return pkg.NewErrorWithFix(i18n.T("cat.store"), err.Error(),
+			i18n.T("link.error.remote.fix"), pkg.ExitError)
 	}
 
 	// Link
@@ -143,14 +146,18 @@ func runLink(cmd *cobra.Command, args []string) error {
 		PublisherName: remote.Publisher.Name,
 	})
 	if err != nil {
-		return pkg.NewError("Liaison", err.Error(), pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.link"), err.Error(), pkg.ExitError)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Module lié avec succès"))
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Local"), config.ExternalModulesDir+"/"+result.LocalModule+"/")
-	fmt.Printf("  %s : %s (%s v%s)\n", s.Muted.Render("Distant"), result.RemoteToken, result.RemoteName, result.RemoteVersion)
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("link.success")),
+		s.KeyValue(i18n.T("label.local"), config.ExternalModulesDir+"/"+result.LocalModule+"/"),
+		s.KeyValue(i18n.T("label.remote"),
+			fmt.Sprintf("%s (%s v%s)", result.RemoteToken, result.RemoteName, result.RemoteVersion)),
+	))
+	fmt.Println()
 	return nil
 }
 
@@ -168,8 +175,8 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(linked) == 0 {
-		return pkg.NewError("Module",
-			"aucun module lié à un module distant trouvé dans external_modules",
+		return pkg.NewError(i18n.T("cat.module"),
+			i18n.T("link.error.none_linked"),
 			pkg.ExitModuleNotFound)
 	}
 
@@ -179,9 +186,9 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 		localName = args[0]
 		if !pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, localName)) {
 			return pkg.NewErrorWithFix(
-				"Module",
-				fmt.Sprintf("le module %q n'existe pas dans %s", localName, config.ExternalModulesDir),
-				"Vérifiez le nom du module.",
+				i18n.T("cat.module"),
+				i18n.Tf("link.error.module_absent", localName, config.ExternalModulesDir),
+				i18n.T("link.error.module_absent.fix"),
 				pkg.ExitModuleNotFound,
 			)
 		}
@@ -193,17 +200,17 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 			}
 		}
 		if !linkedOk {
-			return pkg.NewError("Module",
-				fmt.Sprintf("le module %q n'est pas lié à un module distant", localName),
+			return pkg.NewError(i18n.T("cat.module"),
+				i18n.Tf("link.error.not_linked", localName),
 				pkg.ExitError)
 		}
 	} else if len(linked) > 1 {
 		if !tui.IsInteractive() {
-			return pkg.NewError("Sélection",
-				"plusieurs modules liés, fournissez le nom du module en argument",
+			return pkg.NewError(i18n.T("cat.selection"),
+				i18n.T("link.error.multi"),
 				pkg.ExitError)
 		}
-		selected, err := tui.Select("Sélectionner le module à délier", linked)
+		selected, err := tui.Select(i18n.T("link.prompt.unlink"), linked)
 		if err != nil {
 			return err
 		}
@@ -218,25 +225,25 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 		if m.Name == "" {
 			remote = m.Version
 		}
-		fmt.Printf("  Actuellement lié à : %s %s\n", m.Token, remote)
+		fmt.Println(i18n.Tf("link.current", m.Token, remote))
 	}
 
 	// Optional remote metadata sync before unlinking (PUT /modules/:id).
 	if flagUnlinkSyncRemote {
 		remoteToken := linker.RemoteToken(localName)
 		if remoteToken == "" {
-			warn("aucun module distant associé, synchronisation ignorée")
+			warn(i18n.T("link.warn.no_remote"))
 		} else if err := syncRemoteBeforeUnlink(root, localName, remoteToken); err != nil {
-			debugf("synchronisation distante avant déliaison : %v", err)
-			warn("synchronisation distante impossible : " + err.Error())
+			debugf("remote sync before unlink: %v", err)
+			warn(i18n.Tf("link.warn.sync_failed", err.Error()))
 		} else {
-			fmt.Println("  ✓ Métadonnées synchronisées vers le module distant")
+			fmt.Println(i18n.T("link.success.synced"))
 		}
 	}
 
 	// Confirm
 	if tui.IsInteractive() {
-		confirm, err := tui.Confirm(fmt.Sprintf("Délier le module %q ?", localName), false)
+		confirm, err := tui.Confirm(i18n.Tf("link.confirm.unlink", localName), false)
 		if err != nil {
 			return err
 		}
@@ -246,14 +253,16 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := linker.Unlink(localName); err != nil {
-		return pkg.NewError("Déliaison", err.Error(), pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.unlink"), err.Error(), pkg.ExitError)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Module délié avec succès"))
-	fmt.Printf("  %s n'est plus lié à un module distant.\n",
-		s.Muted.Render(config.ExternalModulesDir+"/"+localName+"/"))
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("link.success.unlink")),
+		s.Value.Render(i18n.Tf("link.unlinked", config.ExternalModulesDir+"/"+localName+"/")),
+	))
+	fmt.Println()
 	return nil
 }
 
@@ -262,7 +271,7 @@ func runUnlink(cmd *cobra.Command, args []string) error {
 func syncRemoteBeforeUnlink(root, localName, remoteToken string) error {
 	sess, err := auth.LoadSession(auth.NewStore())
 	if err != nil || sess == nil || !sess.IsAuthenticated() {
-		return fmt.Errorf("non connecté — exécutez 'sentients connect'")
+		return fmt.Errorf("%s", i18n.T("auth.error.not_authenticated"))
 	}
 	m, err := module.LoadManifest(config.ManifestPath(root, localName))
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
 // GitHubRelease is the minimal representation of a GitHub release for version
@@ -70,10 +72,7 @@ func CheckForUpdate(currentVersion string) string {
 		return ""
 	}
 
-	return fmt.Sprintf(
-		"Mise à jour disponible : v%s → v%s\n  → https://github.com/protorians/sentient-cli/releases/latest",
-		currentClean, latestClean,
-	)
+	return i18n.Tf("update.available", currentClean, latestClean)
 }
 
 // skipUpdate reports whether the network check is disabled by configuration.
@@ -104,7 +103,7 @@ func fetchLatestVersion() (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "sentient-cli")
+	req.Header.Set("User-Agent", UserAgent())
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -45,7 +45,7 @@ type Linker struct {
 func (l *Linker) Link(name string, remote RemoteInfo) (*LinkResult, error) {
 	moduleDir := filepath.Join(l.Root, config.ExternalModulesDir, name)
 	if !pkg.DirExists(moduleDir) {
-		return nil, fmt.Errorf("le module %q n'existe pas dans %s", name, config.ExternalModulesDir)
+		return nil, fmt.Errorf("module %q does not exist in %s", name, config.ExternalModulesDir)
 	}
 
 	manifestPath := filepath.Join(moduleDir, config.ManifestFileName)
@@ -69,7 +69,7 @@ func (l *Linker) Link(name string, remote RemoteInfo) (*LinkResult, error) {
 		m.Publisher.Name = remote.PublisherName
 	}
 	if err := m.Save(manifestPath); err != nil {
-		return nil, fmt.Errorf("mise à jour du manifest impossible : %w", err)
+		return nil, fmt.Errorf("failed to update manifest: %w", err)
 	}
 
 	// Record the association so LinkedModules does not depend on the token
@@ -77,7 +77,7 @@ func (l *Linker) Link(name string, remote RemoteInfo) (*LinkResult, error) {
 	state := l.loadLinks()
 	state.Modules[name] = remote.Token
 	if err := l.saveLinks(state); err != nil {
-		return nil, fmt.Errorf("enregistrement de la liaison impossible : %w", err)
+		return nil, fmt.Errorf("failed to record the link: %w", err)
 	}
 
 	remoteName := remote.Name
@@ -101,7 +101,7 @@ func (l *Linker) Link(name string, remote RemoteInfo) (*LinkResult, error) {
 func (l *Linker) Unlink(name string) error {
 	moduleDir := filepath.Join(l.Root, config.ExternalModulesDir, name)
 	if !pkg.DirExists(moduleDir) {
-		return fmt.Errorf("le module %q n'existe pas dans %s", name, config.ExternalModulesDir)
+		return fmt.Errorf("module %q does not exist in %s", name, config.ExternalModulesDir)
 	}
 
 	manifestPath := filepath.Join(moduleDir, config.ManifestFileName)
@@ -113,13 +113,13 @@ func (l *Linker) Unlink(name string) error {
 	// Generate a new local UUID token (de-link from remote).
 	m.Token = pkg.NewUUID()
 	if err := m.Save(manifestPath); err != nil {
-		return fmt.Errorf("mise à jour du manifest impossible : %w", err)
+		return fmt.Errorf("failed to update manifest: %w", err)
 	}
 
 	state := l.loadLinks()
 	delete(state.Modules, name)
 	if err := l.saveLinks(state); err != nil {
-		return fmt.Errorf("enregistrement de la déliaison impossible : %w", err)
+		return fmt.Errorf("failed to record the unlink: %w", err)
 	}
 
 	return nil
@@ -132,7 +132,7 @@ func (l *Linker) Unlink(name string) error {
 func (l *Linker) LinkedModules() ([]string, error) {
 	dir := filepath.Join(l.Root, config.ExternalModulesDir)
 	if !pkg.DirExists(dir) {
-		return nil, fmt.Errorf("le dossier %q est introuvable", config.ExternalModulesDir)
+		return nil, fmt.Errorf("directory %q not found", config.ExternalModulesDir)
 	}
 
 	linked := map[string]bool{}
@@ -146,7 +146,7 @@ func (l *Linker) LinkedModules() ([]string, error) {
 
 	entries, err := filepath.Glob(filepath.Join(dir, "*", config.ManifestFileName))
 	if err != nil {
-		return nil, fmt.Errorf("recherche de manifest impossible : %w", err)
+		return nil, fmt.Errorf("failed to search manifests: %w", err)
 	}
 	for _, manifestPath := range entries {
 		moduleName := filepath.Base(filepath.Dir(manifestPath))

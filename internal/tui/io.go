@@ -1,9 +1,10 @@
 package tui
 
 import (
-	"fmt"
+	"errors"
 	"os"
 
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"golang.org/x/term"
 )
 
@@ -13,8 +14,8 @@ func IsInteractive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-// RequireInteractive returns an explicit French error when the environment is
-// not a terminal (helpful in CI or piped contexts).
+// RequireInteractive returns an explicit error when the environment is not a
+// terminal (helpful in CI or piped contexts).
 func RequireInteractive(what string) error {
-	return fmt.Errorf("%s nécessite un terminal interactif", what)
+	return errors.New(i18n.Tf("tui.error.interactive", what))
 }

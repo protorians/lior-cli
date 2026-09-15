@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,15 +9,19 @@ import (
 	"strings"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
 
 // jsxTagRE heuristically recognises JSX elements without a full TS/JSX parser:
-// closing tags (`</div>`), custom (capitalised) components (`<Foo …/>`) and
+// closing tags (`</div>`), custom (capitalised) components that are
+// self-closing (`<Foo …/>`) or carry content/attributes (`<Foo …>`), and
 // lowercase native elements carrying attributes (`<div className=…/>`). It
-// deliberately ignores type arguments such as `Array<string>`.
-var jsxTagRE = regexp.MustCompile(`(?:</[A-Z][A-Za-z0-9._-]*>|</[a-z][a-z0-9_-]*>|<[A-Z][A-Za-z0-9._-]*(?:\s[^<>]*?)?/?>|<[a-z][a-z0-9_-]*(?:\s+[a-zA-Z-]+=)[^<>]*?/?>)`)
+// deliberately ignores type arguments such as `Array<string>`, generic chains
+// such as `this.get<FetchResponse<Item>>(...)`, and capitalised type
+// references used inside generic chains (`<Item>>`).
+var jsxTagRE = regexp.MustCompile(`(?:</[A-Z][A-Za-z0-9._-]*>|</[a-z][a-z0-9_-]*>|<[A-Z][A-Za-z0-9._-]*(?:\s[^<>]*?)?/>|<[A-Z][A-Za-z0-9._-]*(?:\s[^<>]*?)>|<[a-z][a-z0-9_-]*(?:\s+[a-zA-Z-]+=)[^<>]*?/?>)`)
 
 // Auditor runs all conformance checks on a module.
 type Auditor struct {
@@ -58,7 +63,7 @@ func (a *Auditor) AuditModules(name string) (*AuditResult, error) {
 func (a *Auditor) auditSingle(name string) (*AuditResult, error) {
 	moduleDir := filepath.Join(a.Root, config.ExternalModulesDir, name)
 	if !pkg.DirExists(moduleDir) {
-		return nil, fmt.Errorf("module %q introuvable dans %s", name, config.ExternalModulesDir)
+		return nil, errors.New(i18n.Tf("val.module_not_found", name, config.ExternalModulesDir))
 	}
 	res, err := a.auditModule(name)
 	if err != nil {
@@ -70,11 +75,11 @@ func (a *Auditor) auditSingle(name string) (*AuditResult, error) {
 func (a *Auditor) auditAll() (*AuditResult, error) {
 	dir := filepath.Join(a.Root, config.ExternalModulesDir)
 	if !pkg.DirExists(dir) {
-		return nil, fmt.Errorf("le dossier %q est introuvable", config.ExternalModulesDir)
+		return nil, errors.New(i18n.Tf("modules.error.dir", config.ExternalModulesDir))
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("lecture de %s impossible : %w", config.ExternalModulesDir, err)
+		return nil, fmt.Errorf("failed to read %s: %w", config.ExternalModulesDir, err)
 	}
 
 	result := &AuditResult{}
@@ -114,67 +119,96 @@ func (a *Auditor) auditModule(name string) (*module.Result, error) {
 
 // auditArchitecture checks Clean Architecture rules.
 func (a *Auditor) auditArchitecture(moduleDir, indexPath string, res *module.Result) {
-	// Check: components don't import services directly
-	componentsDir := filepath.Join(moduleDir, "components")
-	if pkg.DirExists(componentsDir) {
-		_ = filepath.Walk(componentsDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() {
-				return nil
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			content := string(data)
-			if strings.Contains(content, "from \"../services") || strings.Contains(content, "from '../services") ||
-				strings.Contains(content, "from \"./services") || strings.Contains(content, "from './services") {
-				rel, _ := filepath.Rel(moduleDir, path)
-				res.Findings = append(res.Findings, module.Finding{
-					Category: "Clean Architecture",
-					Rule:     "components→services",
-					Severity: module.LevelError,
-					Message:  fmt.Sprintf("%s importe directement des services", rel),
-				})
-			}
-			return nil
-		})
+	// Check: components don't import services directly (legacy `components/`
+	// layout). The canonical layout lets presentation/ use application/service,
+	// so bare capitalised service imports there are legitimate.
+	a.auditComponentsImportServices(moduleDir, "components", res)
+
+	// Check: services don't contain JSX (legacy `services/` layout and the
+	// canonical application/service/, which is plain data-access TS).
+	for _, dir := range []string{"services", filepath.Join("application", "service")} {
+		a.auditServicesHaveNoJSX(moduleDir, dir, res)
 	}
 
-	// Check: services don't contain JSX
-	servicesDir := filepath.Join(moduleDir, "services")
-	if pkg.DirExists(servicesDir) {
-		_ = filepath.Walk(servicesDir, func(path string, info os.FileInfo, err error) error {
-			if err != nil || info.IsDir() || !strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".tsx") {
-				return nil
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				return nil
-			}
-			if jsxTagRE.Match(data) {
-				rel, _ := filepath.Rel(moduleDir, path)
-				res.Findings = append(res.Findings, module.Finding{
-					Category: "Clean Architecture",
-					Rule:     "services→JSX",
-					Severity: module.LevelError,
-					Message:  fmt.Sprintf("%s contient du JSX dans un service", rel),
-				})
-			}
-			return nil
-		})
-	}
-
-	// Check: index.tsx has async render function
+	// Check: index.tsx declares a module (identifier + widgets). The canonical
+	// declaration is declarative (ModuleDeclarationInterface: widgets, service,
+	// routines, providers) — the legacy async `render` field no longer exists.
 	if pkg.FileExists(indexPath) {
 		data, err := os.ReadFile(indexPath)
 		if err == nil {
 			content := string(data)
-			hasRender := strings.Contains(content, "render")
-			hasAsync := strings.Contains(content, "async")
-			addLevel(res, "index.tsx", "render", hasRender && hasAsync,
-				"render est asynchrone", module.LevelError)
+			hasIdentifier := strings.Contains(content, "identifier:")
+			hasWidgets := strings.Contains(content, "widgets:")
+			addLevel(res, "index.tsx", "declaration", hasIdentifier && hasWidgets,
+				"module declaration present (identifier, widgets)", module.LevelError)
 		}
 	}
+}
+
+// auditComponentsImportServices scans a component directory for direct service
+// imports.
+func (a *Auditor) auditComponentsImportServices(moduleDir, dir string, res *module.Result) {
+	componentsDir := filepath.Join(moduleDir, dir)
+	if !pkg.DirExists(componentsDir) {
+		return
+	}
+	_ = filepath.Walk(componentsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		content := string(data)
+		if strings.Contains(content, "from \"../services") || strings.Contains(content, "from '../services") ||
+			strings.Contains(content, "from \"./services") || strings.Contains(content, "from './services") ||
+			strings.Contains(content, "from \"../../application/service") || strings.Contains(content, "from '../../application/service") {
+			rel, _ := filepath.Rel(moduleDir, path)
+			res.Findings = append(res.Findings, module.Finding{
+				Category: "Clean Architecture",
+				Rule:     "components→services",
+				Severity: module.LevelError,
+				Message:  fmt.Sprintf("%s imports services directly", rel),
+			})
+		}
+		return nil
+	})
+}
+
+// auditServicesHaveNoJSX scans a service directory for JSX content.
+func (a *Auditor) auditServicesHaveNoJSX(moduleDir, dir string, res *module.Result) {
+	servicesDir := filepath.Join(moduleDir, dir)
+	if !pkg.DirExists(servicesDir) {
+		return
+	}
+	_ = filepath.Walk(servicesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".tsx") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		if jsxTagRE.Match(data) {
+			rel, _ := filepath.Rel(moduleDir, path)
+			res.Findings = append(res.Findings, module.Finding{
+				Category: "Clean Architecture",
+				Rule:     "services→JSX",
+				Severity: module.LevelError,
+				Message:  fmt.Sprintf("%s contains JSX in a service", rel),
+			})
+		}
+		return nil
+	})
+}
+
+// platformCoreModules are requirements provided by the workspace core (not
+// local external_modules/): their presence is governed by the workspace, so
+// the local-existence check is skipped for them.
+var platformCoreModules = map[string]bool{
+	"organization": true,
+	"identity":     true,
 }
 
 // auditDependencies checks that listed requirements and npm deps exist.
@@ -186,9 +220,12 @@ func (a *Auditor) auditDependencies(name string, res *module.Result) {
 
 	// Check requirements
 	for req := range manifest.Requirements {
+		if platformCoreModules[req] {
+			continue
+		}
 		reqDir := filepath.Join(a.Root, config.ExternalModulesDir, req)
 		addLevel(res, "requirements", req, pkg.DirExists(reqDir),
-			fmt.Sprintf("requirement %q existe", req), module.LevelError)
+			fmt.Sprintf("requirement %q exists", req), module.LevelError)
 	}
 
 	// Check that listed npm dependencies are installed (spec rule
@@ -198,7 +235,7 @@ func (a *Auditor) auditDependencies(name string, res *module.Result) {
 	for dep := range manifest.Dependencies {
 		depDir := filepath.Join(a.Root, "node_modules", filepath.FromSlash(dep))
 		addLevel(res, "dependencies", dep, pkg.DirExists(depDir),
-			fmt.Sprintf("dépendance %q installée", dep), module.LevelError)
+			fmt.Sprintf("dependency %q installed", dep), module.LevelError)
 	}
 }
 
@@ -215,8 +252,8 @@ func (a *Auditor) auditAssets(name string, res *module.Result) {
 			}
 			return nil
 		})
-		addLevel(res, "assets", "fichiers", hasContent,
-			"assets contiennent des fichiers", module.LevelWarning)
+		addLevel(res, "assets", "files", hasContent,
+			"assets contain files", module.LevelWarning)
 	}
 }
 
@@ -225,7 +262,7 @@ func addLevel(res *module.Result, category, rule string, ok bool, okMsg string, 
 	msg := okMsg
 	if !ok {
 		sev = failSev
-		msg = rule + " non conforme"
+		msg = rule + " not compliant"
 	}
 	res.Findings = append(res.Findings, module.Finding{
 		Category: category,

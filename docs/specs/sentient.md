@@ -1,14 +1,15 @@
-# Sentient CLI (`sentients`)
+# Sentients CLI (`sentients`)
 
-> **Statut : PLANNING (spécification complète, aucun code)**
+> **Statut : IMPLÉMENTÉ (binaire `sentients`, spec alignée sur le code)**
 >
 > Ce document est la **spécification SpecKit de la CLI `sentients`**, outil en ligne de commande
 > permettant aux développeurs d'initialiser, créer, construire, auditer, déboguer et publier des
 > modules Sentient via un compte développeur `sentient-connect`.
 >
-> - **Stack technique** : Go (GoLang) + Bubbletea (TUI framework lipgloss/charmbracelet)
+> - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **Aucun code n'est implémenté** à partir de ce document tant que la roadmap n'est pas engagée.
+> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`), releases 0.0.8/0.0.9 ;
+>   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
 
 ---
 
@@ -20,9 +21,9 @@
 | Nom | Sentient CLI |
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
-| Version de spécification | `0.0.0` (candidate `0.1.0`) |
-| Statut de la version | `active` (spec) — non livrée |
-| Langue | Français |
+| Version de spécification | `0.1.0` (candidate) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.0.9) |
+| Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
 ---
@@ -60,7 +61,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ### Dans le périmètre (In Scope)
 
-- `sentients init` — Initialisation d'un projet Sentient (clone + deps)
+- `sentients init` — Initialisation d'un projet Sentient (téléchargement de la release template + deps)
 - `sentients create module` — Création de module dans `external_modules/`
 - `sentients connect` — Authentification développeur (credentials + MFA)
 - `sentients disconnect` — Suppression des credentials
@@ -98,20 +99,20 @@ init → create → develop → debug → audit → pack → sign → link → p
 | ID | Description |
 |----|-------------|
 | FR-001 | La CLI détecte automatiquement les gestionnaires de paquets disponibles (bun, pnpm, yarn, npm) et propose le choix à l'utilisateur |
-| FR-002 | `sentients init` clone le repository `protorians/sentient-cms` dans le répertoire courant |
+| FR-002 | `sentients init` télécharge la release (ZIP) du template `protorians/sentients-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
 | FR-003 | `sentients init` installe les dépendances avec le gestionnaire choisi |
-| FR-004 | `sentients create module` crée un module dans `external_modules/<nom>/` avec structure standardisée |
+| FR-004 | `sentients create module` crée un module dans `external_modules/<nom>/` à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
 | FR-005 | `sentients create module` génère un token UUID unique dans `manifest.json` |
 | FR-006 | `sentients connect` authentifie le développeur via `sentient-connect` (email + mot de passe) |
 | FR-007 | `sentients connect` supporte le MFA (TOTP, backup codes) |
-| FR-008 | `sentients connect` stocke les credentials de manière sécurisée (keychain/credential store) |
+| FR-008 | `sentients connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
 | FR-009 | `sentients disconnect` supprime toutes les credentials stockées |
-| FR-010 | `sentients pack` compresse `external_modules/<module>/` + `public/assets/<module>/` en `.smp` |
+| FR-010 | `sentients pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.url>/` en `.smp` |
 | FR-011 | `sentients pack` déplace l'archive vers `.sentients/build/` |
-| FR-012 | `sentients publish` construit puis publie via l'API `sentient-connect` |
+| FR-012 | `sentients publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
 | FR-013 | `sentients publish` demande les métadonnées du module si non définies |
-| FR-014 | `sentients link` lie un module local à un module existant dans `sentient-connect` |
-| FR-015 | `sentients unlink` délie un module local de `sentient-connect` |
+| FR-014 | `sentients link` lie un module local à un module distant (token produit, mode CI `link <module> <token>`) et persiste l'état dans `.sentients/links.json` |
+| FR-015 | `sentients unlink` délie un module local de `sentient-connect` (option `--sync-remote` pour synchroniser les métadonnées locales) |
 | FR-016 | `sentients debug` lance le debug d'un module ou de tous les modules |
 | FR-017 | `sentients audit` vérifie la conformité Clean Architecture, `manifest.json` et `index.tsx` |
 | FR-018 | `sentients audit` vérifie que les `requirements` et `dependencies` existent |
@@ -121,6 +122,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-022 | `sentients sign <module>` signe l'archive `.smp` du module et produit un fichier `.sig` |
 | FR-023 | `sentients sign verify <module>` vérifie la validité de la signature `.sig` d'un module |
 | FR-024 | `sentients sign` affiche le fingerprint SHA-256 de la clé publique du développeur |
+| FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `SENTIENT_CLI_LANG` → `cli.lang` de `sentients.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
 
 ### Exigences non-fonctionnelles
 
@@ -132,6 +134,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | NFR-004 | Sortie terminal compatible UTF-8 + 256 couleurs minimum |
 | NFR-005 | Logs activables via `--verbose` ou variable d'environnement `SENTIENT_CLI_DEBUG` |
 | NFR-006 | Mises à jour auto-detectées (notification, pas de mise à jour forcée) |
+| NFR-007 | Interface bilingue `en-US` (défaut) / `fr-FR` via catalogues i18n embarqués dans le binaire, avec repli sur `en-US` |
 
 ### Exigences de sécurité
 
@@ -151,14 +154,15 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 | ID | Description |
 |----|-------------|
-| TECH-001 | Go 1.22+ comme langage de développement |
+| TECH-001 | Go 1.22+ comme langage de développement (go.mod : 1.26) |
 | TECH-002 | Bubbletea comme framework TUI pour les interactions utilisateur |
 | TECH-003 | Lipgloss pour le styling terminal |
-| TECH-004 | Bubbles pour les composants TUI réutilisables (spinners, selects, inputs) |
+| TECH-004 | Bubbles pour les composants TUI réutilisables — priorité stricte aux composants natifs bubbles avant tout composant custom (voir §9.1) |
 | TECH-005 | GoReleaser pour la compilation multi-plateforme et le packaging |
 | TECH-006 | Architecture en couches : commands → services → infrastructure |
-| TECH-007 | Configuration via fichier `.sentient-cli.toml` optionnel dans le projet |
+| TECH-007 | Configuration via fichier `sentients.config.json` optionnel dans le projet |
 | TECH-008 | Communication avec `sentient-connect` via REST API HTTPS |
+| TECH-009 | Registre d'applications `app.config.json` embarqué dans le binaire (`baseUrl`/`timeout` par application API), surchargeable par un `app.config.json` local et `SENTIENT_AUTH_API` |
 
 ---
 
@@ -168,62 +172,74 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ```
 sentient-cli/
-├── main.go                        # Point d'entrée
-├── cmd/                           # Commandes CLI (couche présentation)
-│   ├── root.go                    # Commande racine (cobra/flag parsing)
-│   ├── init.go                    # sentients init
+├── main.go                        # Point d'entrée (variables version/commit/date + //go:embed app.config.json)
+├── cmd/                           # Commandes CLI (couche présentation, Cobra)
+│   ├── root.go                    # Commande racine (flags --verbose, --no-color, --lang, update check)
+│   ├── init.go                    # sentients init (--channel alpha|beta|rc|stable)
 │   ├── create.go                  # sentients create module
 │   ├── connect.go                 # sentients connect
 │   ├── disconnect.go              # sentients disconnect
 │   ├── pack.go                    # sentients pack
 │   ├── sign.go                    # sentients sign (keygen / sign / verify)
 │   ├── publish.go                 # sentients publish
-│   ├── link.go                    # sentients link
-│   ├── unlink.go                  # sentients unlink
+│   ├── link.go                    # sentients link + unlink (--sync-remote)
 │   ├── debug.go                   # sentients debug
-│   ├── audit.go                   # sentients audit
-│   ├── help.go                    # sentients help
-│   └── version.go                 # sentients -v / --version
+│   ├── audit.go                   # sentients audit (--output table|json)
+│   ├── modules.go                 # Helpers de résolution projet/module (code 3)
+│   └── localize.go                # Helpers i18n (MessageKey, résolution langue)
 ├── internal/
 │   ├── config/                    # Configuration projet & CLI
-│   │   ├── config.go              # Lecture/écriture .sentient-cli.toml
+│   │   ├── config.go              # Lecture/écriture sentients.config.json
 │   │   └── paths.go               # Résolution des chemins projet
+│   ├── appconfig/                 # Registre d'applications embarqué (app.config.json, TECH-009)
+│   │   └── appconfig.go           # BaseURL/timeout par API, surcharge locale/env
+│   ├── i18n/                      # Internationalisation (NFR-007)
+│   │   ├── i18n.go                # Résolution langue, lookup de clés, fallback en-US
+│   │   └── locales/               # Catalogues embarqués en-US.json, fr-FR.json
 │   ├── auth/                      # Authentification & credentials
-│   │   ├── credentials.go         # Gestion keychain (CRUD)
+│   │   ├── credentials.go         # Keychain + fallback vault chiffré (SENTIENT_CLI_STORE)
 │   │   ├── connector.go           # Client API sentient-connect
 │   │   ├── mfa.go                 # Logique MFA (TOTP, backup codes)
-│   │   └── session.go             # Session locale (token cache)
+│   │   └── session.go             # Session locale (token cache, refresh)
 │   ├── module/                    # Logique module
 │   │   ├── creator.go             # Création de module
+│   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence)
+│   │   ├── mockups/               # hello-world/ + page.tsx (mockups embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
-│   │   ├── packer.go              # Compression .smp
-│   │   ├── linker.go              # Liaison local ↔ distant
-│   │   └── validator.go           # Validation module
+│   │   ├── packer.go              # Compression .smp (limite 50 MB)
+│   │   ├── linker.go              # Liaison local ↔ distant + état .sentients/links.json
+│   │   ├── validator.go           # Validation module
+│   │   └── module_test.go         # Tests unitaires
 │   ├── signing/                   # Signature numérique Ed25519
 │   │   ├── signer.go              # Génération clés, signature, vérification
-│   │   └── keystore.go            # Stockage clés dans le keychain OS
+│   │   └── keystore.go            # Stockage clés (keychain + fallback chiffré signing.enc)
 │   ├── audit/                     # Audit de conformité
-│   │   ├── auditor.go             # Orchestrateur d'audit
-│   │   ├── architecture.go        # Vérification Clean Architecture
-│   │   ├── manifest.go            # Validation manifest.json
-│   │   └── dependencies.go        # Vérification dépendances
+│   │   └── auditor.go             # Orchestrateur d'audit (règles manifest/bootstrap/deps)
 │   ├── debug/                     # Debug de module
-│   │   └── debugger.go            # Lancement debug
-│   ├── store/                     # Store (fichiers .smp)
+│   │   └── debugger.go            # Build/test du module (scripts ou tsc --noEmit)
+│   ├── store/                     # Publication store
 │   │   ├── builder.go             # Construction archive
-│   │   └── publisher.go           # Publication via API
+│   │   └── publisher.go           # Publication via API developer-store (produit → version → artefact)
 │   ├── tui/                       # Composants Bubbletea
-│   │   ├── app.go                 # Application TUI racine
-│   │   ├── styles.go              # Styles Lipgloss
-│   │   ├── prompts.go             # Prompts interactifs
-│   │   ├── spinner.go             # Indicateur de progression
-│   │   └── table.go               # Tableau de sélection
+│   │   ├── components.go          # SummaryCard, Wordmark, StepsList, LogsBlock (lipgloss)
+│   │   ├── styles.go              # Palette brand sage/olive + thème dark/light
+│   │   ├── prompts.go             # AskText, Confirm, Select (degradation non-interactive)
+│   │   ├── spinner.go             # RunWithSpinner (indicateur de progression)
+│   │   ├── progress.go            # RunWithProgress (barre de progression, téléchargements)
+│   │   └── table.go               # Tableau arrondi custom (lipgloss)
 │   └── pkg/                       # Utilitaires
+│       ├── errors.go              # Erreurs catégorisées + codes de sortie §11.1
 │       ├── fs.go                  # Opérations fichiers
-│       ├── git.go                 # Opérations git
-│       ├── http.go                # Client HTTP
+│       ├── git.go                 # Exécution de commandes externes
+│       ├── github.go              # FetchReleaseZip (téléchargement release init)
+│       ├── http.go                # Client HTTP + enveloppe Raiton + APIError
 │       ├── uuid.go                # Génération UUID
-│       └── crypto.go              # Chiffrement/hachage
+│       ├── crypto.go              # MachineSecret (PBKDF2), EncryptVault/DecryptVault (AES-256-GCM)
+│       └── update.go              # Détection de mises à jour (NFR-006, cache 24 h)
+├── e2e/                           # Tests E2E
+│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-025 vs mock API)
+│   └── testdata/                  # scripts/*.txtar + fixtures/ (bun, node, npm, tsc, mock API)
+├── app.config.json                # Registre embarqué des applications (surchargeable localement)
 ├── go.mod
 ├── go.sum
 ├── .goreleaser.yaml               # Configuration GoReleaser
@@ -232,20 +248,24 @@ sentient-cli/
 
 ### 4.2 Dépendances Go
 
-| Module | Usage | Version |
-|--------|-------|---------|
-| `github.com/spf13/cobra` | Parsing de commandes | `^1.8.0` |
-| `github.com/charmbracelet/bubbletea` | Framework TUI | `^1.2.0` |
-| `github.com/charmbracelet/lipgloss` | Styling terminal | `^1.0.0` |
-| `github.com/charmbracelet/bubbles` | Composants TUI (spinner, select, input) | `^0.20.0` |
-| `github.com/zalando/go-keyring` | Accès keychain système | `^0.2.5` |
-| `github.com/google/uuid` | Génération UUID v4 | `^1.6.0` |
-| `github.com/BurntSushi/toml` | Parsing TOML | `^1.3.2` |
-| `golang.org/x/term` | Détection terminal | `^0.20.0` |
+| Module | Usage | Version (go.mod) |
+|--------|-------|-----------------|
+| `github.com/spf13/cobra` | Parsing de commandes | `v1.10.2` |
+| `github.com/charmbracelet/bubbletea` | Framework TUI | `v1.3.10` |
+| `github.com/charmbracelet/lipgloss` | Styling terminal | `v1.1.0` |
+| `github.com/charmbracelet/bubbles` | Composants TUI (spinner, textinput, list, progress) | `v1.0.0` |
+| `github.com/zalando/go-keyring` | Accès keychain système | `v0.2.8` |
+| `github.com/google/uuid` | Génération UUID v4 | `v1.6.0` |
+| `github.com/muesli/termenv` | Détection terminal / profile couleur | `v0.16.0` |
+| `rogpeppe/go-internal` | Tests E2E (testscript) | `v1.16.0` |
+| `golang.org/x/term` | Détection terminal | `v0.46.0` |
 | `net/http` | Client API (stdlib) | — |
 | `crypto/aes`, `crypto/cipher` | Chiffrement (stdlib) | — |
 | `crypto/ed25519` | Signature numérique Ed25519 (stdlib) | — |
 | `archive/zip` | Compression .smp (stdlib) | — |
+
+> Le parsing TOML (`BurntSushi/toml`) a été retiré : la configuration est uniquement JSON
+> (`sentients.config.json`). `sentient.config.toml` ne sert plus que de marqueur de projet.
 
 ### 4.3 Pipeline d'exécution
 
@@ -278,40 +298,55 @@ Utilisateur
 
 #### Purpose
 
-Initialiser un nouveau projet Sentient en clonant le template `protorians/sentient-cms` et en
-installant les dépendances.
+Initialiser un nouveau projet Sentient en téléchargeant la release (ZIP) du template
+`protorians/sentients-socle` et en installant les dépendances. La source est `--channel`
+("stable" par défaut) ; `SENTIENT_CLI_TEMPLATE_REPO` peut la remplacer par une URL GitHub,
+une URL ZIP directe ou un répertoire local (tests/miroirs).
 
 #### Comportement
 
-1. **Demander le nom du projet** (dossier cible) via input Bubbletea
-2. **Détection automatique** des gestionnaires de paquets disponibles sur la machine :
-   - `bun` → disponible ?
+1. **Déterminer le nom du projet** : argument positionnel optionnel, sinon input Bubbletea
+   (défaut : nom du dossier courant)
+2. **Résoudre le canal de release** (`--channel alpha|beta|rc|stable`, défaut `stable`) :
+   la release la plus récente du canal est téléchargée en ZIP via l'API GitHub
+3. **Gérer la destination existante** : dossier non vide → proposer *Annuler* / *Fusionner* /
+   *Vider* (cwd) / *Supprimer* ; jamais effacé sans approbation
+4. **Détection automatique** des gestionnaires de paquets disponibles sur la machine :
+   - `bun` → disponible ? (recommandé, premier du fil)
    - `pnpm` → disponible ?
    - `yarn` → disponible ?
    - `npm` → disponible ?
-3. **Proposer le choix** via un sélecteur Bubbletea (liste filtrée aux disponibles)
-4. **Cloner** `https://github.com/protorians/sentient-cms` dans `./<nom-projet>/`
-5. **Installer les dépendances** avec le gestionnaire sélectionné
-6. **Afficher le résumé** : projet initialisé, gestionnaire utilisé, prochaines étapes
+5. **Proposer le choix** via un sélecteur Bubbletea (liste filtrée aux disponibles)
+6. **Télécharger la release** avec barre de progression `RunWithProgress` (extraction dans la
+   destination ; en cas de fusion, téléchargement dans un dossier temporaire puis copie)
+7. **Installer les dépendances** avec le gestionnaire sélectionné (échec → warning non bloquant)
+8. **Écrire `sentients.config.json`** (racine `project.name` + `project.packageManager`)
+9. **Afficher le résumé** : projet initialisé, gestionnaire utilisé, prochaines étapes
 
 #### Contraintes
 
 - Si aucun gestionnaire n'est détecté → erreur explicite avec instructions d'installation
-- Si le dossier existe déjà → demander confirmation (écraser / annuler)
-- Le clone doit être un shallow clone (`--depth 1`) pour rapidité
+- `--channel` doit être l'un des canaux valides (erreur listant les choix sinon)
+- Pas de clone git : téléchargement de l'archive de release (rapide, sans historique git)
+- En mode non-interactif, un dossier existant est vidé uniquement si `SENTIENT_CLI_YES` est défini, sinon refus explicite
 
 #### Sortie TUI
 
 ```
+Destination : /chemin/vers/mon-projet
 ? Nom du projet : mon-projet
+? Canal de release : stable
 ? Gestionnaire de paquets : bun (recommandé)
-  ⠋ Clonage de sentient-cms...
+  ⠋ Téléchargement de la release sentients-socle...
+  [================--------------------] 45%
   ⠋ Installation des dépendances...
 
   ✓ Projet initialisé avec succès
+    Gestionnaire : bun
 
   Prochaines étapes :
     cd mon-projet
+    sentients connect
     sentients create module
 ```
 
@@ -321,100 +356,118 @@ installant les dépendances.
 
 #### Purpose
 
-Créer un nouveau module dans le dossier `external_modules/` à la racine du projet.
+Créer un nouveau module dans `external_modules/<nom>/` à partir d'un **mockup de référence embarqué**
+dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun checkout externe requis.
 
 #### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Sentient (fichier `sentient.config.toml` ou détection du dossier `external_modules/`)
-2. **Demander le nom du module** via input Bubbletea
-3. **Valider le nom** : kebab-case, pas de caractères spéciaux, longueur 3-64
-4. **Créer la structure** :
+1. **Vérifier le contexte** : être à la racine d'un projet Sentient (`sentients.config.json`,
+   `sentient.config.toml` ou présence de `external_modules/`)
+2. **Demander le nom** (`kebab-case`, 3-64, pas de caractères spéciaux) et la **description** du module
+3. **Résoudre la source du mockup** (ordre de priorité) :
+   - `--mockup` (champ `Creator.MockupDir`)
+   - `SENTIENT_MODULE_MOCKUP` (répertoire de module de référence)
+   - mockup **embarqué** `internal/module/mockups/hello-world/`
+   (une source custom doit ressembler à un module scaffoldable : `manifest.json` + `index.tsx`)
+4. **Scaffolder le module** (copie + renommage) :
+   - Les fichiers et identifiants du mockup sont renommés selon les 6 variantes du nom
+     (`Hello World` → affichable, `HelloWorld` → PascalCase, `helloWorld` → camelCase,
+     `hello-world` → kebab-case, `HELLO_WORLD` → UPPER_SNAKE, `helloworld` → minuscules)
+   - Le contenu des fichiers textes est réécrit en conséquence (renommage des fichiers inclus)
+5. **Patcher l'identité** :
+   - `manifest.json` : injection d'un **token UUID v4 unique** si absent + description fournie
+   - `index.tsx` : réécriture de la ligne `description` de la déclaration
+   - `package.json` : description mise à jour
+   - `README.md` : généré (nom, description, structure)
+6. **Scaffolder la page** : si la déclaration du module porte un `uri`/`url`, générer
+   `src/app/<uri>/page.tsx` à partir du page mockup (`SENTIENT_PAGE_MOCKUP`, sinon embarqué)
+7. **Afficher le résumé** : module créé, token généré, page créée (si uri), prochaines étapes
+
+#### Structure générée (mockup embarqué hello-world)
 
 ```
 external_modules/<module-name>/
-├── manifest.json
-├── index.tsx
-├── components/
-│   └── .gitkeep
-├── hooks/
-│   └── .gitkeep
-├── services/
-│   └── .gitkeep
-└── README.md
+├── manifest.json               # identité + token UUID v4 injecté
+├── index.tsx                   # déclaration (identifier, widgets, service, routines, uri)
+├── package.json                # dépendances du mockup
+├── README.md
+├── application/
+│   └── service/                # hello-world-api-service.ts (service de données)
+├── domain/
+│   ├── enums/                  # statuts
+│   └── interfaces              # hello-world.interface.ts
+├── infrastructure/
+│   └── routines/               # analytics routine
+└── presentation/
+    ├── components/             # data-grid, columns, details-sheet, create-dialog
+    ├── providers/              # header provider (layout)
+    ├── views/                  # hello-world.view.tsx
+    └── widgets/                # hello-world.widget.tsx
 ```
 
-5. **Générer `manifest.json`** avec :
+`manifest.json` (extrait — l'identité est forcée à la création) :
 
 ```json
 {
   "schemaVersion": 1,
   "id": "<module-name>",
-  "domain": "mod.sentients.<module-name>",
+  "domain": "mod.sentients.<lowerName>",
   "key": "<MODULE_NAME_UPPER>",
   "name": "<Nom du module>",
-  "description": "",
+  "description": "<description>",
   "version": "0.1.0",
-  "icon": "PuzzleIcon",
-  "type": "EXTERNAL",
-  "entry": "index.tsx",
   "uri": "/<module-name>",
   "token": "<UUID v4 généré>",
-  "publisher": {
-    "id": "",
-    "name": ""
-  },
-  "platforms": {
-    "web": { "supported": true, "modes": ["web"] },
-    "desktop": { "supported": false },
-    "mobile": { "supported": false }
-  },
-  "managerCompatibility": { "min": "0.0.0", "max": "*.x" },
-  "apiCompatibility": { "min": "0.0.0", "max": "*.x" },
-  "permissions": [],
-  "apiScopes": [],
-  "capabilities": {
-    "needsNetwork": true,
-    "supportsOffline": false,
-    "requiresOrganization": false,
-    "requiresAuthenticatedUser": true
-  },
-  "isEnabled": true,
-  "isDefault": false,
-  "requirements": {},
-  "dependencies": {
-    "@sentients/sdk": "workspace:*"
-  },
-  "widgets": [],
-  "routines": [],
-  "menu": { "items": [] }
+  "type": "INTERNAL",
+  "entry": "index.tsx",
+  "widgets": ["analytics"],
+  "routines": ["<moduleName>AnalyticsRoutine"],
+  "requirements": { "organization": ">=1.0.0", "identity": ">=1.0.0" }
 }
 ```
 
-6. **Générer `index.tsx`** avec un squelette conforme aux conventions du manager :
+`index.tsx` (déclaration déclarative, pas de `render` asynchrone) :
 
 ```tsx
-import type { ModuleDeclarationInterface } from "@/modules";
+import {ModuleDeclarationInterface} from "@sentients/sdk/domain/entities/module.interface";
 
-const declaration: ModuleDeclarationInterface = {
-  name: "<ModuleName>",
-  description: "",
-  render: async () => {
-    const mod = await import("./components");
-    return mod.default;
-  },
+const moduleDeclaration: ModuleDeclarationInterface = {
+    identifier: 'mod.sentients.<lowerName>',
+    key: '<MODULE_NAME_UPPER>',
+    name: '<Nom du module>',
+    description: '<description>',
+    uri: '/<module-name>',
+    widgets: { analytics: <ModuleName>Widget },
+    service: { fetch: <ModuleName>ApiService },
+    routines: [<moduleName>AnalyticsRoutine],
+    providers: { layout: <ModuleName>HeaderProvider },
+    isEnabled: true,
+    isDefault: false,
+    type: 'INTERNAL',
+    category: 'SYSTEM',
+    requirements: { organization: '>=1.0.0', identity: '>=1.0.0' },
 };
 
-export default declaration;
+export default moduleDeclaration;
 ```
 
-7. **Générer `README.md`** avec les métadonnées du module
-8. **Afficher le résumé** : module créé, emplacement, prochaines étapes
+`src/app/<uri>/page.tsx` (scaffoldé si `uri` déclaré) :
+
+```tsx
+import {<ModuleName>View} from "@/external_modules/<module-name>/presentation/views/<module-name>.view";
+
+export default function <ModuleName>Page() {
+    return <<ModuleName>View/>;
+}
+```
 
 #### Contraintes
 
-- Le token UUID est **unique** et généré à la création
-- Le nom du module ne peut pas entrer en conflit avec un module existant
-- Le `key` (ModuleEnum) est généré en UPPER_SNAKE_CASE du nom
+- Le token UUID est **unique** et généré à la création (injection dans le manifest scaffoldé)
+- Le nom du module ne peut pas entrer en conflit avec un module existant (`external_modules/`)
+- Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
+- `SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP` permettent de remplacer les mockups
+  (tests, templates d'équipe) — voir `internal/module/scaffold.go`
 
 #### Sortie TUI
 
@@ -426,6 +479,7 @@ export default declaration;
   ✓ Token généré : a1b2c3d4-e5f6-7890-abcd-ef1234567890
   ✓ manifest.json initialisé
   ✓ index.tsx initialisé
+  ✓ Page : src/app/blog-manager/page.tsx
 
   Prochaines étapes :
     sentients connect
@@ -478,6 +532,8 @@ manière sécurisée.
 - Session **à jeton unique** : le token Bearer est rafraîchi via `POST /api/auth/sessions/refresh` si expiré
 - Le `mfa_secret` (si TOTP enrollment local) est chiffré dans le keychain
 - Après 5 échecs de connexion → temporaire (5 min) avec message clair
+- **Mode CI / headless** : les prompts sont alimentés par `SENTIENT_CLI_CONNECT_EMAIL`,
+  `SENTIENT_CLI_CONNECT_PASSWORD` et `SENTIENT_CLI_MFA_CODE` (même pattern que `SENTIENT_CLI_YES`)
 
 #### Sortie TUI
 
@@ -544,12 +600,13 @@ Construire le build d'un module et créer une archive `.smp` compressée.
 3. **Valider le `manifest.json`** (champs requis : `id`, `name`, `version`, `token`)
 4. **Construire les chemins** :
    - Source module : `external_modules/<module>/`
+   - Source assets : `src/app/<module.url>/`
    - Source assets : `public/assets/<module>/` (si existe)
    - Destination : `.sentients/build/`
 5. **Créer l'archive ZIP** :
    - Nom : `<module>-<version>.smp` (le `.smp` est un ZIP renommé)
-   - Contenu : dossiers `external_modules/<module>/` et `public/assets/<module>/` (si existe)
-   - Préfixe dans l'archive : `external_modules/<module>/` et `public/assets/<module>/`
+   - Contenu : dossiers `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.url>` (si existe)
+   - Préfixe dans l'archive : `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.url>`
 6. **Déplacer** l'archive vers `.sentients/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
@@ -563,6 +620,8 @@ Construire le build d'un module et créer une archive `.smp` compressée.
 │   ├── components/
 │   ├── hooks/
 │   └── ...
+└── src/app/<module.url>/
+    └── ...
 └── public/assets/<module>/    (optionnel)
     └── ...
 ```
@@ -656,30 +715,32 @@ Construire et publier un module dans le store via l'API `sentient-connect`.
 
 #### Purpose
 
-Lier un module créé dans `sentient-connect` avec le module en local.
+Lier un module créé dans `sentient-connect` avec le module en local, via son token produit.
 
 #### Comportement
 
-1. **Vérifier l'authentification** (sinon → `sentients connect`)
-2. **Lister les modules locaux** dans `external_modules/` via sélecteur Bubbletea
-3. **Lister les modules en ligne** via API :
-   - `GET /api/developer-store/modules` (modules du développeur)
-   - Afficher dans un tableau Bubbletea avec : nom, version, statut
-4. **Demander le token du module en ligne** via input Bubbletea
-5. **Valider le token** via API :
-   - `GET /api/developer-store/modules/<id>` (id du produit module)
-   - Vérifier que le module existe et appartient au développeur
-6. **Mettre à jour le `manifest.json` local** :
-   - Ajouter/mettre à jour le champ `token` avec le token distant
-   - Ajouter les métadonnées distantes si absentes localement
-7. **Afficher le résumé** : module lié (local ↔ distant)
+1. **Vérifier le contexte projet** (racine + `external_modules/`) et l'authentification (sinon → `sentients connect`)
+2. **Sélectionner le module local** : argument positionnel ou sélecteur Bubbletea
+3. **Lister les modules en ligne** via API `GET /api/developer-store/modules`, proposer une sélection
+   (items au format `token — name vversion`)
+4. **Résoudre le token distant** :
+   - En mode CI (non-interactif) : `sentients link <module> <token>` en arguments
+   - En interactif : choix dans la liste
+5. **Valider le token** via `GET /api/developer-store/modules/<id>` (existe + appartient au développeur)
+6. **Mettre à jour le `manifest.json` local** : `token` remplacé par le token distant, métadonnées
+   distantes fusionnées dans les champs absents (`name`, `description`, `publisher.*`)
+7. **Persister l'état** dans `.sentients/links.json` (`{"modules": {"<module>": "<token>"}}`) —
+   source de vérité pour `unlink`/`LinkedModules`
+8. **Afficher le résumé** : module lié (local ↔ distant)
 
 #### Sortie TUI
 
 ```
 ? Sélectionner le module local : blog-manager
-? Token du module en ligne : m_abc123def456
-  ⠋ Vérification du module distant...
+  ⠋ Récupération des modules en ligne…
+? Token du module en ligne :
+    m_abc123def456 — Blog Manager v0.1.0
+  ⠋ Vérification du module distant…
 
   ✓ Module lié avec succès
     Local : external_modules/blog-manager/
@@ -696,12 +757,17 @@ Délier un module local de son correspondant dans `sentient-connect`.
 
 #### Comportement
 
-1. **Vérifier l'authentification** (sinon → `sentients connect`)
-2. **Lister les modules locaux** ayant un token distant dans leur `manifest.json`
-3. **Afficher la liste** via sélecteur Bubbletea (modules liés uniquement)
-4. **Demander confirmation**
-5. **Supprimer le champ `token`** du `manifest.json` local
-6. **Afficher confirmation**
+1. **Vérifier le contexte projet**
+2. **Lister les modules localement liés** via `.sentients/links.json` (source de vérité) + les
+   manifests portant un token non-UUID (migration)
+3. **Sélectionner le module à délier** : argument positionnel ou sélecteur Bubbletea
+4. **Afficher le lien actuel** (token + version distante)
+5. **Optionnel** : `--sync-remote` synchronise d'abord les métadonnées locales vers le produit
+   distant (`PUT /api/developer-store/modules/:id`, best-effort)
+6. **Demander confirmation** (Bubbletea confirm ; non-interactif → exécution directe)
+7. **Délier** : régénère un **nouveau token UUID local** dans `manifest.json` et retire l'entrée de
+   `.sentients/links.json`
+8. **Afficher confirmation**
 
 #### Sortie TUI
 
@@ -720,32 +786,32 @@ Délier un module local de son correspondant dans `sentient-connect`.
 
 #### Purpose
 
-Lancer le debug d'un ou tous les modules dans `external_modules/`.
+Lancer le debug d'un ou tous les modules dans `external_modules/` : validation puis build réel du module.
 
 #### Comportement
 
 1. **Analyser l'argument** :
    - Si `<module>` est fourni → debug uniquement ce module
    - Sinon → debug **tous** les modules dans `external_modules/`
-2. **Vérifier l'existence** du ou des modules
-3. **Lancer le processus de debug** :
-   - Exécuter le build du module avec les flags de debug (`--debug`, source maps)
-   - Surveiller les erreurs en temps réel
-   - Afficher les logs du module dans un viewer TUI (scrollable)
-4. **Mode single module** :
-   - Compiler le module en mode dev
-   - Afficher les erreurs de compilation
-   - Afficher les erreurs d'exécution (si applicable)
-5. **Mode all modules** :
-   - Compiler tous les modules en parallèle
-   - Afficher un tableau de statut (nom, statut, erreurs)
-   - Détecter les conflits entre modules
+2. **Valider le module** (mêmes règles que `audit`) : si erreurs → statut `ERROR` avec la liste
+   des règles en échec
+3. **Détecter le gestionnaire de paquets** (bun → pnpm → yarn → npm) ; aucun → statut `WARNING`
+4. **Résoudre la commande de build** :
+   - Script du `package.json` du module puis du projet (candidats `debug`, `dev`, `build`,
+     comparés par clé exacte, pas de collision de sous-chaîne)
+   - Repli : **type-check TypeScript réel** `tsc --noEmit` si le module contient des sources
+     `.ts`/`.tsx` et qu'un `tsconfig.json` + un `tsc` résolvable existent
+5. **Exécuter la commande** :
+   - OK → statut `OK` (sortie affichée si présente)
+   - Échec → statut `ERROR`, sortie d'erreur affichée
+6. **Aucun build ni type-check possible** → statut `WARNING` (`no_build_script`), jamais un faux "OK"
+7. **Mode all modules** : itérer sur chaque module et afficher le tableau de statut (nom, statut, erreurs)
 
 #### Sortie TUI (single)
 
 ```
   Debug : blog-manager
-  ⠋ Compilation en mode debug...
+  ⠋ Validation du module…
   ✓ Compilation réussie
 
   ┌─────────────────────────────────────────────┐
@@ -789,31 +855,31 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 
 | Catégorie | Règle | Sévérité |
 |-----------|-------|----------|
-| **Clean Architecture** | Pas de dépendances directes entre couches interdites | ERROR |
-| **Clean Architecture** | Les hooks ne contiennent pas de logique métier | WARNING |
-| **Clean Architecture** | Les services ne contiennent pas de JSX | ERROR |
-| **Clean Architecture** | Les composants n'importent pas directement les services | WARNING |
+| **manifest.json** | `lecture` du JSON valide | ERROR |
 | **manifest.json** | Champ `id` présent et non vide | ERROR |
 | **manifest.json** | Champ `name` présent et non vide | ERROR |
 | **manifest.json** | Champ `version` au format SemVer valide | ERROR |
+| **manifest.json** | Champ `token` UUID valide | ERROR |
 | **manifest.json** | Champ `entry` pointe vers un fichier existant | ERROR |
-| **manifest.json** | Champ `domain` au format `mod.sentients.<name>` | WARNING |
-| **manifest.json** | Champ `token` présent (UUID valide) | ERROR |
-| **manifest.json** | `permissions` est un tableau | WARNING |
-| **manifest.json** | `dependencies` listent des packages existants | ERROR |
-| **index.tsx** | Fichier existe et exporte un `ModuleDeclarationInterface` | ERROR |
-| **index.tsx** | Le champ `name` correspond au manifest | WARNING |
-| **index.tsx** | La fonction `render` est asynchrone | ERROR |
-| **requirements** | Toutes les requirements listées dans le manifest existent dans `external_modules/` | ERROR |
-| **dependencies** | Toutes les dépendances npm sont installées | ERROR |
-| **dependencies** | Pas de dépendances en double | WARNING |
-| **assets** | Les fichiers dans `public/assets/<module>/` existent | WARNING |
+| **manifest.json** | Champ `domain` au format `mod.sentients.<lowerName>` | WARNING |
+| **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
+| **index.tsx** | Fichier existe et exporte une valeur par défaut | ERROR |
+| **index.tsx** | Déclaration module présente (`identifier` + `widgets`) — déclaration déclarative, l'ancien `render` async n'existe plus | ERROR |
+| **Clean Architecture** | Les composants n'importent pas directement les services (`../services`, `application/service`) | ERROR |
+| **Clean Architecture** | Les services ne contiennent pas de JSX (`services/` et `application/service/`, heuristique regex JSX) | ERROR |
+| **requirements** | Les requirements listées existent dans `external_modules/` (exceptions : modules core plateforme `organization`, `identity`) | ERROR |
+| **dependencies** | Les dépendances npm listées sont installées dans `node_modules` | ERROR |
+| **assets** | `public/assets/<module>/` contient des fichiers (si le dossier existe) | WARNING |
+
+> Note : la règle « pas de dépendances en double » a été retirée (itération d'une map — les clés
+> dupliquées sont impossibles par construction). La règle « pas de logique métier dans les hooks »
+> n'existe plus : le layout canonique n'a pas de dossier `hooks/`.
 
 4. **Générer le rapport** :
-   - Afficher les résultats dans un tableau TUI
-   - Colorer par sévérité (rouge = ERROR, orange = WARNING, vert = OK)
-   - Résumé : X erreurs, Y warnings, Z modules audités
-5. **Optionnel** : exporter le rapport en JSON (`--output json`)
+   - Format par défaut : tableau TUI, coloré par sévérité (rouge = ERROR, orange = WARNING, vert = OK),
+     résumé « X erreurs, Y warnings »
+   - `--output json` : machine-readable `{"modules": [{"module", "findings": [{category, rule, severity, message}]}]}`
+   - `--output table` : forçage du tableau (non-interactif)
 
 #### Sortie TUI
 
@@ -828,10 +894,10 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
   │ manifest.json        │ token    │ ✓ UUID valide            │
   │ manifest.json        │ entry    │ ✓ Fichier existe         │
   │ index.tsx            │ export   │ ✓ Défaut exporté         │
-  │ index.tsx            │ render   │ ✓ Async                  │
+  │ index.tsx            │ decl     │ ✓ Déclaration présente   │
   │ requirements         │ exist    │ ⚠ organization non trouvé│
   │ dependencies         │ install  │ ✓ Toutes installées      │
-  │ Clean Architecture   │ couche   │ ✓ Conforme               │
+  │ Clean Architecture   │ services→JSX │ ✓ Conforme           │
   └──────────────────────┴──────────┴──────────────────────────┘
 
   Résumé : 0 erreurs, 1 warning
@@ -853,33 +919,39 @@ Afficher l'aide contextuelle de la CLI.
 #### Sortie TUI (sans argument)
 
 ```
-Sentient CLI — Outil de développement pour les modules Sentient
+┌───────────────┐
+│ ⬢ sentients   │   ← wordmark (badge brand, dégrade en texte sous --no-color)
+└───────────────┘
+
+Sentient CLI — Development tool for Sentient modules
 
 Usage:
-  sentients <commande> [options]
+  sentients [command]
 
-Commandes disponibles:
-  init                  Initialiser un projet Sentient
-  create module         Créer un nouveau module
-  connect               Se connecter à Sentient Connect
-  disconnect            Se déconnecter
-  pack                  Construire l'archive d'un module (.smp)
-  sign keygen           Générer une paire de clés de signature
-  sign <module>         Signer l'archive d'un module
-  sign verify <module>  Vérifier la signature d'un module
-  publish               Publier un module sur le store
-  link                  Lier un module local à un module distant
-  unlink                Délier un module
-  debug <module>        Déboguer un module
-  audit <module>        Auditer la conformité d'un module
-  help                  Afficher cette aide
-  -v, --version         Afficher la version
+Available Commands:
+  audit         Audit a module's conformance
+  connect       Connect to Sentient Connect
+  create        Create a new module
+  debug         Debug a module
+  disconnect    Disconnect from Sentient Connect
+  init          Initialize a new Sentient project
+  link          Link a local module to a remote module
+  pack          Pack a module
+  publish       Publish a module to the store
+  sign          Sign a module archive
+  unlink        Unlink a local module from sentient-connect
+  help          Help about any command
 
-Options globales:
-  --verbose             Activer les logs détaillés
-  --no-color            Désactiver les couleurs
-  --help                Afficher l'aide
-  --version             Afficher la version
+Flags:
+      --help     help for sentients
+  -v, --version  version for sentients
+
+Global Flags:
+      --lang string    language / UI locale (fr-FR, en-US, …)
+      --no-color       disable colors
+      --verbose        enable verbose logs
+
+Use "sentients [command] --help" for more information about a command.
 
 Exemples:
   sentients init
@@ -891,6 +963,9 @@ Exemples:
   sentients audit
 ```
 
+> Le help est thématisé : labels de section teintés (accent), wordmark brand en tête ;
+> les informations et messages — y compris l'aide — sont localisés (NFR-007).
+
 ---
 
 ### 5.12 `sentients -v` / `sentients --version`
@@ -901,13 +976,13 @@ Afficher la version actuelle de la CLI.
 
 #### Comportement
 
-1. Lire la version compilée dans le binaire (via `ldflags`)
-2. Afficher : `sentients v<version> (<os>/<arch>) <commit>`
+1. Lire la version compilée dans le binaire (via `ldflags` : `main.version`, `main.commit`, `main.date`)
+2. Afficher : `sentients v<version> (<os>/<arch>) <commit>` (template de version Cobra)
 
 #### Sortie
 
 ```
-sentients v0.1.0 (darwin/arm64) abc1234
+sentients v0.0.9 (darwin/arm64) abc1234
 ```
 
 ---
@@ -1049,23 +1124,35 @@ avant publication.
 
 ## 6. Modèle de données local
 
-### 6.1 Fichier `.sentient-cli.toml` (optionnel)
+### 6.1 Fichier `sentients.config.json` (optionnel)
 
 Placé à la racine du projet Sentient, ce fichier permet de configurer la CLI.
 
-```toml
-[project]
-name = "mon-projet"
-package_manager = "bun"
-
-[publish]
-default_registry = "https://store.sentient.dev"
-auto_audit = true
-
-[debug]
-verbose = false
-log_level = "info"
+```json
+{
+  "project": {
+    "name": "mon-projet",
+    "packageManager": "bun"
+  },
+  "publish": {
+    "defaultRegistry": "https://store.sentient.dev",
+    "autoAudit": true
+  },
+  "debug": {
+    "verbose": false,
+    "logLevel": "info"
+  },
+  "cli": {
+    "lang": "fr-FR"
+  }
+}
 ```
+
+> La configuration est **JSON uniquement** (le parser TOML a été retiré en 0.0.9). Le fichier
+> historique `sentient.config.toml` ne sert plus que de marqueur de projet (racine) pour
+> `create`/`link`/etc., et `sentients.config.json` est écrit par `sentients init`.
+> `cli.lang` force la langue d'interface (NFR-007, FR-025) ; un champ vide garde l'auto-détection
+> (`SENTIENT_CLI_LANG` / locale OS).
 
 ### 6.2 Fichier `manifest.json` (par module)
 
@@ -1100,6 +1187,15 @@ sentient-cli-signing/
 | macOS Keychain | macOS | `security` CLI ou `go-keyring` |
 | Secret Service | Linux | D-Bus + `libsecret` via `go-keyring` |
 | Credential Manager | Windows | `cmdkey` ou `Credential Manager` via `go-keyring` |
+| Fichier chiffré (fallback) | Sans keychain | Vault AES-256-GCM `~/.sentient-cli/credentials.enc` |
+
+- Le backend par défaut est le keychain système ; si le keychain est injoignable (probe de lecture),
+  la CLI bascule **transparentement** sur un vault fichier chiffré AES-256-GCM
+  (`credentials.enc` pour l'auth, `signing.enc` pour les clés).
+- La clé AES du vault est dérivée en **PBKDF2** du secret machine par utilisateur
+  (`~/.sentient-cli/machine.secret`) — jamais de passphrase codée en dur.
+- `SENTIENT_CLI_STORE=keychain|file` force le backend (CI/headless) ; `NewStoreVolatile` isole les tests.
+- Service keychain : `sentient-cli` (credentials), `sentient-cli-signing` (clés de signature).
 
 ### 7.2 Chiffrement des archives
 
@@ -1132,7 +1228,8 @@ sentient-cli-signing/
 
 - Les clés de signature sont stockées dans le keychain OS (service `sentient-cli-signing`)
 - La clé privée n'est **jamais** affichée à l'écran ni exportée
-- Fallback : fichier chiffré `~/.sentient-cli/signing.enc` (AES-256-GCM) quand le keychain n'est pas disponible
+- Fallback : fichier chiffré `~/.sentient-cli/signing.enc` (AES-256-GCM, clé PBKDF2 du secret machine)
+  quand le keychain n'est pas disponible
 - L'algorithme utilisé est **Ed25519** (signatures compactes de 64 octets, clés de 32 octets)
 - Les fichiers `.sig` sont des binaires contenant uniquement la signature Ed25519
 - La vérification de signature utilise la clé publique stockée dans le keychain
@@ -1146,6 +1243,12 @@ sentient-cli-signing/
 > (developer-store), derrière un préfixe global **`/api`** et une enveloppe Raiton unique :
 > `{ message, data, statusCode }` (`RaitonResponses(message, data, statusCode)`).
 > Les erreurs reprennent l'enveloppe (`message`), le code HTTP et un `code` optionnel.
+>
+> La base URL du client est résolue par le **registre `app.config.json`** (TECH-009) : le binaire
+> embarque le registre workspace (`sentient-auth`, `sentient-store`, …), un `app.config.json` local
+> peut le surcharger, et `SENTIENT_AUTH_API` force la base URL (priorité max). Le timeout HTTP par
+> défaut est de 30 s (surchargeable par application via `api.timeout`). Le header
+> `Authorization: Bearer <token>` est posé à chaque requête quand une session existe.
 
 ### 8.1 Endpoints `sentient-connect`
 
@@ -1157,10 +1260,11 @@ sentient-cli-signing/
 | POST | `/api/mfa/challenge` | Défi MFA (gardé) → `{mfaRequired, challenge?, factors}` |
 | POST | `/api/mfa/totp/verify` | Vérification code TOTP (gardé) → `{mfaVerified, mfaToken?}` |
 | POST | `/api/mfa/recovery/verify` | Vérification backup code (gardé) |
-| GET | `/api/developer-store/modules` | Liste des produits module du développeur |
+| GET | `/api/developer-store/modules` | Liste des produits module du développeur (tableau brut ou paginé `{items, …}`) |
 | GET | `/api/developer-store/modules/:id` | Détail d'un produit module (id) |
+| GET | `/api/developer-store/modules/:id/versions` | Liste des versions publiées (meilleure version pour link/publish) |
 | POST | `/api/developer-store/modules` | Création d'un produit module |
-| PUT | `/api/developer-store/modules/:id` | Mise à jour des métadonnées du produit |
+| PUT | `/api/developer-store/modules/:id` | Mise à jour des métadonnées du produit (unlink `--sync-remote`) |
 | POST | `/api/developer-store/modules/:id/versions` | Création d'une version |
 | POST | `/api/developer-store/modules/:id/versions/:versionId/artifact` | Déclaration de l'artefact |
 
@@ -1179,7 +1283,7 @@ sentient-cli-signing/
 |-------|------|-------------|
 | `user` | object | `{ id, username, email?, avatar?, status, roles[] }` |
 | `token` | string | JWT Bearer unique (session 24 h, TTL estimé côté CLI) |
-| `device` | object | `{ id, name }` |
+| `device` | string | UUID de l'appareil (session) |
 
 Pas de `expires_in` ni de `refresh_token` : la CLI estime l'expiration à 24 h et
 rafraîchit via `POST /api/auth/sessions/refresh`.
@@ -1193,43 +1297,82 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 | `type` | enum | oui | `DeveloperModuleType` (`WEB_APP_REMOTE` par défaut, …) |
 | `primaryCategory` | string | oui | Catégorie storefront |
 
+#### POST `/api/developer-store/modules/:id/versions` — `CreateVersionRequest`
+
+| Champ | Type | Requis | Description |
+|-------|------|--------|-------------|
+| `versionString` | string | oui | Version SemVer du manifest |
+| `buildNumber` | number | oui | Numéro de build (incrémenté par la CLI) |
+| `releaseNotes` | JSON | non | Notes de release (objet) |
+| `minManager` / `maxManager` | string | non | Compatibilité manager (manifest) |
+| `minApi` / `maxApi` | string | non | Compatibilité API (manifest) |
+| `supportedRuntimes` | string[] | non | Runtimes activés du manifest (`WEB`, `DESKTOP`, `MOBILE`) |
+
 #### POST `/api/developer-store/modules/:id/versions/:versionId/artifact` — `DeclareArtifactRequest`
 
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
 | `manifest` | JSON | oui | Contenu du `manifest.json` |
 | `checksum` | string | oui | SHA-256 hex de l'archive `.smp` |
-| `signature` | string | non | Signature Ed25519 (base64 du `.smp.sig`) |
+| `signature` | string | non | Signature Ed25519 (base64 du `.smp.sig`, vide si non signé) |
 | `size` | number | oui | Taille de l'archive en octets |
 
 ---
 
 ## 9. TUI — Composants Bubbletea
 
-### 9.1 Composants réutilisables
+### 9.1 Priorité d'utilisation des composants
+
+> **Règle obligatoire** : avant de créer tout composant TUI custom, **prioriser
+> systématiquement les composants existants de l'écosystème Bubbletea / Bubbles**
+> (https://github.com/charmbracelet/bubbletea/tree/main/examples,
+> https://github.com/charmbracelet/bubbles). Un composant custom ne doit être
+> implémenté que si aucun composant bubbles existant ne correspond au besoin, ou
+> si le composant bubbles ne peut pas être étendu/overridé pour le cas d'usage.
+>
+> **Ordre de priorité** :
+> 1. Composants `bubbles/*` natifs (spinner, textinput, list, table, viewport, confirm, pager, filepicker, progress, help, key, stopwatch, textarea…)
+> 2. Extension / styling des composants bubbles via lipgloss (styles custom, delegates)
+> 3. Composition de plusieurs composants bubbles dans un modèle Bubbletea `Model`
+> 4. Composant custom uniquement en dernier recours, avec justification documentée
+>
+> **Vérification avant implémentation** : consulter les examples officiels
+> (https://github.com/charmbracelet/bubbletea/tree/main/examples) et la
+> documentation bubbles (https://github.com/charmbracelet/bubbles#readme) pour
+> chaque nouveau composant TUI.
+
+### 9.2 Composants réutilisables
 
 | Composant | Usage | Bibliothèque |
 |-----------|-------|--------------|
-| `Spinner` | Indicateur de progression | `bubbles/spinner` |
-| `Select` | Sélection dans une liste | `bubbles/list` |
-| `Input` | Saisie de texte | `bubbles/textinput` |
-| `Confirm` | Confirmation oui/non | `bubbles/confirm` |
-| `Table` | Affichage de données tabulaires | `bubbles/table` |
-| `Viewport` | Scroll de contenu | `bubbles/viewport` |
-| `Toast` | Notifications | Custom (lipgloss) |
+| `RunWithSpinner` | Indicateur de progression (`tui/spinner.go`) | `bubbles/spinner` |
+| `RunWithProgress` | Barre de progression (téléchargements release, `tui/progress.go`) | `bubbles/progress` |
+| `Select` | Sélection dans une liste (`tui.Select`) | `bubbles/list` |
+| `AskText` | Saisie de texte (`tui.AskText`) | `bubbles/textinput` |
+| `Confirm` | Confirmation oui/non (`tui.Confirm`) | Custom (modèle Bubbletea minimal) |
+| `Table` | Affichage de données tabulaires (`tui.Table`, arrondi + bandes) | Custom (lipgloss) |
+| `SummaryCard` / `Wordmark` / `StepsList` / `LogsBlock` | Cartes de synthèse, badge brand, listes d'étapes, blocs de logs (`tui/components.go`) | Custom (lipgloss) |
 
-### 9.2 Styles
+> Tous les composants interactifs se **dégradent en sortie non-interactive** lorsque le terminal
+> n'est pas un TTY (ci / pipes) : prompts résolus via `SENTIENT_CLI_YES`, arguments positionnels,
+> texte sur stderr. `Table` est un composant statique custom (pas de sélection) ; les sélections
+> de liste passent par `bubbles/list`.
+
+### 9.3 Styles
+
+La palette est une identité **brand sage/olive à deux arrêts** (tous les éléments sémantiques
+partagent l'arrêt du thème) :
+
+- `#C1A875` — **sage**, l'accent principal (lisibilité sur fond sombre)
+- `#725B2A` — **olive sombre**, l'arrêt secondaire (encre foncée sur fond clair)
 
 | Élément | Couleur (dark) | Couleur (light) |
 |---------|---------------|-----------------|
-| Succès | `#00D26A` | `#00A854` |
-| Erreur | `#FF4757` | `#E63946` |
-| Warning | `#FFA502` | `#E67E22` |
-| Info | `#1E90FF` | `#2980B9` |
-| Muted | `#636E72` | `#95A5A6` |
-| Accent | `#A855F7` | `#7C3AED` |
+| Succès / Erreur / Warning / Info / Accent | `#C1A875` (sage) | `#725B2A` (olive) |
+| Muted / Texte / Bordure | `#C1A875` (sage) | `#725B2A` (olive) |
+| Soft (surfaces tintées, bandes, chips) | `#725B2A` (olive) | `#C1A875` (sage) |
 
-### 9.3 Thème
+### 9.4 Thème
 
 La CLI détecte automatiquement le thème du terminal (dark/light) via `lipgloss.HasDarkBackground()`
 et adapte les couleurs en conséquence.
@@ -1243,6 +1386,11 @@ et adapte les couleurs en conséquence.
 ```yaml
 # .goreleaser.yaml
 version: 2
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
 builds:
   - main: .
     binary: sentients
@@ -1255,6 +1403,9 @@ builds:
     goarch:
       - amd64
       - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64      # Windows arm64 non livré (NFR-003)
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -1262,18 +1413,24 @@ builds:
       - -X main.date={{.Date}}
 
 archives:
-  - format: tar.gz
-    name_template: >-
-      sentients-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+  - id: packages
+    formats:
+      - tar.gz
+    name_template: sentients-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
+  - id: binaries
+    formats:
+      - binary
+    name_template: sentients_{{ .Version }}_{{ .Os }}_{{ .Arch }}
 
 checksum:
   name_template: checksums.txt
 
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 changelog:
   sort: asc
@@ -1286,6 +1443,9 @@ changelog:
 ### 10.2 Installation
 
 ```bash
+# Go install (releases GitHub)
+go install github.com/protorians/sentient-cli@latest
+
 # npm / npx (npmjs)
 npm install -g @sentients/cli
 # ou
@@ -1296,9 +1456,6 @@ curl -sSL https://get.sentient.dev/cli | sh
 
 # Windows (PowerShell)
 iwr -useb https://get.sentient.dev/cli.ps1 | iex
-
-# Go install
-go install github.com/protorians/sentient-cms/cli/sentient-cli@latest
 
 # Homebrew (à créer)
 brew install protorians/sentient/sentient-cli
@@ -1334,7 +1491,13 @@ brew install protorians/sentient/sentient-cli
 
 ### 11.2 Messages d'erreur
 
-Tous les messages d'erreur sont en français et suivent le format :
+Les messages sont **localisés** (NFR-007, FR-025) : catalogues `en-US` (défaut) et `fr-FR`
+embarqués dans le binaire, résolution `--lang` → `SENTIENT_CLI_LANG` → `cli.lang` → locale OS
+(`LC_ALL` / `LC_MESSAGES` / `LANG`) → repli `en-US`. Tous les textes (messages, prompts, help,
+erreurs) passent par `i18n.T`/`i18n.Tf`.
+
+Les erreurs catégorisées sont rendues sur **stderr** dans une carte encadrée (arrondi, teinte
+erreur) :
 
 ```
 ✗ <Catégorie> : <Message détaillé>
@@ -1344,8 +1507,8 @@ Tous les messages d'erreur sont en français et suivent le format :
 Exemple :
 
 ```
-✗ Authentification : Token expiré
-  → Exécutez 'sentients connect' pour vous reconnecter.
+✗ Authentication : Token expired
+  → Run 'sentients connect' to sign in again.
 ```
 
 ---
@@ -1356,12 +1519,20 @@ Exemple :
 
 | Type | Outil | Couverture cible |
 |------|-------|------------------|
-| Unit | `testing` stdlib + `testify` | 80% |
-| Integration | `testify/suite` | Scénarios complets |
-| E2E | `testscript` (txtar) | Toutes les commandes |
-| TUI | `bubbletea/teatest` | Composants interactifs |
+| Unit | `testing` stdlib (pas de testify) | 80% |
+| Integration | `testing` + `testscript` | Scénarios complets |
+| E2E | `testscript` (txtar) contre une **mock API** `httptest` (`e2e/mockapi`) | Toutes les commandes |
+
+L'harness E2E (`e2e/e2e_test.go`) compile le binaire à partir de la racine, expose la CLI sous
+`$SENTIENTS`, pointe `SENTIENT_AUTH_API` vers la mock API (une par script), force le vault fichier
+(`SENTIENT_CLI_STORE=file`), désactive l'update check (`SENTIENT_CLI_SKIP_UPDATE=1`), injecte des
+fixtures portables `bun/npm/tsc/node` et donne un `HOME` isolé writable par script.
 
 ### 12.2 Scénarios de test critiques
+
+Suite E2E réelle (11 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
+`03_create`, `04_pack`, `05_sign`, `06_debug`, `07_audit`, `08_network`, `09_mfa`,
+`10_link_unlink`.
 
 | ID | Scénario |
 |----|----------|
@@ -1394,6 +1565,10 @@ Exemple :
 ---
 
 ## 13. Roadmap — Découpage Produit
+
+> **État (2026-09-12)** : les Epics E-001 → E-008 sont largement implémentés dans les releases
+> 0.0.8/0.0.9 (branche `alpha`). Le détail de l'alignement spec ↔ roadmap est dans
+> `docs/rapport-implementation.md` (§5).
 
 ```
 Product: sentient-cli v1.0.0
@@ -1433,7 +1608,7 @@ Product: sentient-cli v1.0.0
     │
     ├── Epic E-006 : Expérience développeur
     │   ├── Story S-013 : Mode verbose / logs
-    │   ├── Story S-014 : Configuration `.sentient-cli.toml`
+    │   ├── Story S-014 : Configuration `sentients.config.json`
     │   └── Story S-015 : Auto-update detection
     │
     └── Epic E-007 : Tests & CI
@@ -1449,7 +1624,7 @@ Product: sentient-cli v1.0.0
 | ID | Risque | Probabilité | Impact | Mitigation |
 |----|--------|-------------|--------|------------|
 | R-001 | API `sentient-connect` non disponible | Moyenne | Élevé | Mode offline pour les commandes locales (init, create, pack, audit, debug) |
-| R-002 | Incompatibilité keychain sur certaines distributions Linux | Moyenne | Moyen | Fallback fichier chiffré (AES-256-GCM) avec warning |
+| R-002 | Incompatibilité keychain sur certaines distributions Linux | Moyenne | Moyen | Fallback transparent fichier chiffré AES-256-GCM (`credentials.enc` / `signing.enc`), clé PBKDF2 du secret machine, `SENTIENT_CLI_STORE` pour forcer le backend |
 | R-003 | Taille du binaire trop élevée | Faible | Faible | `ldflags -s -w`, UPX compression optionnelle |
 | R-004 | Breaking changes API `sentient-connect` | Faible | Élevé | Versioning API, détection automatique de la version |
 | R-005 | Conflits de noms de modules | Moyenne | Moyen | Validation stricte, vérification d'unicité avant création |

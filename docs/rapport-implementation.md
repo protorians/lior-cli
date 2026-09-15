@@ -35,10 +35,10 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 ## 2. Ce qui est implémenté (par commande)
 
 ### `sentients init` (FR-001, FR-002, FR-003)
-- Clone shallow de `protorians/sentient-cms` (dossier cible demandé, confirmation/écrasement si existe).
+- Clone shallow de `protorians/sentients-socle` (dossier cible demandé, confirmation/écrasement si existe).
 - Détection des package managers `bun → pnpm → yarn → npm` (FR-001) + choix interactif.
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
-- Écrit `.sentient-cli.toml` (config projet).
+- Écrit `sentients.config.json` (config projet).
 
 ### `sentients create module [nom]` (FR-004, FR-005)
 - Génère la structure `external_modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
@@ -51,13 +51,13 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   (le token de session est attaché en Bearer après le sign-in).
 - Expiration estimée à 24 h ; rafraîchissement via `POST /api/auth/sessions/refresh` (plus de refresh token).
 - Credentials stockées dans le keychain OS (`go-keyring`), avec store chiffré de repli.
-- Base URL via env `SENTIENT_CONNECT_API` ou `app.config.json`.
+- Base URL et timeout via l'entrée `sentient-auth` de `app.config.json` (`api.baseUrl`, `api.timeout`), surchargée par l'env `SENTIENT_AUTH_API` ; le registre `app.config.json` est embarqué dans le binaire.
 
 ### `sentients disconnect` (FR-008, FR-009)
 - Invalidation serveur best-effort (`POST /api/auth/logout`) + suppression locale, avec confirmation.
 
 ### `sentients pack [module]` (FR-010, FR-011)
-- Zip `external_modules/<module>/` + `public/assets/<module>/` → `.sentients/build/<module>-<version>.smp`.
+- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.sentients/build/<module>-<version>.smp`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
 ### `sentients sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
@@ -66,7 +66,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Fingerprint SHA-256 de la clé publique (commande `sign` sans argument).
 
 ### `sentients publish [module]` (FR-012, FR-013)
-- Authentification obligatoire, auto-audit pré-publication (config `auto_audit`), complétion
+- Authentification obligatoire, auto-audit pré-publication (config `autoAudit`), complétion
   interactive des métadonnées (`name`, `description`, `publisher.*`), pack puis publication en
   **3 étapes** sur l'API developer-store (spec connect §21) :
   1. résolution/création du produit module (`POST /api/developer-store/modules`) ;
@@ -105,7 +105,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 | Package | Rôle | Exports clés |
 |---------|------|--------------|
 | `auth` | Authentification | `Store`, `Session`, `Connector`, `Authenticator`, `MFAFactor` |
-| `config` | Config projet `.sentient-cli.toml` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
+| `config` | Config projet `sentients.config.json` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
 | `module` | Logique module | `Manifest`, `Creator`, `Packer`, `Linker`, `Validator` |
 | `signing` | Signature Ed25519 | `KeyStore`, `GenerateKeyPair`, `SignArchive`, `VerifySignature`, `Fingerprint`, `FindArchive` |
 | `audit` | Audit conformité | `Auditor`, `AuditResult` |
@@ -113,6 +113,15 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 | `store` | Client store API | `Client` (`ListModules`, `GetModule`, `UpdateModule`, `Publish` — 3 étapes developer-store) |
 | `pkg` | Utilitaires | erreurs+exit codes, crypto AES-256-GCM, fs, git, http, uuid, update |
 | `tui` | UI Charm | `AskText/AskSecret/Select/Confirm`, `RunWithSpinner`, `Table`, `NewStyles` |
+
+> **Priorité composants TUI (règle obligatoire, spec §9.1)** : avant de créer
+> tout composant custom, utiliser en priorité les composants natifs `bubbles/*`
+> (spinner, textinput, list, table, viewport, confirm, pager, filepicker, progress,
+> help, key, stopwatch, textarea…), puis étendre via lipgloss, puis composer dans
+> un modèle Bubbletea. Un composant custom ne doit être implémenté qu'en dernier
+> recours, avec justification. Consulter les examples officiels
+> https://github.com/charmbracelet/bubbletea/tree/main/examples et la doc
+> https://github.com/charmbracelet/bubbles avant chaque nouveau composant TUI.
 
 ---
 
@@ -227,7 +236,7 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 
 ### Release 0.3.0 (Qualité) — ⏳ à faire
 - S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `SENTIENT_CLI_DEBUG`).
-- S-014 config `.sentient-cli.toml` ✅ déjà présente.
+- S-014 config `sentients.config.json` ✅ déjà présente.
 - S-015 auto-update ✅ partiel (notification seule, pas de download ; désactivable en CI).
 - S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (10 packages), **E2E ✅** (10 scénarios
   txtar, TC-001 → TC-025, mock `sentient-connect` in-memory), **CI ✅** (job `e2e`).

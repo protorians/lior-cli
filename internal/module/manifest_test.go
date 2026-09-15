@@ -80,14 +80,11 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	path := dir + "/manifest.json"
 
 	m := NewManifest("billing", "")
-	m.Widgets = []Widget{
-		{ID: "w_1", Name: "Stats", Description: "Graphique des ventes"},
-	}
-	m.Routines = []Routine{
-		{ID: "r_1", Name: "Invoicing", Description: "Génération des factures"},
-	}
+	m.Widgets = []string{"analytics"}
+	m.Routines = []string{"billingAnalyticsRoutine"}
+	m.Providers = []string{"layout"}
 	m.Menu.Items = []MenuItem{
-		{ID: "mi_1", Label: "Factures", Icon: "FileIcon", URI: "/billing/invoices"},
+		{Label: "Factures", Icon: "FileIcon", URL: "/billing/invoices"},
 	}
 	if err := m.Save(path); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -97,13 +94,47 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}
-	if len(loaded.Widgets) != 1 || loaded.Widgets[0].Name != "Stats" {
+	if len(loaded.Widgets) != 1 || loaded.Widgets[0] != "analytics" {
 		t.Errorf("Widgets non conformes: %+v", loaded.Widgets)
 	}
-	if len(loaded.Routines) != 1 || loaded.Routines[0].ID != "r_1" {
+	if len(loaded.Routines) != 1 || loaded.Routines[0] != "billingAnalyticsRoutine" {
 		t.Errorf("Routines non conformes: %+v", loaded.Routines)
 	}
-	if len(loaded.Menu.Items) != 1 || loaded.Menu.Items[0].URI != "/billing/invoices" {
+	if len(loaded.Providers) != 1 || loaded.Providers[0] != "layout" {
+		t.Errorf("Providers non conformes: %+v", loaded.Providers)
+	}
+	if len(loaded.Menu.Items) != 1 || loaded.Menu.Items[0].URL != "/billing/invoices" {
+		t.Errorf("Menu non conforme: %+v", loaded.Menu)
+	}
+}
+
+func TestManifestReadsMockupStyleMenuURL(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/manifest.json"
+
+	m := NewManifest("billing", "")
+	m.Menu.Items = []MenuItem{
+		{Label: "Factures", Icon: "FileIcon", URL: "/billing/invoices"},
+	}
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// The reference mockup declares menu entries with a `url` field.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.ReplaceAll(string(data), `"uri"`, `"url"`)
+	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if len(loaded.Menu.Items) != 1 || loaded.Menu.Items[0].URL != "/billing/invoices" {
 		t.Errorf("Menu non conforme: %+v", loaded.Menu)
 	}
 }

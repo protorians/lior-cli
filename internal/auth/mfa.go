@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
 // FactorKind identifies an MFA factor type (MfaFactorVm.type).
@@ -51,7 +53,7 @@ func (a *Authenticator) Verify(ctx context.Context, prompt Prompt) (*VerifyRespo
 		}
 		code = strings.TrimSpace(code)
 		if code == "" {
-			return nil, fmt.Errorf("code MFA obligatoire")
+			return nil, fmt.Errorf("%s", i18n.T("auth.error.mfa_code_required"))
 		}
 
 		switch kind {
@@ -73,12 +75,14 @@ func (a *Authenticator) Verify(ctx context.Context, prompt Prompt) (*VerifyRespo
 	}
 
 	if lastErr == nil {
-		return nil, fmt.Errorf("vérification MFA échouée")
+		return nil, fmt.Errorf("%s", i18n.T("auth.error.mfa_failed"))
 	}
 	if challengeErr != nil {
-		return nil, fmt.Errorf("vérification MFA échouée : %v ; le challenge MFA a également échoué : %v", lastErr, challengeErr)
+		return nil, fmt.Errorf("%s: %v; %s: %v",
+			i18n.T("auth.error.mfa_failed"), lastErr,
+			i18n.T("auth.error.mfa_challenge_failed"), challengeErr)
 	}
-	return nil, fmt.Errorf("vérification MFA échouée : %v", lastErr)
+	return nil, fmt.Errorf("%s: %v", i18n.T("auth.error.mfa_failed"), lastErr)
 }
 
 // challengeFactors returns the factors exposed by a successful challenge, or

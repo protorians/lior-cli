@@ -1,12 +1,12 @@
-# TC-019 — `sentients help` sans argument affiche l'aide générale.
+# TC-019 — `sentients help` without arguments prints the general help.
 exec $SENTIENTS --no-color help
-stdout 'Sentient CLI est l.outil de développement unique'
+stdout 'Sentient CLI is the one development tool'
 stdout 'Available Commands:'
 stdout '  pack '
 
-# TC-020 — `sentients help` avec commande affiche l'aide de la commande.
+# TC-020 — `sentients help` with a command prints that command's help.
 exec $SENTIENTS --no-color help pack
-stdout 'Construit le build d.un module'
+stdout 'Builds a module'
 stdout 'Usage:'
 stdout '  sentients pack \[module\] \[flags\]'
 

@@ -3,26 +3,34 @@ cd project
 mkdir external_modules
 exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 
-# TC-003 — nom invalide : rejeté (exit 1) avec message explicite.
+# TC-003 — invalid name: rejected (exit 1) with an explicit message.
 ! exec $SENTIENTS --no-color create module Foo
 stderr 'kebab-case'
 exec sh -c '"$SENTIENTS" --no-color create module Foo >/dev/null 2>&1; echo $?'
 stdout '^1$'
 
-# TC-004 — nom valide : structure complète générée.
+# TC-004 — valid name: complete structure scaffolded from the embedded mockup.
 exec $SENTIENTS --no-color create module blog-manager
-stdout 'Module créé'
-stdout 'Token généré'
-stdout 'manifest.json initialisé'
-stdout 'index.tsx initialisé'
+stdout 'Module created'
+stdout 'Token generated'
+stdout 'manifest.json initialized'
+stdout 'index.tsx initialized'
+stdout 'Page created from mockup'
 
 cd external_modules/blog-manager
 exists manifest.json
 exists index.tsx
 exists README.md
-exists components
-exists hooks
-exists services
-exec grep -q '"version": "0.1.0"' manifest.json
+exists package.json
+exists application
+exists domain
+exists infrastructure
+exists presentation
+exec grep -q '"version": "1.0.0"' manifest.json
 exec grep -q '"name": "Blog Manager"' manifest.json
 exec grep -q '"id": "blog-manager"' manifest.json
+exec grep -q '"token": "[0-9a-f-]*"' manifest.json
+
+# The declaration declares a uri → the page is scaffolded in src/app.
+cd ../../src/app/blog-manager
+exists page.tsx

@@ -6,7 +6,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Table renders a simple bordered align-left table.
+// tablePad is the number of spaces kept on each side of a cell.
+const tablePad = 1
+
+// Table renders a rounded, banded, align-left table.
 type Table struct {
 	Headers []string
 	Rows    [][]string
@@ -30,62 +33,65 @@ func (t *Table) AddRow(cells ...string) {
 
 // Render produces the printable table.
 func (t *Table) Render() string {
-	widths := make([]int, len(t.Headers))
+	n := len(t.Headers)
+	widths := make([]int, n)
 	for i, h := range t.Headers {
 		widths[i] = lipgloss.Width(h)
 	}
 	for _, row := range t.Rows {
 		for i, cell := range row {
-			if w := lipgloss.Width(cell); w > widths[i] {
-				widths[i] = w
+			if i < n && lipgloss.Width(cell) > widths[i] {
+				widths[i] = lipgloss.Width(cell)
 			}
 		}
+	}
+
+	total := n + 1
+	for i := 0; i < n; i++ {
+		total += widths[i] + 2*tablePad
 	}
 
 	var b strings.Builder
-	writeRow := func(cells []string, style lipgloss.Style) {
-		b.WriteString("│ ")
-		for i, cell := range cells {
-			b.WriteString(style.Render(lipgloss.NewStyle().Width(widths[i]).Render(cell)))
-			if i < len(cells)-1 {
-				b.WriteString(" │ ")
-			}
-		}
-		b.WriteString(" │\n")
+	b.WriteString("╭" + strings.Repeat("─", total-2) + "╮\n")
+	b.WriteString(t.renderRow(t.Headers, widths, true, false))
+	b.WriteString("├" + strings.Repeat("─", total-2) + "┤\n")
+	for r, row := range t.Rows {
+		b.WriteString(t.renderRow(row, widths, false, r%2 == 1))
 	}
-	writeSep := func() {
-		b.WriteString("├")
-		for i := range t.Headers {
-			b.WriteString(strings.Repeat("─", widths[i]+2))
-			if i < len(t.Headers)-1 {
-				b.WriteString("┼")
-			}
-		}
-		b.WriteString("┤\n")
-	}
+	b.WriteString("╰" + strings.Repeat("─", total-2) + "╯\n")
+	return b.String()
+}
 
-	b.WriteString("┌")
-	for i := range t.Headers {
-		b.WriteString(strings.Repeat("─", widths[i]+2))
-		if i < len(t.Headers)-1 {
-			b.WriteString("┬")
+func (t *Table) renderRow(cells []string, widths []int, header, alt bool) string {
+	var b strings.Builder
+	b.WriteString("│")
+	accent := lipgloss.Color(t.styles.palette.accent)
+	soft := lipgloss.Color(t.styles.palette.soft)
+
+	for i, cell := range cells {
+		if i >= len(widths) {
+			break
 		}
-	}
-	b.WriteString("┐\n")
-	writeRow(t.Headers, t.styles.TableHeader)
-	writeSep()
-	for _, row := range t.Rows {
-		styled := make([]string, len(row))
-		copy(styled, row)
-		writeRow(styled, t.styles.TableRow)
-	}
-	b.WriteString("└")
-	for i := range t.Headers {
-		b.WriteString(strings.Repeat("─", widths[i]+2))
-		if i < len(t.Headers)-1 {
-			b.WriteString("┴")
+		inner := lipgloss.NewStyle().
+			Width(widths[i]+2*tablePad).
+			Padding(0, tablePad).
+			Render(cell)
+		var style lipgloss.Style
+		switch {
+		case header:
+			style = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(accent).
+				Background(soft)
+		case alt:
+			style = lipgloss.NewStyle().
+				Foreground(accent).
+				Background(soft)
+		default:
+			style = lipgloss.NewStyle().Foreground(lipgloss.Color(t.styles.palette.muted))
 		}
+		b.WriteString(style.Render(inner))
 	}
-	b.WriteString("┘\n")
+	b.WriteString("│\n")
 	return b.String()
 }

@@ -2,6 +2,7 @@ package debug
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
@@ -31,7 +33,7 @@ type Debugger struct {
 func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 	moduleDir := filepath.Join(d.Root, config.ExternalModulesDir, name)
 	if !pkg.DirExists(moduleDir) {
-		return nil, fmt.Errorf("module %q introuvable dans %s", name, config.ExternalModulesDir)
+		return nil, errors.New(i18n.Tf("val.module_not_found", name, config.ExternalModulesDir))
 	}
 
 	result := &DebugResult{Module: name}
@@ -44,7 +46,7 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 	}
 
 	if res.HasErrors() {
-		result.Status = "ERREUR"
+		result.Status = "ERROR"
 		result.Errors = res.ErrorCount()
 		for _, f := range res.Findings {
 			if f.Severity == module.LevelError {
@@ -57,8 +59,8 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 	// Try to run the build command if available
 	pm := d.detectPackageManager()
 	if pm == "" {
-		result.Status = "AVERTISSEMENT"
-		result.Logs = append(result.Logs, "aucun gestionnaire de paquets détecté, validation seule effectuée")
+		result.Status = "WARNING"
+		result.Logs = append(result.Logs, i18n.T("debug.npm_none"))
 		return result, nil
 	}
 
@@ -74,9 +76,9 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 	if build != nil {
 		output, err := d.runCommand(build.dir, build.cmd)
 		if err != nil {
-			result.Status = "ERREUR"
+			result.Status = "ERROR"
 			result.Errors++
-			result.Logs = append(result.Logs, fmt.Sprintf("erreur de compilation: %s", err.Error()))
+			result.Logs = append(result.Logs, i18n.Tf("debug.build_error", err.Error()))
 			if output != "" {
 				result.Logs = append(result.Logs, output)
 			}
@@ -90,9 +92,8 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 		// No build script: the validation above is the only thing executed —
 		// this must not be reported as a successful build (previously a false
 		// "OK" hid the absence of any real compilation).
-		result.Status = "AVERTISSEMENT"
-		result.Logs = append(result.Logs,
-			"aucun script de build (debug/dev/build) ni type-check TypeScript trouvé — validation seule effectuée")
+		result.Status = "WARNING"
+		result.Logs = append(result.Logs, i18n.T("debug.no_build_script"))
 	}
 
 	return result, nil
@@ -102,12 +103,12 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 func (d *Debugger) DebugAll() ([]*DebugResult, error) {
 	dir := filepath.Join(d.Root, config.ExternalModulesDir)
 	if !pkg.DirExists(dir) {
-		return nil, fmt.Errorf("le dossier %q est introuvable", config.ExternalModulesDir)
+		return nil, errors.New(i18n.Tf("modules.error.dir", config.ExternalModulesDir))
 	}
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("lecture de %s impossible : %w", config.ExternalModulesDir, err)
+		return nil, fmt.Errorf("failed to read %s: %w", config.ExternalModulesDir, err)
 	}
 
 	var results []*DebugResult
@@ -247,7 +248,7 @@ func moduleHasTS(moduleDir string) bool {
 
 func (d *Debugger) runCommand(dir string, args []string) (string, error) {
 	if len(args) == 0 {
-		return "", fmt.Errorf("commande vide")
+		return "", fmt.Errorf("empty command")
 	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = dir

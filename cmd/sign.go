@@ -3,8 +3,10 @@ package cmd
 import (
 	"crypto/ed25519"
 	"fmt"
+	"strings"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/signing"
@@ -14,16 +16,16 @@ import (
 
 var signCmd = &cobra.Command{
 	Use:   "sign [module]",
-	Short: "Signer les archives .smp (Ed25519)",
-	Long: `Gère les signatures numériques Ed25519 des modules : génère des clés,
-signe les archives .smp et vérifie les signatures.
+	Short: "Sign .smp archives (Ed25519)",
+	Long: `Manages Ed25519 digital signatures for modules: generates keys,
+signs the .smp archives and verifies signatures.
 
-Sous-commandes :
-  sign keygen            Générer une paire de clés Ed25519
-  sign <module>          Signer l'archive .smp d'un module
-  sign verify <module>   Vérifier la signature d'un module
+Subcommands:
+  sign keygen            Generate an Ed25519 key pair
+  sign <module>          Sign a module's .smp archive
+  sign verify <module>   Verify a module's signature
 
-Sans argument, affiche le fingerprint SHA-256 de la clé publique.`,
+Without arguments, shows the SHA-256 fingerprint of the public key.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
@@ -35,16 +37,19 @@ Sans argument, affiche le fingerprint SHA-256 de la clé publique.`,
 
 func init() {
 	signCmd.AddCommand(signKeygenCmd, signVerifyCmd)
+	i18nHelp(signCmd, "cmd.sign.short", "cmd.sign.long")
+	i18nHelp(signKeygenCmd, "cmd.sign.keygen.short", "cmd.sign.keygen.long")
+	i18nHelp(signVerifyCmd, "cmd.sign.verify.short", "cmd.sign.verify.long")
 }
 
 var signKeygenCmd = &cobra.Command{
 	Use:   "keygen",
-	Short: "Générer une paire de clés Ed25519",
-	Long: `Génère une paire de clés Ed25519 et la stocke dans le keychain système
-(repli : fichier chiffré ~/.sentient-cli/signing.enc).
+	Short: "Generate an Ed25519 key pair",
+	Long: `Generates an Ed25519 key pair and stores it in the system keychain
+(fallback: encrypted file ~/.sentient-cli/signing.enc).
 
-Si des clés existent déjà, demande confirmation avant de les écraser
-(régénération silencieuse en mode non interactif).`,
+If keys already exist, asks for confirmation before overwriting them
+(silent regeneration in non-interactive mode).`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runSignKeygen()
@@ -53,46 +58,51 @@ Si des clés existent déjà, demande confirmation avant de les écraser
 
 var signVerifyCmd = &cobra.Command{
 	Use:   "verify [module]",
-	Short: "Vérifier la signature d'un module",
-	Long: `Vérifie la validité du fichier .sig d'un module par rapport à son
-archive .smp, à l'aide de la clé publique stockée dans le keychain.`,
+	Short: "Verify a module's signature",
+	Long: `Verifies the validity of a module's .sig file against its
+.smp archive, using the public key stored in the keychain.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return verifySignature(args)
 	},
 }
 
-// printSigningFingerprint affiche le fingerprint SHA-256 de la clé publique (FR-024).
+// printSigningFingerprint prints the SHA-256 fingerprint of the public key (FR-024).
 func printSigningFingerprint() error {
 	store := signing.NewKeyStore()
 	pub, err := store.GetPublicKey()
 	if err != nil {
-		return pkg.NewErrorWithFix("Signature",
-			"aucune clé de signature trouvée dans le keychain",
-			"Exécutez 'sentients sign keygen' pour générer une paire de clés.",
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
+			i18n.T("sign.error.no_key"),
+			i18n.T("sign.error.keygen.fix"),
 			pkg.ExitSigning)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.SubHeader.Render("Clé de signature du développeur :"))
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Fingerprint"), s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub))))
+	fmt.Println(s.NeutralPanel(
+		s.SubHeader.Render(i18n.T("sign.header"))+"\n\n"+
+			s.KeyValue(i18n.T("label.fingerprint"),
+				s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub)))),
+	))
 	return nil
 }
 
-// runSignKeygen génère une paire de clés Ed25519 et la stocke (spec §5.13.1).
+// runSignKeygen generates an Ed25519 key pair and stores it (spec §5.13.1).
 func runSignKeygen() error {
 	store := signing.NewKeyStore()
 
 	if store.HasKeys() {
 		s := tui.NewStyles()
 		fmt.Println()
-		fmt.Println(s.Warning.Render("⚠ Des clés de signature existent déjà"))
+		body := s.Warning.Render(i18n.T("sign.keys_exist"))
 		if pub, err := store.GetPublicKey(); err == nil {
-			fmt.Printf("  %s : %s\n", s.Muted.Render("Fingerprint actuel"), s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub))))
+			body += "\n\n" + s.KeyValue(i18n.T("label.current_fingerprint"),
+				s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub))))
 		}
+		fmt.Println(s.WarningPanel(body))
 		if tui.IsInteractive() {
-			regenerate, err := tui.Confirm("Régénérer la paire de clés (écrase les précédentes)", false)
+			regenerate, err := tui.Confirm(i18n.T("sign.confirm.regenerate"), false)
 			if err != nil {
 				return err
 			}
@@ -104,26 +114,30 @@ func runSignKeygen() error {
 
 	pub, priv, err := signing.GenerateKeyPair()
 	if err != nil {
-		return pkg.NewError("Signature", err.Error(), pkg.ExitSigning)
+		return pkg.NewError(i18n.T("cat.signature"), err.Error(), pkg.ExitSigning)
 	}
 
-	_, err = tui.RunWithSpinner("Sauvegarde des clés dans le keychain…", func() (struct{}, error) {
+	_, err = tui.RunWithSpinner(i18n.T("sign.spinner.saving"), func() (struct{}, error) {
 		return struct{}{}, signing.SaveKeyPair(store, pub, priv)
 	})
 	if err != nil {
-		return pkg.NewError("Signature", err.Error(), pkg.ExitSigning)
+		return pkg.NewError(i18n.T("cat.signature"), err.Error(), pkg.ExitSigning)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Paire de clés Ed25519 générée avec succès"))
-	fmt.Printf("  %s : %s (SHA-256 de la clé publique)\n", s.Muted.Render("Fingerprint"), s.Info.Render(signing.Fingerprint(pub)))
-	fmt.Printf("  %s : stockée dans le keychain système\n", s.Muted.Render("Clé privée"))
-	fmt.Printf("  %s : stockée dans le keychain système\n", s.Muted.Render("Clé publique"))
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("sign.keygen.success")),
+		s.KeyValue(i18n.T("label.fingerprint"),
+			s.Info.Render(signing.Fingerprint(pub))+" (SHA-256 of the public key)"),
+		s.KeyValue(i18n.T("label.private_key"), i18n.T("sign.stored_keychain")),
+		s.KeyValue(i18n.T("label.public_key"), i18n.T("sign.stored_keychain")),
+	))
+	fmt.Println()
 	return nil
 }
 
-// signModule signe l'archive .smp d'un module (spec §5.13.2).
+// signModule signs a module's .smp archive (spec §5.13.2).
 func signModule(args []string) error {
 	root, err := requireProjectRoot()
 	if err != nil {
@@ -137,20 +151,20 @@ func signModule(args []string) error {
 
 	m, err := module.LoadManifest(config.ManifestPath(root, name))
 	if err != nil {
-		return pkg.NewError("Manifest", err.Error(), pkg.ExitManifest)
+		return pkg.NewError(i18n.T("cat.manifest"), err.Error(), pkg.ExitManifest)
 	}
 
 	archivePath, err := signing.FindArchive(root, name, m.Version)
 	if err != nil {
-		return pkg.NewErrorWithFix("Signature",
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
 			err.Error(),
-			"Exécutez 'sentients pack "+name+"' pour construire l'archive d'abord.",
+			i18n.Tf("sign.error.pack.fix", name),
 			pkg.ExitSigning)
 	}
 
 	sigPath := archivePath + ".sig"
 	if pkg.FileExists(sigPath) && tui.IsInteractive() {
-		overwrite, err := tui.Confirm("Un fichier .sig existe déjà, l'écraser", false)
+		overwrite, err := tui.Confirm(i18n.T("sign.confirm.overwrite"), false)
 		if err != nil {
 			return err
 		}
@@ -159,7 +173,7 @@ func signModule(args []string) error {
 		}
 	}
 
-	keys, err := tui.RunWithSpinner("Chargement de la clé de signature…", func() (*signingKey, error) {
+	keys, err := tui.RunWithSpinner(i18n.T("sign.spinner.loading"), func() (*signingKey, error) {
 		pub, priv, err := signing.LoadKeyPair(signing.NewKeyStore())
 		if err != nil {
 			return nil, err
@@ -167,30 +181,33 @@ func signModule(args []string) error {
 		return &signingKey{pub: pub, priv: priv}, nil
 	})
 	if err != nil {
-		return pkg.NewErrorWithFix("Signature",
-			"clé de signature introuvable : "+err.Error(),
-			"Exécutez 'sentients sign keygen' pour générer une paire de clés.",
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
+			i18n.Tf("sign.error.key_not_found", err.Error()),
+			i18n.T("sign.error.keygen.fix"),
 			pkg.ExitSigning)
 	}
 
-	sigPath, err = tui.RunWithSpinner("Signature de l'archive…", func() (string, error) {
+	sigPath, err = tui.RunWithSpinner(i18n.T("sign.spinner.signing"), func() (string, error) {
 		return signing.SignArchive(archivePath, keys.priv)
 	})
 	if err != nil {
-		return pkg.NewError("Signature", err.Error(), pkg.ExitSigning)
+		return pkg.NewError(i18n.T("cat.signature"), err.Error(), pkg.ExitSigning)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Archive signée avec succès"))
-	fmt.Printf("  %s    : %s v%s\n", s.Muted.Render("Module"), name, m.Version)
-	fmt.Printf("  %s   : %s\n", s.Muted.Render("Archive"), s.Info.Render(archivePath))
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Signature"), s.Info.Render(sigPath))
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Signataire"), s.Info.Render(signing.Fingerprint(keys.pub)))
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("sign.success")),
+		s.KeyValue(i18n.T("label.module"), name+" v"+m.Version),
+		s.KeyValue(i18n.T("label.archive"), s.Info.Render(archivePath)),
+		s.KeyValue(i18n.T("label.signature"), s.Info.Render(sigPath)),
+		s.KeyValue(i18n.T("label.signer"), s.Info.Render(signing.Fingerprint(keys.pub))),
+	))
+	fmt.Println()
 	return nil
 }
 
-// verifySignature vérifie la signature .sig d'un module (spec §5.13.3).
+// verifySignature verifies a module's .sig signature (spec §5.13.3).
 func verifySignature(args []string) error {
 	root, err := requireProjectRoot()
 	if err != nil {
@@ -204,26 +221,26 @@ func verifySignature(args []string) error {
 
 	m, err := module.LoadManifest(config.ManifestPath(root, name))
 	if err != nil {
-		return pkg.NewError("Manifest", err.Error(), pkg.ExitManifest)
+		return pkg.NewError(i18n.T("cat.manifest"), err.Error(), pkg.ExitManifest)
 	}
 
 	archivePath, err := signing.FindArchive(root, name, m.Version)
 	if err != nil {
-		return pkg.NewErrorWithFix("Signature",
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
 			err.Error(),
-			"Exécutez 'sentients pack "+name+"' pour construire l'archive d'abord.",
+			i18n.Tf("sign.error.pack.fix", name),
 			pkg.ExitSigning)
 	}
 
 	sigPath := archivePath + ".sig"
 	if !pkg.FileExists(sigPath) {
-		return pkg.NewErrorWithFix("Signature",
-			fmt.Sprintf("fichier de signature introuvable : %s", sigPath),
-			"Exécutez 'sentients sign "+name+"' pour signer l'archive.",
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
+			i18n.Tf("sign.error.sig_not_found", sigPath),
+			i18n.Tf("sign.error.sign.fix", name),
 			pkg.ExitSigning)
 	}
 
-	valid, err := tui.RunWithSpinner("Vérification de la signature…", func() (bool, error) {
+	valid, err := tui.RunWithSpinner(i18n.T("sign.spinner.verifying"), func() (bool, error) {
 		pubBytes, err := signing.NewKeyStore().GetPublicKey()
 		if err != nil {
 			return false, err
@@ -231,29 +248,37 @@ func verifySignature(args []string) error {
 		return signing.VerifySignature(archivePath, sigPath, ed25519.PublicKey(pubBytes))
 	})
 	if err != nil {
-		return pkg.NewErrorWithFix("Signature",
-			"clé de vérification introuvable : "+err.Error(),
-			"Exécutez 'sentients sign keygen' pour générer une paire de clés.",
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
+			i18n.Tf("sign.error.verification_key", err.Error()),
+			i18n.T("sign.error.keygen.fix"),
 			pkg.ExitSigning)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
 	if valid {
-		fmt.Println(s.Success.Render("✓ Signature valide"))
-		fmt.Printf("  %s     : %s v%s\n", s.Muted.Render("Module"), name, m.Version)
-		fmt.Printf("  %s    : %s\n", s.Muted.Render("Archive"), s.Info.Render(archivePath))
-		if pub, err := signing.NewKeyStore().GetPublicKey(); err == nil {
-			fmt.Printf("  %s : %s\n", s.Muted.Render("Signataire"), s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub))))
+		rows := []string{
+			s.KeyValue(i18n.T("label.module"), name+" v"+m.Version),
+			s.KeyValue(i18n.T("label.archive"), s.Info.Render(archivePath)),
 		}
+		if pub, err := signing.NewKeyStore().GetPublicKey(); err == nil {
+			rows = append(rows,
+				s.KeyValue(i18n.T("label.signer"),
+					s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub)))))
+		}
+		fmt.Println(s.SummaryCard(s.Success.Render(i18n.T("sign.valid")), rows...))
+		fmt.Println()
 		return nil
 	}
 
-	fmt.Println(s.Error.Render("✗ Signature invalide"))
-	fmt.Printf("  %s     : %s v%s\n", s.Muted.Render("Module"), name, m.Version)
-	fmt.Printf("  %s    : %s\n", s.Muted.Render("Archive"), s.Info.Render(archivePath))
-	fmt.Println("  → L'archive a pu être modifiée ou la clé de vérification est incorrecte.")
-	return pkg.NewError("Signature", "signature invalide", pkg.ExitSigning)
+	rows := []string{
+		s.KeyValue(i18n.T("label.module"), name+" v"+m.Version),
+		s.KeyValue(i18n.T("label.archive"), s.Info.Render(archivePath)),
+	}
+	fmt.Println(s.ErrorPanel(
+		s.Error.Render(i18n.T("sign.invalid"))+"\n\n"+strings.Join(rows, "\n")+"\n\n"+s.Hint.Render(i18n.T("sign.invalid.hint")),
+	))
+	return pkg.NewError(i18n.T("cat.signature"), i18n.T("sign.error.invalid"), pkg.ExitSigning)
 }
 
 type signingKey struct {

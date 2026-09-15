@@ -12,6 +12,28 @@ const http = require("http");
 const REPO = "protorians/sentient-cli";
 const BINARY_NAME = "sentients";
 
+function getOsToken() {
+  const platform = os.platform();
+  const arch = os.arch();
+  switch (platform) {
+    case "darwin":
+      return `Macintosh; ${arch === "arm64" ? "" : "Intel "}Mac OS X ${execSync("sw_vers -productVersion").toString().trim()}`;
+    case "linux":
+      return `X11; Linux ${arch === "x64" ? "x86_64" : arch === "arm64" ? "aarch64" : arch}`;
+    case "win32":
+      return `Windows NT 10.0; Win64; ${arch === "arm64" ? "ARM64" : "x64"}`;
+    default:
+      return `${platform}; ${arch}`;
+  }
+}
+
+function getUserAgent() {
+  const pkg = require("../package.json");
+  // `Node/<version>` is the engine token of Node's core `http`/`https`
+  // package; `Senteints/<version>` is the CLI.
+  return `Protorians/5.0 (${getOsToken()}) Node/${process.version.slice(1)} Senteints/${pkg.version}`;
+}
+
 const PLATFORM_MAP = {
   darwin: { amd64: "darwin_amd64", arm64: "darwin_arm64" },
   linux: { amd64: "linux_amd64", arm64: "linux_arm64" },
@@ -58,7 +80,7 @@ function download(url) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith("https") ? https : http;
     mod
-      .get(url, { headers: { "User-Agent": "sentient-cli-npm" } }, (res) => {
+      .get(url, { headers: { "User-Agent": getUserAgent() } }, (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           return download(res.headers.location).then(resolve, reject);
         }

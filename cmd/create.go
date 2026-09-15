@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/tui"
@@ -11,18 +12,27 @@ import (
 )
 
 var createCmd = &cobra.Command{
-	Use:   "create module [nom]",
-	Short: "Créer un nouveau module",
-	Long: `Créer un nouveau module dans external_modules/ avec la structure
-standardisée : manifest.json, index.tsx, components/, hooks/, services/.
+	Use:   "create module [name]",
+	Short: "Create a new module",
+	Long: `Creates a new module in external_modules/ from the embedded
+hello-world mockup, renamed with the given module name: manifest.json,
+index.tsx, package.json, application/, domain/, infrastructure/,
+presentation/.
 
-Le token UUID unique du module est généré automatiquement.
+When the module declaration declares a uri/url, a page is also scaffolded
+in src/app/ from the embedded page mockup.
 
-Usage : sentients create module [nom]`,
+The module's unique UUID token is generated automatically.
+
+Usage : sentients create module [name]`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runCreate(cmd, args)
 	},
+}
+
+func init() {
+	i18nHelp(createCmd, "cmd.create.short", "cmd.create.long")
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
@@ -31,7 +41,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		args = args[1:]
 	}
 	if len(args) > 1 {
-		return pkg.NewError("Module", "trop d'arguments — utilisez 'sentients create module [nom]'", pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.module"), i18n.T("create.error.too_many"), pkg.ExitError)
 	}
 
 	root, err := requireProjectRoot()
@@ -45,21 +55,21 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 	if name == "" {
 		if !tui.IsInteractive() {
-			return pkg.NewError("Critère de saisie", "fournissez le nom du module en argument", pkg.ExitError)
+			return pkg.NewError(i18n.T("cat.input"), i18n.T("create.error.no_name"), pkg.ExitError)
 		}
-		n, err := tui.AskText("Nom du module", "")
+		n, err := tui.AskText(i18n.T("create.prompt.name"), "")
 		if err != nil {
 			return err
 		}
 		name = strings.TrimSpace(n)
 	}
 	if err := module.ValidateName(name); err != nil {
-		return pkg.NewError("Module", err.Error(), pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
 	}
 
 	description := ""
 	if tui.IsInteractive() {
-		d, err := tui.AskText("Description du module", "")
+		d, err := tui.AskText(i18n.T("create.prompt.description"), "")
 		if err != nil {
 			return err
 		}
@@ -69,22 +79,27 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	creator := &module.Creator{Root: root}
 	result, err := creator.Create(name, description)
 	if err != nil {
-		if strings.Contains(err.Error(), "existe déjà") {
-			return pkg.NewError("Module", err.Error(), pkg.ExitError)
+		if module.IsExistsError(err) {
+			return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
 		}
 		return err
 	}
 
 	s := tui.NewStyles()
+	panel := s.Success.Render(i18n.Tf("create.success.dir", result.Dir)) + "\n" +
+		s.Success.Render(i18n.Tf("create.success.token", result.Token)) + "\n" +
+		s.Success.Render(i18n.T("create.success.manifest")) + "\n" +
+		s.Success.Render(i18n.T("create.success.entry"))
+	if result.Page != "" {
+		panel += "\n" + s.Success.Render(i18n.Tf("create.success.page", result.Page))
+	}
 	fmt.Println()
-	fmt.Println(s.Success.Render(fmt.Sprintf("✓ Module créé : %s/", result.Dir)))
-	fmt.Println(s.Success.Render("✓ Token généré : " + result.Token))
-	fmt.Println(s.Success.Render("✓ manifest.json initialisé"))
-	fmt.Println(s.Success.Render("✓ index.tsx initialisé"))
+	fmt.Println(s.SuccessPanel(panel))
+	fmt.Println(s.StepsList(i18n.T("init.next"),
+		s.Info.Render("sentients connect"),
+		s.Info.Render("sentients pack "+result.Name),
+		s.Info.Render("sentients publish"),
+	))
 	fmt.Println()
-	fmt.Println(s.SubHeader.Render("Prochaines étapes :"))
-	fmt.Println(s.Info.Render("  sentients connect"))
-	fmt.Println(s.Info.Render("  sentients pack " + result.Name))
-	fmt.Println(s.Info.Render("  sentients publish"))
 	return nil
 }

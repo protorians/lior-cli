@@ -1,31 +1,26 @@
-# TC-001 — `sentients init` avec bun détecté (fixture sur le PATH) et template
-# local (SENTIENT_CLI_TEMPLATE_REPO) pour rester hors réseau.
+# TC-001 — `sentients init` with bun detected (fixture on the PATH) and local
+# template source (SENTIENT_CLI_TEMPLATE_REPO) to stay offline.
 mkdir template
 cd template
-exec git init -q
-exec git config user.email test@example.com
-exec git config user.name 'Test'
 mkdir external_modules
 exec sh -c 'echo keep > external_modules/.gitkeep'
 exec sh -c 'printf "app = \"template\"\n" > sentient.config.toml'
-exec sh -c 'printf "{\"name\":\"sentient-cms\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
-exec git add -A
-exec git commit -qm 'template'
+exec sh -c 'printf "{\"name\":\"sentients-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
 cd $WORK
 
 env SENTIENT_CLI_TEMPLATE_REPO=$WORK/template
 exec $SENTIENTS --no-color init demo-app
-stdout '✓ Projet initialisé avec succès'
-stdout 'Gestionnaire : bun'
+stdout '✓ Project initialized successfully'
+stdout 'Package manager: bun'
 
 cd demo-app
-exists .sentient-cli.toml
+exists sentients.config.json
 exists external_modules
-exec grep -q 'auto_audit' .sentient-cli.toml
+exec grep -q 'autoAudit' sentients.config.json
 cd $WORK
 
-# TC-002 — aucun gestionnaire de paquets détecté : refus explicite (exit 1),
-# avant tout clone réseau.
+# TC-002 — no package manager detected: explicit refusal (exit 1), before any
+# network download.
 env PATH=/nonexistent
 ! exec $SENTIENTS --no-color init nomanager
-stderr 'aucun gestionnaire de paquets détecté'
+stderr 'no package manager detected'

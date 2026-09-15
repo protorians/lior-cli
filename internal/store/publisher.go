@@ -21,12 +21,12 @@ const modulesPath = "/api/developer-store/modules"
 
 // DeveloperModuleType enum values exposed by the store.
 const (
-	ModuleTypeConfiguration   = "CONFIGURATION"
-	ModuleTypeExternalURL     = "EXTERNAL_URL"
-	ModuleTypeWebAppRemote    = "WEB_APP_REMOTE"
-	ModuleTypeWebAppCached    = "WEB_APP_CACHED"
-	ModuleTypeWebAppLocal     = "WEB_APP_LOCAL"
-	ModuleTypeRemoteFrontend  = "REMOTE_FRONTEND"
+	ModuleTypeConfiguration  = "CONFIGURATION"
+	ModuleTypeExternalURL    = "EXTERNAL_URL"
+	ModuleTypeWebAppRemote   = "WEB_APP_REMOTE"
+	ModuleTypeWebAppCached   = "WEB_APP_CACHED"
+	ModuleTypeWebAppLocal    = "WEB_APP_LOCAL"
+	ModuleTypeRemoteFrontend = "REMOTE_FRONTEND"
 )
 
 // defaultPrimaryCategory is used for products whose manifest declares no
@@ -117,7 +117,7 @@ func (c *Client) SetToken(token string) {
 func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 	var raw json.RawMessage
 	if err := c.Connector.Client.Do(ctx, "GET", modulesPath, nil, &raw); err != nil {
-		return nil, fmt.Errorf("récupération des modules échouée : %w", err)
+		return nil, fmt.Errorf("failed to fetch modules: %w", err)
 	}
 	var products []Product
 	if err := json.Unmarshal(raw, &products); err == nil {
@@ -131,7 +131,7 @@ func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 		Items []Product `json:"items"`
 	}
 	if err := json.Unmarshal(raw, &page); err != nil {
-		return nil, fmt.Errorf("récupération des modules échouée : %w", err)
+		return nil, fmt.Errorf("failed to fetch modules: %w", err)
 	}
 	modules := make([]RemoteModule, 0, len(page.Items))
 	for _, p := range page.Items {
@@ -144,7 +144,7 @@ func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 func (c *Client) GetModule(ctx context.Context, id string) (*RemoteModuleResponse, error) {
 	var product Product
 	if err := c.Connector.Client.Do(ctx, "GET", modulesPath+"/"+url.PathEscape(id), nil, &product); err != nil {
-		return nil, fmt.Errorf("récupération du module %q échouée : %w", id, err)
+		return nil, fmt.Errorf("failed to fetch module %q: %w", id, err)
 	}
 	mod := remoteFromProduct(product)
 	mod.Version = c.latestVersion(ctx, product.ID)
@@ -186,7 +186,7 @@ func (c *Client) latestVersion(ctx context.Context, productID string) string {
 // UpdateModule syncs a module's remote metadata via PUT /api/developer-store/modules/:id.
 func (c *Client) UpdateModule(ctx context.Context, id string, m *module.Manifest) error {
 	if err := c.Connector.Client.Do(ctx, "PUT", modulesPath+"/"+url.PathEscape(id), updateProductRequest(m), nil); err != nil {
-		return fmt.Errorf("mise à jour du module %q échouée : %w", id, err)
+		return fmt.Errorf("failed to update module %q: %w", id, err)
 	}
 	return nil
 }
@@ -224,7 +224,7 @@ func (c *Client) Publish(ctx context.Context, archivePath string, manifest *modu
 func (c *Client) createProduct(ctx context.Context, m *module.Manifest) (*Product, error) {
 	var out Product
 	if err := c.Connector.Client.Do(ctx, "POST", modulesPath, createProductRequest(m), &out); err != nil {
-		return nil, fmt.Errorf("création du module distant échouée : %w", err)
+		return nil, fmt.Errorf("failed to create the remote module: %w", err)
 	}
 	return &out, nil
 }
@@ -242,7 +242,7 @@ func (c *Client) resolveProduct(ctx context.Context, m *module.Manifest) (string
 			return product.ID, nil
 		}
 		if !isNotFound(err) {
-			return "", fmt.Errorf("résolution du module distant échouée : %w", err)
+			return "", fmt.Errorf("failed to resolve the remote module: %w", err)
 		}
 	}
 	product, err := c.createProduct(ctx, m)
@@ -272,7 +272,7 @@ func (c *Client) createVersion(ctx context.Context, productID string, m *module.
 	}
 	var out Version
 	if err := c.Connector.Client.Do(ctx, "POST", modulesPath+"/"+productID+"/versions", body, &out); err != nil {
-		return nil, fmt.Errorf("création de la version échouée : %w", err)
+		return nil, fmt.Errorf("failed to create the version: %w", err)
 	}
 	return &out, nil
 }
@@ -280,13 +280,13 @@ func (c *Client) createVersion(ctx context.Context, productID string, m *module.
 func (c *Client) declareArtifact(ctx context.Context, productID, versionID, archivePath string, m *module.Manifest) (*Artifact, error) {
 	data, err := os.ReadFile(archivePath)
 	if err != nil {
-		return nil, fmt.Errorf("lecture de l'archive impossible : %w", err)
+		return nil, fmt.Errorf("failed to read the archive: %w", err)
 	}
 	checksum := sha256.Sum256(data)
 	signature, _ := artifactSignature(archivePath)
 	manifestJSON, merr := json.Marshal(m)
 	if merr != nil {
-		return nil, fmt.Errorf("sérialisation du manifest impossible : %w", merr)
+		return nil, fmt.Errorf("failed to serialize the manifest: %w", merr)
 	}
 	body := declareArtifactRequest{
 		Manifest:  manifestJSON,
@@ -297,7 +297,7 @@ func (c *Client) declareArtifact(ctx context.Context, productID, versionID, arch
 	var out Artifact
 	if err := c.Connector.Client.Do(ctx, "POST",
 		modulesPath+"/"+productID+"/versions/"+versionID+"/artifact", body, &out); err != nil {
-		return nil, fmt.Errorf("déclaration de l'artefact échouée : %w", err)
+		return nil, fmt.Errorf("failed to declare the artifact: %w", err)
 	}
 	return &out, nil
 }
@@ -335,14 +335,14 @@ func updateProductRequest(m *module.Manifest) map[string]string {
 }
 
 type createVersionRequest struct {
-	VersionString     string          `json:"versionString"`
-	BuildNumber       int             `json:"buildNumber"`
+	VersionString     string           `json:"versionString"`
+	BuildNumber       int              `json:"buildNumber"`
 	ReleaseNotes      *json.RawMessage `json:"releaseNotes,omitempty"`
-	MinManager        string          `json:"minManager,omitempty"`
-	MaxManager        string          `json:"maxManager,omitempty"`
-	MinAPI            string          `json:"minApi,omitempty"`
-	MaxAPI            string          `json:"maxApi,omitempty"`
-	SupportedRuntimes []string        `json:"supportedRuntimes,omitempty"`
+	MinManager        string           `json:"minManager,omitempty"`
+	MaxManager        string           `json:"maxManager,omitempty"`
+	MinAPI            string           `json:"minApi,omitempty"`
+	MaxAPI            string           `json:"maxApi,omitempty"`
+	SupportedRuntimes []string         `json:"supportedRuntimes,omitempty"`
 }
 
 type declareArtifactRequest struct {

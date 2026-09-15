@@ -39,8 +39,8 @@ func TestDebugModuleValid(t *testing.T) {
 		t.Errorf("Module = %q, want my-module", result.Module)
 	}
 	// Without a package manager or build script, should succeed with validation only
-	if result.Status != "OK" && result.Status != "AVERTISSEMENT" {
-		t.Errorf("Status = %q, want OK or AVERTISSEMENT", result.Status)
+	if result.Status != "OK" && result.Status != "WARNING" {
+		t.Errorf("Status = %q, want OK or WARNING", result.Status)
 	}
 }
 
@@ -70,8 +70,8 @@ func TestDebugModuleInvalidManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DebugModule: %v", err)
 	}
-	if result.Status != "ERREUR" {
-		t.Errorf("Status = %q, want ERREUR", result.Status)
+	if result.Status != "ERROR" {
+		t.Errorf("Status = %q, want ERROR", result.Status)
 	}
 	if result.Errors == 0 {
 		t.Error("Errors doit être > 0 pour un manifest invalide")

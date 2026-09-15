@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
 // TokenTTL is the client-side lifetime of a session token. The API responses
@@ -95,12 +97,12 @@ func (s *Session) Save() error {
 // using the current token as the bearer credential.
 func (s *Session) Refresh(ctx context.Context, connector *Connector) error {
 	if !s.IsAuthenticated() {
-		return fmt.Errorf("aucun token de session disponible — exécutez 'sentients connect'")
+		return fmt.Errorf("%s", i18n.T("auth.error.no_token"))
 	}
 	connector.Client.Token = s.AccessToken
 	resp, err := connector.RefreshSession(ctx, s.Device)
 	if err != nil {
-		return fmt.Errorf("rafraîchissement du token impossible : %w", err)
+		return fmt.Errorf("%s: %w", i18n.T("auth.error.refresh"), err)
 	}
 	s.AccessToken = resp.Token
 	t := time.Now().Add(TokenTTL)
@@ -116,7 +118,7 @@ func (s *Session) Clear() error {
 // ValidToken returns a non-expired access token, refreshing when needed.
 func (s *Session) ValidToken(ctx context.Context, connector *Connector) (string, error) {
 	if !s.IsAuthenticated() {
-		return "", fmt.Errorf("non authentifié — exécutez 'sentients connect'")
+		return "", fmt.Errorf("%s", i18n.T("auth.error.not_authenticated"))
 	}
 	if s.IsExpired() {
 		if err := s.Refresh(ctx, connector); err != nil {

@@ -2,12 +2,14 @@ package module
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
 
@@ -35,7 +37,7 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 		return nil, err
 	}
 	if res.HasErrors() {
-		return nil, fmt.Errorf("le module %q contient %d erreur(s) de validation, pack annulé", name, res.ErrorCount())
+		return nil, errors.New(i18n.Tf("pack.error.validation", name, res.ErrorCount()))
 	}
 
 	m, err := LoadManifest(config.ManifestPath(p.Root, name))
@@ -50,20 +52,21 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 
 	archivePath := filepath.Join(buildDir, fmt.Sprintf("%s-%s.smp", name, m.Version))
 
-	moduleSrc := filepath.Join(p.Root, config.ExternalModulesDir, name)
+	moduleSrc := config.ModuleDir(p.Root, name)
+	appSrc := config.ModuleAppSrcDir(p.Root, name)
 	assetsSrc := config.ModuleAssetsDir(p.Root, name)
 
-	if err := p.createArchive(archivePath, moduleSrc, assetsSrc); err != nil {
+	if err := p.createArchive(archivePath, moduleSrc, appSrc, assetsSrc); err != nil {
 		return nil, err
 	}
 
 	info, err := os.Stat(archivePath)
 	if err != nil {
-		return nil, fmt.Errorf("stat de l'archive impossible : %w", err)
+		return nil, fmt.Errorf("failed to stat archive: %w", err)
 	}
 	if info.Size() > MaxArchiveSize {
 		os.Remove(archivePath)
-		return nil, fmt.Errorf("l'archive dépasse la taille maximale de %d MB", MaxArchiveSize/(1024*1024))
+		return nil, errors.New(i18n.Tf("pack.error.max_size", MaxArchiveSize/(1024*1024)))
 	}
 
 	return &PackResult{
@@ -74,12 +77,13 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 	}, nil
 }
 
-// createArchive zips `moduleSrc` (prefixed `external_modules/<name>/`) and,
-// when present, `assetsSrc` (prefixed `public/assets/<name>/`) into `dest`.
-func (p *Packer) createArchive(dest, moduleSrc, assetsSrc string) error {
+// createArchive zips `moduleSrc` (prefixed `external_modules/<name>/`),
+// `appSrc` (prefixed `src/app/<name>/`) and, when present, `assetsSrc`
+// (prefixed `public/assets/<name>/`) into `dest`.
+func (p *Packer) createArchive(dest, moduleSrc, appSrc, assetsSrc string) error {
 	f, err := os.Create(dest)
 	if err != nil {
-		return fmt.Errorf("création de l'archive %s impossible : %w", dest, err)
+		return fmt.Errorf("failed to create archive %s: %w", dest, err)
 	}
 	defer f.Close()
 
@@ -103,7 +107,7 @@ func (p *Packer) createArchive(dest, moduleSrc, assetsSrc string) error {
 			}
 			w, err := zw.Create(filepath.ToSlash(rel))
 			if err != nil {
-				return fmt.Errorf("écriture dans l'archive impossible : %w", err)
+				return fmt.Errorf("failed to write to archive: %w", err)
 			}
 			in, err := os.Open(path)
 			if err != nil {
@@ -111,13 +115,16 @@ func (p *Packer) createArchive(dest, moduleSrc, assetsSrc string) error {
 			}
 			if _, err := io.Copy(w, in); err != nil {
 				in.Close()
-				return fmt.Errorf("copie de %s dans l'archive impossible : %w", path, err)
+				return fmt.Errorf("failed to copy %s into archive: %w", path, err)
 			}
 			return in.Close()
 		})
 	}
 
 	if err := addToZip(moduleSrc); err != nil {
+		return err
+	}
+	if err := addToZip(appSrc); err != nil {
 		return err
 	}
 	return addToZip(assetsSrc)

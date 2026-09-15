@@ -1,17 +1,25 @@
 package module
 
 import (
-	"fmt"
+	"errors"
 	"path/filepath"
-	"strings"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
 
-// Creator builds new modules with the standardised structure.
+// Creator builds new modules by scaffolding them from a reference mockup.
 type Creator struct {
+	// Root is the project root containing external_modules/.
 	Root string
+	// MockupDir optionally points to a reference module (e.g. the hello-world
+	// example) to copy and rename. When empty, the embedded mockup is used.
+	MockupDir string
+	// PageMockup optionally points to a `src/app/<name>/page.tsx` template used
+	// when the module declaration declares a `uri`/`url`. When empty, the
+	// embedded page mockup is used.
+	PageMockup string
 }
 
 // CreateResult summarises a module creation.
@@ -20,16 +28,32 @@ type CreateResult struct {
 	Dir      string
 	Token    string
 	Manifest *Manifest
+	// Page is the optional `src/app/<name>/page.tsx` path scaffolded from the
+	// page mockup when the module declaration declares a `uri`/`url`.
+	Page string
 }
 
-// Description is the optional human-readable description of the module.
-type Description = string
+// moduleExistsError reports that a module with the same name already exists.
+type moduleExistsError struct {
+	module string
+	dir    string
+}
 
-// Indices are the empty sub-directories created inside each module.
-var moduleSubDirs = []string{"components", "hooks", "services"}
+func (e *moduleExistsError) Error() string {
+	return i18n.Tf("module.error.exists", e.module, e.dir)
+}
 
-// Create generates a module named `name` inside `external_modules/`.
-// When `description` is empty, a description is not written to the manifest.
+// IsExistsError reports whether err is an "module already exists" error.
+func IsExistsError(err error) bool {
+	var ee *moduleExistsError
+	return errors.As(err, &ee)
+}
+
+// Create generates a module named `name` inside `external_modules/` by copying
+// the reference mockup (custom or embedded) and renaming its components and
+// information with the module name. When the module declaration declares a
+// `uri`/`url`, a matching `src/app/<uri>/page.tsx` is scaffolded from the page
+// mockup.
 func (c *Creator) Create(name, description string) (*CreateResult, error) {
 	if err := ValidateName(name); err != nil {
 		return nil, err
@@ -37,66 +61,36 @@ func (c *Creator) Create(name, description string) (*CreateResult, error) {
 
 	moduleDir := filepath.Join(c.Root, config.ExternalModulesDir, name)
 	if pkg.DirExists(moduleDir) {
-		return nil, fmt.Errorf("le module %q existe déjà dans %s", name, moduleDir)
+		return nil, &moduleExistsError{module: name, dir: moduleDir}
 	}
-	if err := pkg.CreateDir(moduleDir); err != nil {
+
+	var err error
+	if src := c.moduleMockupSource(); src != "" {
+		err = scaffoldFromMockup(src, moduleDir, name, description)
+	} else {
+		err = scaffoldEmbeddedModule(moduleDir, name, description)
+	}
+	if err != nil {
 		return nil, err
 	}
 
-	manifest := NewManifest(name, description)
-	manifestPath := filepath.Join(moduleDir, config.ManifestFileName)
-	if err := manifest.Save(manifestPath); err != nil {
-		return nil, err
+	page := ""
+	if src := c.pageMockupSource(); src != "" {
+		page = scaffoldPage(c.Root, moduleDir, name, src)
+	} else {
+		page = scaffoldEmbeddedPage(c.Root, moduleDir, name)
 	}
 
-	if err := pkg.WriteString(filepath.Join(moduleDir, config.ModuleEntryFileName), indexTemplate(name, description)); err != nil {
+	manifest, err := LoadManifest(filepath.Join(moduleDir, config.ManifestFileName))
+	if err != nil {
 		return nil, err
-	}
-	if err := pkg.WriteString(filepath.Join(moduleDir, "README.md"), readmeTemplate(name, description)); err != nil {
-		return nil, err
-	}
-	for _, sub := range moduleSubDirs {
-		if err := pkg.WriteString(filepath.Join(moduleDir, sub, ".gitkeep"), ""); err != nil {
-			return nil, err
-		}
 	}
 
 	return &CreateResult{
 		Name:     name,
 		Dir:      moduleDir,
 		Token:    manifest.Token,
-		Manifest: &manifest,
+		Manifest: manifest,
+		Page:     page,
 	}, nil
-}
-
-func indexTemplate(name, description string) string {
-	return fmt.Sprintf(`import type { ModuleDeclarationInterface } from "@/modules";
-
-const declaration: ModuleDeclarationInterface = {
-  name: "%s",
-  description: "%s",
-  render: async () => {
-    const mod = await import("./components");
-    return mod.default;
-  },
-};
-
-export default declaration;
-`, displayName(name), description)
-}
-
-func readmeTemplate(name, description string) string {
-	var b strings.Builder
-	b.WriteString(fmt.Sprintf("# %s\n\n", displayName(name)))
-	if description != "" {
-		b.WriteString(description + "\n\n")
-	}
-	b.WriteString(fmt.Sprintf("Module Sentient `%s`.", name))
-	b.WriteString("\n\n## Structure\n\n")
-	b.WriteString("- `manifest.json` — métadonnées du module\n")
-	b.WriteString("- `index.tsx` — point d'entrée du module\n")
-	b.WriteString("- `components/` — composants React\n")
-	b.WriteString("- `hooks/` — hooks React\n")
-	b.WriteString("- `services/` — services métier\n")
-	return b.String()
 }

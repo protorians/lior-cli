@@ -3,8 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/protorians/sentient-cli/internal/auth"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/tui"
 	"github.com/spf13/cobra"
@@ -12,22 +14,26 @@ import (
 
 var disconnectCmd = &cobra.Command{
 	Use:   "disconnect",
-	Short: "Se déconnecter",
-	Long:  "Supprime toutes les credentials stockées et déconnecte le développeur.",
+	Short: "Disconnect",
+	Long:  "Removes all stored credentials and disconnects the developer.",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runDisconnect(cmd)
 	},
 }
 
+func init() {
+	i18nHelp(disconnectCmd, "cmd.disconnect.short", "cmd.disconnect.long")
+}
+
 func runDisconnect(cmd *cobra.Command) error {
 	sess, err := auth.LoadSession(auth.NewStore())
 	if err != nil {
-		return pkg.NewError("Authentification", err.Error(), pkg.ExitAuth)
+		return pkg.NewError(i18n.T("cat.authentication"), err.Error(), pkg.ExitAuth)
 	}
 	if sess == nil || !sess.IsAuthenticated() {
 		fmt.Println()
-		fmt.Println(tui.NewStyles().Muted.Render("Vous n'êtes pas connecté — rien à faire."))
+		fmt.Println(tui.NewStyles().Muted.Render(i18n.T("disconnect.none")))
 		return nil
 	}
 
@@ -36,8 +42,8 @@ func runDisconnect(cmd *cobra.Command) error {
 		email = sess.User.Email
 	}
 	fmt.Println()
-	fmt.Printf("  Déconnecter %s ?\n", email)
-	confirm, err := tui.Confirm("Confirmer la déconnexion", false)
+	fmt.Println(i18n.Tf("disconnect.confirm", email))
+	confirm, err := tui.Confirm(i18n.T("disconnect.confirm.title"), false)
 	if err != nil {
 		return err
 	}
@@ -49,18 +55,21 @@ func runDisconnect(cmd *cobra.Command) error {
 	connector := auth.NewConnector()
 	connector.Client.Token = sess.AccessToken
 	if err := connector.SignOut(context.Background(), sess.Device); err != nil {
-		debugf("invalidation du token côté serveur : %v", err)
+		debugf("server-side token invalidation: %v", err)
 	}
 
-	if _, err := tui.RunWithSpinner("Déconnexion…", func() (struct{}, error) {
+	if _, err := tui.RunWithSpinner(i18n.T("disconnect.spinner"), func() (struct{}, error) {
 		return struct{}{}, sess.Clear()
 	}); err != nil {
-		return pkg.NewError("Authentification", "suppression des credentials impossible : "+err.Error(), pkg.ExitAuth)
+		return pkg.NewError(i18n.T("cat.authentication"), i18n.Tf("disconnect.error.remove", err.Error()), pkg.ExitAuth)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Déconnecté avec succès"))
-	fmt.Println(s.Muted.Render("  Toutes les credentials ont été supprimées."))
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("disconnect.success")),
+		s.Muted.Render(strings.TrimSpace(i18n.T("disconnect.cleared"))),
+	))
+	fmt.Println()
 	return nil
 }

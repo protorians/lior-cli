@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/tui"
@@ -11,15 +12,19 @@ import (
 
 var packCmd = &cobra.Command{
 	Use:   "pack [module]",
-	Short: "Construire l'archive d'un module (.smp)",
-	Long: `Construit le build d'un module et crée une archive .smp compressée
-(déplacée vers .sentients/build/).
+	Short: "Build a module archive (.smp)",
+	Long: `Builds a module and creates a compressed .smp archive
+(moved to .sentients/build/).
 
-Sans argument, un sélecteur permet de choisir le module.`,
+Without an argument, a selector lets you choose the module.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runPack(cmd, args)
 	},
+}
+
+func init() {
+	i18nHelp(packCmd, "cmd.pack.short", "cmd.pack.long")
 }
 
 func runPack(cmd *cobra.Command, args []string) error {
@@ -33,7 +38,7 @@ func runPack(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result, err := tui.RunWithSpinner("Construction de l'archive…", func() (*module.PackResult, error) {
+	result, err := tui.RunWithSpinner(i18n.T("pack.spinner"), func() (*module.PackResult, error) {
 		p := &module.Packer{Root: root}
 		return p.Pack(name)
 	})
@@ -41,15 +46,18 @@ func runPack(cmd *cobra.Command, args []string) error {
 		if _, ok := err.(*pkg.Error); ok {
 			return err
 		}
-		return pkg.NewError("Pack", err.Error(), pkg.ExitBuild)
+		return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 	}
 
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Archive créée avec succès"))
-	fmt.Printf("  %s : %s v%s\n", s.Muted.Render("Module"), name, result.Version)
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Fichier"), s.Info.Render(result.Path))
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Taille"), humanSize(result.Size))
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("pack.success")),
+		s.KeyValue(i18n.T("label.module"), name+" v"+result.Version),
+		s.KeyValue(i18n.T("label.file"), s.Info.Render(result.Path)),
+		s.KeyValue(i18n.T("label.size"), humanSize(result.Size)),
+	))
+	fmt.Println()
 	return nil
 }
 

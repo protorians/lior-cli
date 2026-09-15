@@ -1,35 +1,42 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
-
-	"github.com/BurntSushi/toml"
 )
 
-// Config mirrors the optional `.sentient-cli.toml` file at the project root.
+// Config mirrors the optional `sentients.config.json` file at the project root.
 type Config struct {
-	Project ProjectConfig `toml:"project"`
-	Publish PublishConfig `toml:"publish"`
-	Debug   DebugConfig   `toml:"debug"`
+	Project ProjectConfig `json:"project"`
+	Publish PublishConfig `json:"publish"`
+	Debug   DebugConfig   `json:"debug"`
+	Cli     CliConfig     `json:"cli"`
+}
+
+// CliConfig configures CLI-level settings.
+type CliConfig struct {
+	// Lang is the UI locale of the CLI (e.g. "fr-FR", "en-US"). An empty
+	// value keeps the auto-detection (SENTIENT_CLI_LANG / OS locale).
+	Lang string `json:"lang"`
 }
 
 // ProjectConfig configures the project-level settings.
 type ProjectConfig struct {
-	Name           string `toml:"name"`
-	PackageManager string `toml:"package_manager"`
+	Name           string `json:"name"`
+	PackageManager string `json:"packageManager"`
 }
 
 // PublishConfig configures publication defaults.
 type PublishConfig struct {
-	DefaultRegistry string `toml:"default_registry"`
-	AutoAudit       bool   `toml:"auto_audit"`
+	DefaultRegistry string `json:"defaultRegistry"`
+	AutoAudit       bool   `json:"autoAudit"`
 }
 
 // DebugConfig configures debug/log behaviour.
 type DebugConfig struct {
-	Verbose  bool   `toml:"verbose"`
-	LogLevel string `toml:"log_level"`
+	Verbose  bool   `json:"verbose"`
+	LogLevel string `json:"logLevel"`
 }
 
 // Default returns a Config populated with sensible defaults.
@@ -53,26 +60,28 @@ func Load(path string) (Config, error) {
 	if path == "" {
 		return cfg, nil
 	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
 		return cfg, nil
-	} else if err != nil {
-		return cfg, fmt.Errorf("lecture du fichier de configuration %s impossible : %w", path, err)
 	}
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
-		return cfg, fmt.Errorf("décodage du fichier de configuration %s impossible : %w", path, err)
+	if err != nil {
+		return cfg, fmt.Errorf("failed to read config file %s: %w", path, err)
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("failed to decode config file %s: %w", path, err)
 	}
 	return cfg, nil
 }
 
-// Save writes the config as TOML at path.
+// Save writes the config as pretty-printed JSON at path.
 func (c Config) Save(path string) error {
-	f, err := os.Create(path)
+	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
-		return fmt.Errorf("création du fichier de configuration %s impossible : %w", path, err)
+		return fmt.Errorf("failed to encode config file %s: %w", path, err)
 	}
-	defer f.Close()
-	if err := toml.NewEncoder(f).Encode(c); err != nil {
-		return fmt.Errorf("écriture du fichier de configuration %s impossible : %w", path, err)
+	data = append(data, '\n')
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("failed to write config file %s: %w", path, err)
 	}
 	return nil
 }

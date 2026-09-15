@@ -328,11 +328,11 @@ func TestPublishServerError(t *testing.T) {
 
 func TestDeveloperTypeFor(t *testing.T) {
 	cases := map[string]string{
-		"":                ModuleTypeWebAppRemote,
-		"EXTERNAL":        ModuleTypeWebAppRemote,
-		"WEB_APP_LOCAL":   ModuleTypeWebAppLocal,
-		"EXTERNAL_URL":    ModuleTypeExternalURL,
-		"CONFIGURATION":   ModuleTypeConfiguration,
+		"":              ModuleTypeWebAppRemote,
+		"EXTERNAL":      ModuleTypeWebAppRemote,
+		"WEB_APP_LOCAL": ModuleTypeWebAppLocal,
+		"EXTERNAL_URL":  ModuleTypeExternalURL,
+		"CONFIGURATION": ModuleTypeConfiguration,
 	}
 	for in, want := range cases {
 		if got := developerTypeFor(in); got != want {

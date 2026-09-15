@@ -3,19 +3,19 @@ cd project
 mkdir external_modules
 exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 
-# TC-006 — connexion avec MFA TOTP : SENTIENT_CLI_MFA_CODE lu depuis l'environnement.
+# TC-006 — connect with MFA TOTP: SENTIENT_CLI_MFA_CODE read from the environment.
 env SENTIENT_CLI_CONNECT_EMAIL=mfa@example.com
 env SENTIENT_CLI_CONNECT_PASSWORD=secret
 env SENTIENT_CLI_MFA_CODE=123456
 exec $SENTIENTS --no-color connect
-stdout '✓ Connecté en tant que mfa@example.com'
+stdout '✓ Connected as mfa@example.com'
 exists $HOME/.sentient-cli/credentials.enc
 
-# Code MFA erroné : le challenge TOTP puis recovery échouent → refus.
+# Wrong MFA code: the TOTP then recovery challenges fail → refusal.
 env SENTIENT_CLI_CONNECT_EMAIL=mfa@example.com
 env SENTIENT_CLI_CONNECT_PASSWORD=secret
 env SENTIENT_CLI_MFA_CODE=000000
 ! exec $SENTIENTS --no-color connect
-stderr 'vérification MFA échouée'
+stderr 'MFA verification failed'
 exec sh -c '"$SENTIENTS" --no-color connect >/dev/null 2>&1; echo $?'
 stdout '^[0-9]+$'

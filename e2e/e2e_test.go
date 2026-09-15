@@ -45,10 +45,10 @@ func TestScripts(t *testing.T) {
 		Setup: func(env *testscript.Env) error {
 			// Whole CLI under test is the freshly built binary.
 			env.Setenv("SENTIENTS", sentientsBin)
-			// Network: a dedicated mock sentient-connect API per script, so
+			// Network: a dedicated mock sentient-auth API per script, so
 			// store/auth state never leaks between TC scenarios.
 			server := httptest.NewServer(mockapi.New().Handler())
-			env.Setenv("SENTIENT_CONNECT_API", server.URL)
+			env.Setenv("SENTIENT_AUTH_API", server.URL)
 			// Deterministic, isolated state: force the encrypted-file vault
 			// and skip the update check.
 			env.Setenv("SENTIENT_CLI_STORE", "file")

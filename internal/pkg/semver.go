@@ -14,7 +14,7 @@ func BumpPatch(version string) (string, error) {
 	v := strings.TrimSpace(version)
 	v = strings.TrimPrefix(v, "v")
 	if !semverStrictRE.MatchString(v) {
-		return "", fmt.Errorf("version %q invalide (SemVer attendu)", version)
+		return "", fmt.Errorf("version %q invalid (SemVer expected)", version)
 	}
 
 	// Strip pre-release and build metadata.
@@ -24,11 +24,11 @@ func BumpPatch(version string) (string, error) {
 
 	segments := strings.SplitN(v, ".", 3)
 	if len(segments) != 3 {
-		return "", fmt.Errorf("version %q invalide (SemVer attendu)", version)
+		return "", fmt.Errorf("version %q invalid (SemVer expected)", version)
 	}
 	patch, err := strconv.Atoi(segments[2])
 	if err != nil {
-		return "", fmt.Errorf("version %q invalide (SemVer attendu)", version)
+		return "", fmt.Errorf("version %q invalid (SemVer expected)", version)
 	}
 	return fmt.Sprintf("%s.%s.%d", segments[0], segments[1], patch+1), nil
 }

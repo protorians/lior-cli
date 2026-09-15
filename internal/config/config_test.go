@@ -20,7 +20,7 @@ func TestConfigDefaults(t *testing.T) {
 }
 
 func TestConfigSaveLoad(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".sentient-cli.toml")
+	path := filepath.Join(t.TempDir(), "sentients.config.json")
 
 	cfg := Default()
 	cfg.Project.Name = "mon-projet"
@@ -42,7 +42,7 @@ func TestConfigSaveLoad(t *testing.T) {
 }
 
 func TestLoadMissingFileUsesDefaults(t *testing.T) {
-	cfg, err := Load(filepath.Join(t.TempDir(), "absent.toml"))
+	cfg, err := Load(filepath.Join(t.TempDir(), "absent.json"))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}

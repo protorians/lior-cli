@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
 // resultMsg carries the outcome of the background task.
@@ -53,7 +56,7 @@ func (m spinnerTask[T]) View() string {
 		}
 		return s.Success.Render("✓ ") + m.label + "\n"
 	}
-	return s.Accent.Render(m.spinner.View()) + " " + m.label + "\n"
+	return s.Accent.Render(m.spinner.View()) + " " + s.Value.Render(m.label) + " …\n"
 }
 
 // RunWithSpinner displays an animated spinner while fn runs in the
@@ -63,7 +66,11 @@ func (m spinnerTask[T]) View() string {
 func RunWithSpinner[T any](label string, fn func() (T, error)) (T, error) {
 	var zero T
 	if !IsInteractive() {
-		fmt.Fprintln(os.Stderr, label+" …")
+		msg := label
+		if !strings.HasSuffix(msg, "…") && !strings.HasSuffix(msg, ".") {
+			msg += " …"
+		}
+		fmt.Fprintln(os.Stderr, msg)
 		return fn()
 	}
 
@@ -74,7 +81,7 @@ func RunWithSpinner[T any](label string, fn func() (T, error)) (T, error) {
 	}()
 
 	m := spinnerTask[T]{
-		spinner: spinner.New(spinner.WithSpinner(spinner.Dot)),
+		spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
 		label:   label,
 		ch:      ch,
 	}
@@ -87,7 +94,7 @@ func RunWithSpinner[T any](label string, fn func() (T, error)) (T, error) {
 	}
 	fm, ok := final.(spinnerTask[T])
 	if !ok {
-		return zero, fmt.Errorf("indicateur de progression terminé de manière inattendue")
+		return zero, errors.New(i18n.T("tui.error.spinner_unexpected"))
 	}
 	return fm.value, fm.err
 }

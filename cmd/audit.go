@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/protorians/sentient-cli/internal/audit"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/tui"
@@ -15,14 +16,15 @@ import (
 var auditOutput string
 
 func init() {
-	auditCmd.Flags().StringVar(&auditOutput, "output", "", "format de sortie (table | json)")
+	auditCmd.Flags().StringVar(&auditOutput, "output", "", i18n.T("audit.flag.output"))
 	_ = auditCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"table", "json"}, cobra.ShellCompDirectiveDefault
 	})
+	i18nHelp(auditCmd, "cmd.audit.short", "cmd.audit.long")
 }
 
 // resolveAuditOutput maps the --output flag to the render mode, rejecting
-// unknown values (spec §5.10 : `--output json` est le seul format machine).
+// unknown values (spec §5.10 : `--output json` is the only machine format).
 func resolveAuditOutput() (string, error) {
 	switch auditOutput {
 	case "", "table":
@@ -30,19 +32,19 @@ func resolveAuditOutput() (string, error) {
 	case "json":
 		return "json", nil
 	default:
-		return "", pkg.NewErrorWithFix("Audit",
-			fmt.Sprintf("format de sortie inconnu %q", auditOutput),
-			"Formats valides : table, json.", pkg.ExitError)
+		return "", pkg.NewErrorWithFix(i18n.T("cat.audit"),
+			i18n.Tf("audit.error.format", auditOutput),
+			i18n.T("audit.error.format.fix"), pkg.ExitError)
 	}
 }
 
 var auditCmd = &cobra.Command{
 	Use:   "audit [module]",
-	Short: "Auditer la conformité d'un module",
-	Long: `Audite la conformité d'un (ou de tous les) module(s) par rapport aux
-règles Sentient : Clean Architecture, manifest.json et index.tsx.
+	Short: "Audit a module's conformance",
+	Long: `Audits the conformance of one (or all) module(s) against the
+Sentient rules: Clean Architecture, manifest.json and index.tsx.
 
-Sans argument, tous les modules de external_modules/ sont audités.`,
+Without an argument, all modules in external_modules/ are audited.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runAudit(cmd, args)
@@ -62,11 +64,11 @@ func runAudit(cmd *cobra.Command, args []string) error {
 
 	auditor := &audit.Auditor{Root: root}
 
-	result, err := tui.RunWithSpinner("Audit des modules…", func() (*audit.AuditResult, error) {
+	result, err := tui.RunWithSpinner(i18n.T("audit.spinner"), func() (*audit.AuditResult, error) {
 		return auditor.AuditModules(name)
 	})
 	if err != nil {
-		return pkg.NewError("Audit", err.Error(), pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.audit"), err.Error(), pkg.ExitError)
 	}
 
 	if auditOutput == "json" {
@@ -81,7 +83,7 @@ func runAudit(cmd *cobra.Command, args []string) error {
 func printAuditJSON(result *audit.AuditResult) error {
 	data, err := json.MarshalIndent(result, "", "  ")
 	if err != nil {
-		return pkg.NewError("Audit", "sérialisation JSON impossible : "+err.Error(), pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.audit"), i18n.Tf("audit.error.json", err.Error()), pkg.ExitError)
 	}
 	fmt.Println(string(data))
 	return nil
@@ -92,9 +94,9 @@ func printAuditResult(result *audit.AuditResult) {
 	fmt.Println()
 
 	for _, mod := range result.Modules {
-		fmt.Println(s.SubHeader.Render("Audit : " + mod.Module))
+		fmt.Println(s.Heading(i18n.Tf("audit.header", mod.Module)))
 
-		t := tui.NewTable([]string{"Catégorie", "Règle", "Statut"})
+		t := tui.NewTable([]string{i18n.T("label.category"), i18n.T("label.rule"), i18n.T("label.status")})
 		for _, f := range mod.Findings {
 			status := s.Success.Render("✓ " + f.Message)
 			switch f.Severity {
@@ -107,9 +109,9 @@ func printAuditResult(result *audit.AuditResult) {
 		}
 
 		if len(mod.Findings) > 0 {
-			fmt.Print(t.Render())
+			fmt.Println(t.Render())
 		} else {
-			fmt.Println(s.Muted.Render("  Aucune vérification effectuée"))
+			fmt.Println(s.Muted.Render(i18n.T("audit.none")))
 		}
 		fmt.Println()
 	}
@@ -118,16 +120,17 @@ func printAuditResult(result *audit.AuditResult) {
 	warnings := result.TotalWarnings()
 
 	if errors == 0 && warnings == 0 {
-		fmt.Println(s.Success.Render("✓ Audit réussi — aucune erreur, aucun avertissement"))
+		fmt.Println(s.SuccessPanel(s.Success.Render(i18n.T("audit.passed"))))
+		fmt.Println()
 	} else {
 		parts := []string{}
 		if errors > 0 {
-			parts = append(parts, fmt.Sprintf("%d erreur(s)", errors))
+			parts = append(parts, i18n.Tf("audit.errors", errors))
 		}
 		if warnings > 0 {
-			parts = append(parts, fmt.Sprintf("%d avertissement(s)", warnings))
+			parts = append(parts, i18n.Tf("audit.warnings", warnings))
 		}
-		header := "Résumé : "
+		header := i18n.T("audit.summary")
 		for i, p := range parts {
 			if i > 0 {
 				header += ", "

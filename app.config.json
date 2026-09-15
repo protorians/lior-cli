@@ -1,43 +1,69 @@
 {
   "$schema": "sentient.config.schema.json",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "applications": {
+    "sentient-socle": {
+      "name": "Sentient Socle",
+      "description": "Frontend Manager pour Sentient — Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
+      "domains": {
+        "production": "socle.sentient.protorians.com",
+        "staging": "socle-staging.sentient.protorians.com",
+        "development": "localhost:5010"
+      },
+      "api": {
+        "baseUrl": "https://localhost:5711",
+        "timeout": 30000
+      }
+    },
     "sentient-connect": {
       "name": "Sentient Connect",
-      "description": "Plateforme de connexion et gestion des développeurs",
+      "description": "Espace Développeur & Publication de Modules",
       "domains": {
         "production": "connect.sentient.protorians.com",
         "staging": "connect-staging.sentient.protorians.com",
         "development": "localhost:5020"
       },
       "api": {
-        "baseUrl": "https://connect.sentient.protorians.com",
+        "baseUrl": "https://localhost:5711",
         "timeout": 30000
       }
     },
-    "sentient-cms": {
-      "name": "Sentient CMS",
-      "description": "Plateforme de gestion des contenus",
+    "sentient-console": {
+      "name": "Sentient Console",
+      "description": "Administration & gouvernance",
       "domains": {
-        "production": "cms.sentient.protorians.com",
-        "staging": "cms-staging.sentient.protorians.com",
+        "production": "console.sentient.protorians.com",
+        "staging": "console-staging.sentient.protorians.com",
         "development": "localhost:5030"
       },
       "api": {
-        "baseUrl": "https://cms.sentient.protorians.com",
+        "baseUrl": "https://localhost:5711",
+        "timeout": 30000
+      }
+    },
+    "sentient-store": {
+      "name": "Sentient Store",
+      "description": "Storefront client pour l'installation de modules",
+      "domains": {
+        "production": "store.sentient.protorians.com",
+        "staging": "store-staging.sentient.protorians.com",
+        "development": "localhost:5040"
+      },
+      "api": {
+        "baseUrl": "https://localhost:5731",
         "timeout": 30000
       }
     },
     "sentient-auth": {
       "name": "Sentient Auth",
-      "description": "Service d'authentification et de gestion des identités",
+      "description": "Service d'authentification SSO — Login, consentement OAuth, MFA",
       "domains": {
         "production": "auth.sentient.protorians.com",
         "staging": "auth-staging.sentient.protorians.com",
         "development": "localhost:5050"
       },
       "api": {
-        "baseUrl": "https://auth.sentient.protorians.com",
+        "baseUrl": "https://localhost:5711",
         "timeout": 30000
       },
       "oauth": {

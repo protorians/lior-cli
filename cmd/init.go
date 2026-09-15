@@ -7,14 +7,17 @@ import (
 	"strings"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
-// templateRepo is the repository cloned by `sentients init` (spec FR-002).
-// `SENTIENT_CLI_TEMPLATE_REPO` overrides it (useful for tests and mirrors).
-const defaultTemplateRepo = "https://github.com/protorians/sentient-cms"
+// templateRepo is the repository whose release zip is downloaded by
+// `sentients init` (spec FR-002). `SENTIENT_CLI_TEMPLATE_REPO` overrides it:
+// it accepts a GitHub repository URL, a direct zip download URL or a local
+// directory (useful for tests and mirrors).
+const defaultTemplateRepo = "https://github.com/protorians/sentients-socle"
 
 func templateRepo() string {
 	if v := os.Getenv("SENTIENT_CLI_TEMPLATE_REPO"); v != "" {
@@ -36,16 +39,25 @@ var packageManagers = []struct {
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialiser un nouveau projet Sentient",
-	Long: `Initialise un nouveau projet Sentient en clonant le template
-protorians/sentient-cms puis en installant les dépendances.
+	Short: "Initialize a new Sentient project",
+	Long: `Initializes a new Sentient project by downloading the release
+archive of the template protorians/sentients-socle (ZIP) and installing
+the dependencies.
 
-Le gestionnaire de paquets est détecté automatiquement (bun, pnpm, yarn, npm)
-et proposé à l'utilisateur.`,
+The package manager is detected automatically (bun, pnpm, yarn, npm)
+and offered to the user.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runInit(cmd, args)
 	},
+}
+
+var initChannel string
+
+func init() {
+	initCmd.Flags().StringVar(&initChannel, "channel", "", "release channel (alpha, beta, rc, stable)")
+	i18nHelp(initCmd, "cmd.init.short", "cmd.init.long")
+	i18nFlag(initCmd, "channel", "init.flag.channel")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -57,10 +69,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Step 1 — project name
 	if projectName == "" {
 		if !tui.IsInteractive() {
-			projectName = "sentient-cms"
+			projectName = "sentients-socle"
 		} else {
 			defaultName := defaultProjectName()
-			name, err := tui.AskText("Nom du projet", defaultName)
+			name, err := tui.AskText(i18n.T("init.prompt.name"), defaultName)
 			if err != nil {
 				return err
 			}
@@ -72,27 +84,56 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	targetDir := projectName
-	if info, err := os.Stat(targetDir); err == nil {
+	cwd, _ := os.Getwd()
+	absTarget, _ := filepath.Abs(targetDir)
+	isCWD := absTarget == cwd
+
+	// Step 2 — release channel (spec FR-002): default to the latest stable
+	// release and ignore alpha/beta/rc tags unless a channel is requested.
+	if initChannel == "" {
+		initChannel = string(pkg.ChannelStable)
+	}
+	if !pkg.IsValidChannel(initChannel) {
+		return pkg.NewError(i18n.T("cat.project"),
+			i18n.Tf("init.error.channel_invalid", initChannel, strings.Join(pkg.ValidChannels, ", ")), pkg.ExitError)
+	}
+	debugf("release channel: %s", initChannel)
+
+	// Show the destination path before doing anything (init dest display fix).
+	fmt.Println(tui.NewStyles().Info.Render(i18n.Tf("init.dest", absTarget)))
+
+	mergeClone := false
+	info, err := os.Stat(targetDir)
+	if err == nil {
 		if !info.IsDir() {
-			return pkg.NewError("Projet", fmt.Sprintf("%s existe et n'est pas un dossier", targetDir), pkg.ExitError)
+			return pkg.NewError(i18n.T("cat.project"), i18n.Tf("init.error.not_dir", targetDir), pkg.ExitError)
 		}
-		if !tui.IsInteractive() {
-			return pkg.NewError("Projet", fmt.Sprintf("le dossier %q existe déjà", targetDir), pkg.ExitError)
-		}
-		overwrite, err := tui.Confirm(fmt.Sprintf("Le dossier %q existe déjà, l'écraser ?", targetDir), false)
-		if err != nil {
-			return err
-		}
-		if !overwrite {
-			return pkg.NewErrorWithFix("Projet", fmt.Sprintf("le dossier %q existe déjà", targetDir),
-				"Choisissez un autre nom de projet ou déplacez le dossier existant.", pkg.ExitError)
-		}
-		if err := os.RemoveAll(targetDir); err != nil {
-			return pkg.NewError("Projet", "suppression du dossier existant impossible", pkg.ExitError)
+		if !dirIsEmpty(targetDir) {
+			// The destination already contains files: never clear, delete or
+			// merge it without the user's approval.
+			action, err := confirmExistingDir(targetDir, isCWD)
+			if err != nil {
+				return err
+			}
+			switch action {
+			case destActionClear:
+				if isCWD {
+					if err := clearDirContents(targetDir); err != nil {
+						return pkg.NewError(i18n.T("cat.project"), i18n.T("init.error.clear"), pkg.ExitError)
+					}
+				} else if err := os.RemoveAll(targetDir); err != nil {
+					return pkg.NewError(i18n.T("cat.project"), i18n.T("init.error.remove"), pkg.ExitError)
+				}
+			case destActionMerge:
+				mergeClone = true
+			default:
+				return pkg.NewErrorWithFix(i18n.T("cat.project"), i18n.Tf("init.error.exists", targetDir),
+					i18n.T("init.error.exists.fix"), pkg.ExitError)
+			}
 		}
 	}
 
-	// Step 2 — package manager detection (spec FR-001)
+	// Step 3 — package manager detection (spec FR-001)
 	available := make([]string, 0, len(packageManagers))
 	for _, pm := range packageManagers {
 		if pkg.HasCommand(pm.name) {
@@ -101,9 +142,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	if len(available) == 0 {
 		return pkg.NewErrorWithFix(
-			"Gestionnaire de paquets",
-			"aucun gestionnaire de paquets détecté (bun, pnpm, yarn, npm)",
-			"Installez bun, pnpm, yarn ou npm puis réessayez.",
+			i18n.T("cat.package_manager"),
+			i18n.T("init.error.pm_none"),
+			i18n.T("init.error.pm_none.fix"),
 			pkg.ExitError,
 		)
 	}
@@ -116,19 +157,19 @@ func runInit(cmd *cobra.Command, args []string) error {
 			var items []string
 			for i, name := range available {
 				if i == 0 {
-					items = append(items, name+" (recommandé)")
+					items = append(items, name+i18n.T("init.hint.recommended"))
 				} else {
 					items = append(items, name)
 				}
 			}
-			selected, err := tui.Select("Gestionnaire de paquets", items)
+			selected, err := tui.Select(i18n.T("init.prompt.pm"), items)
 			if err != nil {
 				return err
 			}
-			pmName = strings.TrimSuffix(selected, " (recommandé)")
+			pmName = strings.TrimSuffix(selected, i18n.T("init.hint.recommended"))
 		}
 	}
-	debugf("gestionnaire de paquets choisi : %s", pmName)
+	debugf("selected package manager: %s", pmName)
 
 	var installCmd []string
 	for _, pm := range packageManagers {
@@ -138,42 +179,53 @@ func runInit(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if installCmd == nil {
-		return pkg.NewError("Gestionnaire de paquets", "gestionnaire inconnu : "+pmName, pkg.ExitError)
+		return pkg.NewError(i18n.T("cat.package_manager"), i18n.Tf("init.error.pm_unknown", pmName), pkg.ExitError)
 	}
 
-	// Step 3 — clone (shallow)
-	if _, err := tui.RunWithSpinner("Clonage de sentient-cms", func() (struct{}, error) {
-		return struct{}{}, pkg.CloneShallow(templateRepo(), targetDir)
+	// Step 4 — release channel download (spec FR-002). When the
+	// destination already contained files and the user approved a merge,
+	// download into a temporary sibling directory then copy the template over
+	// the existing content. A progress bar shows the ZIP download level.
+	cloneLabel := i18n.T("init.spinner.clone")
+	if mergeClone {
+		cloneLabel = i18n.T("init.spinner.merge")
+	}
+	if _, err := tui.RunWithProgress(cloneLabel, func(report tui.ReportFunc) (struct{}, error) {
+		return struct{}{}, fetchTemplate(templateRepo(), initChannel, targetDir, report)
 	}); err != nil {
-		return pkg.NewErrorWithFix("Réseau", err.Error(),
-			"Vérifiez votre connexion et que 'git' est installé.", pkg.ExitNetwork)
+		return pkg.NewErrorWithFix(i18n.T("cat.network"), err.Error(),
+			i18n.T("init.error.clone.fix"), pkg.ExitNetwork)
 	}
 
-	// Step 4 — install dependencies
-	if _, err := tui.RunWithSpinner("Installation des dépendances", func() (struct{}, error) {
+	// Step 5 — install dependencies
+	if _, err := tui.RunWithSpinner(i18n.T("init.spinner.install"), func() (struct{}, error) {
 		return struct{}{}, runInstall(targetDir, installCmd)
 	}); err != nil {
-		warn("L'installation des dépendances a échoué : " + err.Error())
+		warn(i18n.Tf("init.warn.install", err.Error()))
 	}
 
-	// Step 5 — write .sentient-cli.toml
+	// Step 6 — write sentients.config.json
 	cfg := config.Default()
 	cfg.Project.Name = projectName
 	cfg.Project.PackageManager = pmName
 	if err := cfg.Save(filepath.Join(targetDir, config.ConfigFileName)); err != nil {
-		debugf("écriture du fichier de configuration : %v", err)
+		debugf("writing config file: %v", err)
 	}
 
-	// Step 6 — summary
+	// Step 7 — summary
 	s := tui.NewStyles()
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Projet initialisé avec succès"))
-	fmt.Println(s.Muted.Render("  Gestionnaire : " + pmName))
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("init.success")),
+		s.Value.Render(strings.TrimSpace(i18n.Tf("init.summary.pm", pmName))),
+	))
 	fmt.Println()
-	fmt.Println(s.SubHeader.Render("Prochaines étapes :"))
-	fmt.Printf("  %s\n", s.Info.Render("cd "+targetDir))
-	fmt.Printf("  %s\n", s.Info.Render("sentients connect"))
-	fmt.Printf("  %s\n", s.Info.Render("sentients create module"))
+	fmt.Println(s.StepsList(i18n.T("init.next"),
+		s.Info.Render("cd "+targetDir),
+		s.Info.Render("sentients connect"),
+		s.Info.Render("sentients create module"),
+	))
+	fmt.Println()
 	return nil
 }
 
@@ -183,12 +235,137 @@ func defaultProjectName() string {
 			return base
 		}
 	}
-	return "sentient-cms"
+	return "sentients-socle"
+}
+
+// destAction describes how to reuse an existing, non-empty destination.
+type destAction int
+
+const (
+	destActionAbort destAction = iota
+	destActionClear
+	destActionMerge
+)
+
+// dirIsEmpty reports whether path exists and contains no entries.
+func dirIsEmpty(path string) bool {
+	entries, err := os.ReadDir(path)
+	return err == nil && len(entries) == 0
+}
+
+// clearDirContents removes every entry inside dir while keeping dir itself
+// (required when dir is the process working directory).
+func clearDirContents(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// confirmExistingDir asks for approval before reusing a destination that
+// already contains files. Interactive runs let the user Cancel, clear/delete
+// the destination, or merge the template into it. Non-interactive runs fall
+// back to SENTIENT_CLI_YES (approve the clear) or refuse.
+func confirmExistingDir(dir string, isCWD bool) (destAction, error) {
+	if !tui.IsInteractive() {
+		if os.Getenv(tui.ConfirmYesEnv) != "" {
+			return destActionClear, nil
+		}
+		return destActionAbort, pkg.NewErrorWithFix(i18n.T("cat.project"),
+			i18n.Tf("init.error.exists", dir), i18n.T("init.error.exists.fix"), pkg.ExitError)
+	}
+
+	choices := []string{
+		i18n.T("init.choice.cancel"),
+		i18n.T("init.choice.merge"),
+	}
+	if isCWD {
+		choices = append(choices, i18n.T("init.choice.clear"))
+	} else {
+		choices = append(choices, i18n.T("init.choice.delete"))
+	}
+
+	selected, err := tui.Select(i18n.Tf("init.prompt.existing", dir), choices)
+	if err != nil {
+		return destActionAbort, err
+	}
+	switch selected {
+	case i18n.T("init.choice.clear"), i18n.T("init.choice.delete"):
+		return destActionClear, nil
+	case i18n.T("init.choice.merge"):
+		return destActionMerge, nil
+	default:
+		return destActionAbort, nil
+	}
+}
+
+// fetchTemplate populates dest with the template source for the given
+// channel. The repo argument accepts, in order of precedence:
+//
+//   - a local directory (tests / mirrors): its contents are copied directly;
+//   - a GitHub repository URL: the latest release zip for the channel is
+//     resolved through the GitHub API and extracted;
+//   - any other value: treated as a direct ZIP download URL.
+//
+// report forwards download progress (bytes done/total) to the caller; it must
+// be safe to call from the network I/O goroutine.
+func fetchTemplate(repo, channel, dest string, report func(done, total int64)) error {
+	if pkg.DirExists(repo) {
+		return pkg.CopyDir(repo, dest)
+	}
+	if owner, name := githubOwnerRepo(repo); owner != "" && name != "" {
+		return pkg.FetchReleaseZip(owner, name, channel, "", dest, report)
+	}
+	return pkg.FetchReleaseZip("", "", channel, repo, dest, report)
+}
+
+// githubOwnerRepo parses a GitHub repository URL such as
+// `https://github.com/{owner}/{repo}` (with or without a trailing `.git`) into
+// its owner and repository name. Returns empty strings when not a GitHub URL.
+func githubOwnerRepo(repo string) (owner, name string) {
+	repo = strings.TrimSuffix(strings.TrimSpace(repo), "/")
+	repo = strings.TrimSuffix(repo, ".git")
+	parts := strings.Split(repo, "/")
+	if len(parts) < 2 {
+		return "", ""
+	}
+	owner = parts[len(parts)-2]
+	name = parts[len(parts)-1]
+	if owner == "" || name == "" || name == "github.com" {
+		return "", ""
+	}
+	return owner, name
+}
+
+// mergeTemplateInto downloads the template into a temporary sibling directory
+// then copies it over dest, keeping the files already present in dest
+// (conflicts are overwritten by the template). report forwards download
+// progress when the template is fetched over the network.
+func mergeTemplateInto(repo, channel, dest string, report func(done, total int64)) error {
+	absDest, err := filepath.Abs(dest)
+	if err != nil {
+		return fmt.Errorf("failed to resolve destination %s: %w", dest, err)
+	}
+	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".sentients-init-*")
+	if err != nil {
+		return fmt.Errorf("failed to create a temporary directory: %w", err)
+	}
+	defer os.RemoveAll(tmp)
+	if err := fetchTemplate(repo, channel, tmp, report); err != nil {
+		return err
+	}
+	return pkg.CopyDir(tmp, dest)
 }
 
 func runInstall(dir string, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("commande d'installation invalide")
+		return fmt.Errorf("invalid install command")
 	}
 	return pkg.StreamCommandIn(dir, args[0], args[1:]...)
 }

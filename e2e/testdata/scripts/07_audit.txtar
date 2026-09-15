@@ -3,20 +3,20 @@ cd project
 mkdir external_modules
 exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 exec $SENTIENTS --no-color create module blog-manager
-exec sh -c 'mkdir -p node_modules/@sentients/sdk'
+exec sh -c 'mkdir -p node_modules/@sentients/sdk node_modules/@tanstack/react-query node_modules/@tanstack/react-table node_modules/date-fns node_modules/lucide-react node_modules/next node_modules/react node_modules/react-dom node_modules/sonner'
 
-# TC-017 — module conforme : audit réussi, aucune erreur.
+# TC-017 — conforming module: audit succeeds, no errors.
 exec $SENTIENTS --no-color audit blog-manager
-stdout '✓ Audit réussi'
-stdout 'token UUID valide'
+stdout '✓ Audit passed — no errors, no warnings'
+stdout 'valid UUID token'
 
-# Sortie JSON (spec §5.10) : forme machine exploitable.
+# JSON output (spec §5.10): machine-usable form.
 exec $SENTIENTS --no-color audit --output json
 stdout '"modules"'
 stdout '"findings"'
 
-# TC-018 — module cassé (export par défaut absent) : erreurs d'audit.
+# TC-018 — broken module (no default export): audit errors.
 exec sh -c 'printf "export const x = 1;\n" > external_modules/blog-manager/index.tsx'
 exec $SENTIENTS --no-color audit blog-manager
-stderr 'Résumé : 2 erreur\(s\)'
-stdout 'export non conforme'
+stderr 'Summary: 2 error\(s\)'
+stdout 'export not compliant'

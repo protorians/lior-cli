@@ -25,8 +25,8 @@ go build -o sentients .
 
 | Commande | Description |
 |----------|-------------|
-| `sentients init` | Cloner `protorians/sentient-cms` + installer les dépendances (détection bun/pnpm/yarn/npm) |
-| `sentients create module [nom]` | Créer un module standardisé dans `external_modules/` |
+| `sentients init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `protorians/sentients-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
+| `sentients create module [nom]` | Créer un module dans `external_modules/` depuis le mockup hello-world (renommé avec le nom du module) ou, à défaut, avec la structure standardisée |
 | `sentients connect` | Authentification via sentient-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `sentients disconnect` | Invalider le token côté serveur et supprimer les credentials |
 | `sentients pack [module]` | Construire l'archive `.smp` dans `.sentients/build/` |
@@ -42,27 +42,30 @@ go build -o sentients .
 
 ## Configuration
 
-`.sentient-cli.toml` (optionnel, à la racine du projet) :
+`sentients.config.json` (optionnel, à la racine du projet) :
 
-```toml
-[project]
-name = "mon-projet"
-package_manager = "bun"
-
-[publish]
-default_registry = "https://store.sentient.dev"
-auto_audit = true
-
-[debug]
-verbose = false
-log_level = "info"
+```json
+{
+  "project": {
+    "name": "mon-projet",
+    "packageManager": "bun"
+  },
+  "publish": {
+    "defaultRegistry": "https://store.sentient.dev",
+    "autoAudit": true
+  },
+  "debug": {
+    "verbose": false,
+    "logLevel": "info"
+  }
+}
 ```
 
 ## Variables d'environnement
 
 | Variable | Description |
 |----------|-------------|
-| `SENTIENT_CONNECT_API` | URL de base de l'API sentient-connect |
+| `SENTIENT_AUTH_API` | URL de base de l'API sentient-auth (authentications) |
 | `SENTIENT_CLI_DEBUG` | Active les logs détaillés (`--verbose` équivalent) |
 
 ## Sécurité
@@ -71,8 +74,8 @@ log_level = "info"
 - Repli : fichier chiffré AES-256-GCM (`~/.sentient-cli/credentials.enc`)
 - Clés de signature Ed25519 dans le keychain (service `sentient-cli-signing`),
   avec fichier chiffré en repli (`~/.sentient-cli/signing.enc`)
-- Archives `.smp` : ZIP contenant uniquement `external_modules/<module>/` et
-  `public/assets/<module>/` — aucun token ni credential
+- Archives `.smp` : ZIP contenant uniquement `external_modules/<module>/` +
+  `public/assets/<module>/` + `src/app/<module>/` — aucun token ni credential
 
 ## Tests
 

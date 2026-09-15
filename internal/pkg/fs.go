@@ -10,7 +10,7 @@ import (
 // CreateDir ensures a directory exists, creating it (and parents) if needed.
 func CreateDir(path string) error {
 	if err := os.MkdirAll(path, 0o755); err != nil {
-		return fmt.Errorf("impossible de créer le dossier %s : %w", path, err)
+		return fmt.Errorf("failed to create directory %s: %w", path, err)
 	}
 	return nil
 }
@@ -50,7 +50,7 @@ func WriteString(path string, data string) error {
 func CopyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("impossible d'ouvrir %s : %w", src, err)
+		return fmt.Errorf("failed to open %s: %w", src, err)
 	}
 	defer in.Close()
 
@@ -59,12 +59,12 @@ func CopyFile(src, dst string) error {
 	}
 	out, err := os.Create(dst)
 	if err != nil {
-		return fmt.Errorf("impossible de créer %s : %w", dst, err)
+		return fmt.Errorf("failed to create %s: %w", dst, err)
 	}
 	defer out.Close()
 
 	if _, err := io.Copy(out, in); err != nil {
-		return fmt.Errorf("impossible de copier %s vers %s : %w", src, dst, err)
+		return fmt.Errorf("failed to copy %s to %s: %w", src, dst, err)
 	}
 	return nil
 }

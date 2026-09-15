@@ -5,33 +5,33 @@ exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 exec $SENTIENTS --no-color create module blog-manager
 exec $SENTIENTS --no-color pack blog-manager
 
-# TC-022 — `sign keygen` génère la paire Ed25519 (vault fichier, HOME isolé).
+# TC-022 — `sign keygen` generates the Ed25519 pair (file vault, isolated HOME).
 exec $SENTIENTS --no-color sign keygen
-stdout '✓ Paire de clés Ed25519 générée avec succès'
+stdout '✓ Ed25519 key pair generated successfully'
 stdout 'Fingerprint'
 exists $HOME/.sentient-cli/signing.enc
 
-# FR-024 — `sign` sans argument affiche le fingerprint.
+# FR-024 — `sign` without argument prints the fingerprint.
 exec $SENTIENTS --no-color sign
-stdout 'Clé de signature du développeur'
+stdout 'Developer signing key:'
 stdout 'Fingerprint'
 
-# TC-023 — `sign <module>` signe l'archive et produit un .sig de 64 octets.
+# TC-023 — `sign <module>` signs the archive and produces a 64-byte .sig.
 exec $SENTIENTS --no-color sign blog-manager
-stdout '✓ Archive signée avec succès'
-exists .sentients/build/blog-manager-0.1.0.smp.sig
-exec sh -c 'wc -c < .sentients/build/blog-manager-0.1.0.smp.sig'
+stdout '✓ Archive signed successfully'
+exists .sentients/build/blog-manager-1.0.0.smp.sig
+exec sh -c 'wc -c < .sentients/build/blog-manager-1.0.0.smp.sig'
 stdout '^[[:space:]]*64[[:space:]]*$'
 
-# TC-024 — `sign verify` accepte une signature valide.
+# TC-024 — `sign verify` accepts a valid signature.
 exec $SENTIENTS --no-color sign verify blog-manager
-stdout '✓ Signature valide'
+stdout '✓ Valid signature'
 
-# TC-025 — archive modifiée : vérification en échec (exit 12), après re-pack
-# pour repartir d'une archive saine.
+# TC-025 — tampered archive: verification fails (exit 12), after re-pack to
+# start from a healthy archive.
 exec $SENTIENTS --no-color pack blog-manager
-exec sh -c 'printf "x" >> .sentients/build/blog-manager-0.1.0.smp'
+exec sh -c 'printf "x" >> .sentients/build/blog-manager-1.0.0.smp'
 ! exec $SENTIENTS --no-color sign verify blog-manager
-stderr 'signature invalide'
+stderr 'invalid signature'
 exec sh -c '"$SENTIENTS" --no-color sign verify blog-manager >/dev/null 2>&1; echo $?'
 stdout '^12$'

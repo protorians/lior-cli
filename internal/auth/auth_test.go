@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -72,6 +74,36 @@ func TestSessionExpired(t *testing.T) {
 	}
 }
 
+func TestAPIConfigFromWorkspaceAppConfig(t *testing.T) {
+	t.Setenv(EnvAPIBase, "")
+
+	root := t.TempDir()
+	sub := filepath.Join(root, "a", "b", "c")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `{"applications":{"sentient-auth":{"api":{"baseUrl":"https://workspace.example.com","timeout":5000}}}}`
+	if err := os.WriteFile(filepath.Join(root, "app.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chdir(wd) }()
+
+	if base := apiBaseURL(); base != "https://workspace.example.com" {
+		t.Errorf("apiBaseURL = %q, want https://workspace.example.com", base)
+	}
+	if d := apiTimeout(); d != 5*time.Second {
+		t.Errorf("apiTimeout = %v, want 5s", d)
+	}
+}
+
 func TestConnectorSignIn(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/auth/sign-in" {
@@ -83,7 +115,7 @@ func TestConnectorSignIn(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"message":"Connexion réussie","statusCode":200,"data":{"user":{"id":"u1","email":"dev@example.com","username":"dev","roles":[{"id":"r1","name":"Developer"}]},"token":"tok-session","device":{"id":"d1","name":"macbook-pro"}}}`))
+		_, _ = w.Write([]byte(`{"message":"Connexion réussie","statusCode":200,"data":{"user":{"id":"u1","email":"dev@example.com","username":"dev","roles":[{"id":"r1","name":"Developer"}]},"token":"tok-session","device":"d1"}}`))
 	}))
 	defer server.Close()
 
@@ -101,8 +133,8 @@ func TestConnectorSignIn(t *testing.T) {
 	if resp.User.Role != "Developer" {
 		t.Errorf("Role dérivé = %q, want Developer", resp.User.Role)
 	}
-	if resp.Device.ID != "d1" {
-		t.Errorf("Device = %+v, want d1", resp.Device)
+	if resp.Device != "d1" {
+		t.Errorf("Device = %q, want d1", resp.Device)
 	}
 }
 

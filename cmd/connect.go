@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/protorians/sentient-cli/internal/auth"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 	"github.com/protorians/sentient-cli/internal/tui"
 	"github.com/spf13/cobra"
@@ -15,14 +16,18 @@ import (
 
 var connectCmd = &cobra.Command{
 	Use:   "connect",
-	Short: "Se connecter à Sentient Connect",
-	Long: `Authentifie le développeur avec son compte sentient-connect
-(email + mot de passe, MFA prise en charge) et stocke les credentials
-de manière sécurisée (keychain système).`,
+	Short: "Connect to Sentient Connect",
+	Long: `Authenticates the developer with their sentient-connect account
+(email + password, MFA supported) and stores the credentials securely
+(system keychain).`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runConnect(cmd)
 	},
+}
+
+func init() {
+	i18nHelp(connectCmd, "cmd.connect.short", "cmd.connect.long")
 }
 
 func runConnect(cmd *cobra.Command) error {
@@ -32,17 +37,17 @@ func runConnect(cmd *cobra.Command) error {
 	// Existing session?
 	sess, err := auth.LoadSession(store)
 	if err != nil {
-		return pkg.NewError("Authentification", err.Error(), pkg.ExitAuth)
+		return pkg.NewError(i18n.T("cat.authentication"), err.Error(), pkg.ExitAuth)
 	}
 	if sess != nil && sess.IsAuthenticated() {
-		email := "utilisateur"
+		email := "user"
 		if sess.User != nil && sess.User.Email != "" {
 			email = sess.User.Email
 		}
 		fmt.Println()
-		fmt.Printf("  Déjà connecté en tant que %s\n", email)
+		fmt.Println(i18n.Tf("connect.already", email))
 		if tui.IsInteractive() {
-			again, err := tui.Confirm("Voulez-vous vous reconnecter ?", false)
+			again, err := tui.Confirm(i18n.T("connect.confirm.reconnect"), false)
 			if err != nil {
 				return err
 			}
@@ -57,7 +62,7 @@ func runConnect(cmd *cobra.Command) error {
 	// same pattern as `SENTIENT_CLI_YES`.
 	email := ""
 	if tui.IsInteractive() {
-		value, err := tui.AskText("Email", "")
+		value, err := tui.AskText(i18n.T("connect.prompt.email"), "")
 		if err != nil {
 			return err
 		}
@@ -66,12 +71,12 @@ func runConnect(cmd *cobra.Command) error {
 		email = strings.TrimSpace(os.Getenv("SENTIENT_CLI_CONNECT_EMAIL"))
 	}
 	if email == "" {
-		return pkg.NewError("Authentification", "l'email est obligatoire", pkg.ExitAuth)
+		return pkg.NewError(i18n.T("cat.authentication"), i18n.T("connect.error.email"), pkg.ExitAuth)
 	}
 
 	password := ""
 	if tui.IsInteractive() {
-		value, err := tui.AskSecret("Mot de passe")
+		value, err := tui.AskSecret(i18n.T("connect.prompt.password"))
 		if err != nil {
 			return err
 		}
@@ -80,23 +85,24 @@ func runConnect(cmd *cobra.Command) error {
 		password = os.Getenv("SENTIENT_CLI_CONNECT_PASSWORD")
 	}
 	if password == "" {
-		return pkg.NewError("Authentification", "le mot de passe est obligatoire", pkg.ExitAuth)
+		return pkg.NewError(i18n.T("cat.authentication"), i18n.T("connect.error.password"), pkg.ExitAuth)
 	}
 
 	connector := auth.NewConnector()
-	debugf("API sentient-connect : %s", connector.Client.BaseURL)
+	base, source := auth.DebugInfo()
+	debugf("API sentient-connect : %s (source: %s)", base, source)
 
-	signIn, err := tui.RunWithSpinner("Vérification des identifiants", func() (*auth.SignInResponse, error) {
+	signIn, err := tui.RunWithSpinner(i18n.T("connect.spinner.checking"), func() (*auth.SignInResponse, error) {
 		return connector.SignIn(ctx, auth.SignInRequest{Email: email, Password: password})
 	})
 	if err != nil {
-		return classifyConnectorError("Authentification", err, "Vérifiez vos identifiants.")
+		return classifyConnectorError("cat.authentication", "connect.error.credentials.fix", err)
 	}
 
 	session := &auth.Session{
 		Store:       store,
 		AccessToken: signIn.Token,
-		Device:      signIn.Device.ID,
+		Device:      signIn.Device,
 		User:        &signIn.User,
 	}
 	t := time.Now().Add(auth.TokenTTL)
@@ -115,7 +121,7 @@ func runConnect(cmd *cobra.Command) error {
 	}
 
 	if err := session.Save(); err != nil {
-		return pkg.NewError("Authentification", "stockage des credentials impossible : "+err.Error(), pkg.ExitAuth)
+		return pkg.NewError(i18n.T("cat.authentication"), i18n.Tf("connect.error.store", err.Error()), pkg.ExitAuth)
 	}
 
 	printConnectSummary(session)
@@ -124,55 +130,60 @@ func runConnect(cmd *cobra.Command) error {
 
 func runMFA(ctx context.Context, authn *auth.Authenticator) (*auth.VerifyResponse, error) {
 	prompt := func(factor auth.FactorKind) (string, error) {
-		label := "Code TOTP"
+		label := i18n.T("connect.mfa.totp")
 		if factor == auth.FactorRecovery {
-			label = "Code de récupération"
+			label = i18n.T("connect.mfa.recovery")
 		}
 		if !tui.IsInteractive() {
 			// CI: read the verification code from the environment.
 			if code := os.Getenv("SENTIENT_CLI_MFA_CODE"); code != "" {
 				return code, nil
 			}
-			return "", pkg.NewError("MFA", "cette exécution nécessite un terminal interactif pour la vérification MFA", pkg.ExitMFA)
+			return "", pkg.NewError(i18n.T("cat.mfa"), i18n.T("connect.mfa.non_interactive"), pkg.ExitMFA)
 		}
 		return tui.AskText(label, "")
 	}
 
-	resp, err := tui.RunWithSpinner("Vérification du code…", func() (*auth.VerifyResponse, error) {
+	resp, err := tui.RunWithSpinner(i18n.T("connect.spinner.verify"), func() (*auth.VerifyResponse, error) {
 		return authn.Verify(ctx, prompt)
 	})
 	if err != nil {
-		return nil, classifyConnectorError("MFA", err,
-			"Le code est incorrect ou expiré. Vérifiez votre application TOTP / vos codes de récupération (backup codes).")
+		return nil, classifyConnectorError("cat.mfa", "connect.mfa.error.fix", err)
 	}
 	return resp, nil
 }
 
-func classifyConnectorError(category string, err error, fix string) error {
+// classifyConnectorError maps an API/network failure to a categorised CLI error.
+// categoryKey and fixKey are i18n keys; the category is localized at render time.
+func classifyConnectorError(categoryKey, fixKey string, err error) error {
 	if _, ok := err.(*pkg.APIError); ok {
-		return pkg.NewErrorWithFix(category, err.Error(), fix, pkg.ExitAuth)
+		return pkg.NewErrorWithFix(i18n.T(categoryKey), err.Error(), i18n.T(fixKey), pkg.ExitAuth)
 	}
-	return pkg.NewErrorWithFix("Réseau", err.Error(),
-		"Vérifiez votre connexion internet et la disponibilité de sentient-connect.", pkg.ExitNetwork)
+	return pkg.NewErrorWithFix(i18n.T("cat.network"), err.Error(),
+		i18n.T("connect.error.network.fix"), pkg.ExitNetwork)
 }
 
 func printConnectSummary(session *auth.Session) {
 	s := tui.NewStyles()
 	email := ""
-	role := "Développeur"
+	role := i18n.T("label.developer")
 	if session.User != nil {
 		email = session.User.Email
 		role = session.User.Role
 		if role == "" {
-			role = "Développeur"
+			role = i18n.T("label.developer")
 		}
 	}
 	expiry := "—"
 	if session.ExpiresAt != nil {
 		expiry = session.ExpiresAt.UTC().Format("2006-01-02 15:04:05 UTC")
 	}
+	card := s.SummaryCard(
+		s.Success.Render(i18n.Tf("connect.success", email)),
+		s.KeyValue(i18n.T("label.role"), s.Value.Render(role)),
+		s.KeyValue(i18n.T("label.token_expires"), s.Value.Render(expiry)),
+	)
 	fmt.Println()
-	fmt.Println(s.Success.Render("✓ Connecté en tant que " + email))
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Rôle"), role)
-	fmt.Printf("  %s : %s\n", s.Muted.Render("Token expire le"), expiry)
+	fmt.Println(card)
+	fmt.Println()
 }

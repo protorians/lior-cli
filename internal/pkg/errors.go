@@ -5,20 +5,20 @@ import "fmt"
 // Exit codes per spec §11.1.
 const (
 	ExitOK             = 0
-	ExitError          = 1 // erreur générique
-	ExitAuth           = 2 // erreur d'authentification
-	ExitModuleNotFound = 3 // module non trouvé
-	ExitManifest       = 4 // manifest invalide
-	ExitNetwork        = 5 // erreur réseau
-	ExitPermission     = 6 // erreur de permission
-	ExitMFA            = 7 // MFA requis / échoué
+	ExitError          = 1 // generic error
+	ExitAuth           = 2 // authentication error
+	ExitModuleNotFound = 3 // module not found
+	ExitManifest       = 4 // invalid manifest
+	ExitNetwork        = 5 // network error
+	ExitPermission     = 6 // permission error
+	ExitMFA            = 7 // MFA required / failed
 	ExitBuild          = 10
 	ExitPublish        = 11
 	ExitSigning        = 12
 )
 
 // Error is a categorized CLI error rendered as
-// `✗ <Categorie> : <Message>` + `→ <Fix>` (spec §11.2).
+// `✗ <Category> : <Message>` + `→ <Fix>`.
 type Error struct {
 	Category string
 	Message  string
@@ -59,7 +59,7 @@ func ExitCodeFor(err error) int {
 	return ExitError
 }
 
-// FormatError renders an error per the French spec format.
+// FormatError renders an error in the `✗ Category : Message` format.
 func FormatError(err error) string {
 	if e, ok := err.(*Error); ok {
 		out := fmt.Sprintf("✗ %s : %s", e.Category, e.Message)
@@ -68,5 +68,5 @@ func FormatError(err error) string {
 		}
 		return out
 	}
-	return fmt.Sprintf("✗ Erreur : %s", err)
+	return fmt.Sprintf("✗ Error: %s", err)
 }

@@ -2,10 +2,13 @@ package module
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/pkg"
 )
 
@@ -34,23 +37,10 @@ type Manifest struct {
 	IsDefault     bool              `json:"isDefault"`
 	Requirements  map[string]any    `json:"requirements"`
 	Dependencies  map[string]string `json:"dependencies"`
-	Widgets       []Widget          `json:"widgets"`
-	Routines      []Routine         `json:"routines"`
+	Widgets       []string          `json:"widgets"`
+	Routines      []string          `json:"routines"`
+	Providers     []string          `json:"providers,omitempty"`
 	Menu          Menu              `json:"menu"`
-}
-
-// Widget is a reusable UI widget declared by the module.
-type Widget struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
-// Routine is a background task declared by the module.
-type Routine struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
 }
 
 // Publisher describes the developer publishing the module.
@@ -91,12 +81,15 @@ type Menu struct {
 	Items []MenuItem `json:"items"`
 }
 
-// MenuItem is a single entry of the module menu.
+// MenuItem is a single entry of the module menu. The module declaration and
+// the reference mockups use the `url` field; the legacy CLI-generated manifests
+// used `uri`, still read for compatibility.
 type MenuItem struct {
-	ID    string `json:"id"`
+	ID    string `json:"id,omitempty"`
 	Label string `json:"label"`
-	Icon  string `json:"icon"`
-	URI   string `json:"uri"`
+	Icon  string `json:"icon,omitempty"`
+	URL   string `json:"url,omitempty"`
+	URI   string `json:"uri,omitempty"`
 }
 
 // NewManifest builds a fresh manifest for a module.
@@ -135,8 +128,9 @@ func NewManifest(name, description string) Manifest {
 		IsDefault:    false,
 		Requirements: map[string]any{},
 		Dependencies: map[string]string{"@sentients/sdk": "workspace:*"},
-		Widgets:      []Widget{},
-		Routines:     []Routine{},
+		Widgets:      []string{},
+		Routines:     []string{},
+		Providers:    []string{},
 		Menu:         Menu{Items: []MenuItem{}},
 	}
 }
@@ -145,11 +139,11 @@ func NewManifest(name, description string) Manifest {
 func LoadManifest(path string) (*Manifest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("lecture de %s impossible : %w", path, err)
+		return nil, fmt.Errorf("failed to read %s: %w", path, err)
 	}
 	var m Manifest
 	if err := json.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("décodage JSON de %s impossible : %w", path, err)
+		return nil, fmt.Errorf("failed to decode JSON of %s: %w", path, err)
 	}
 	return &m, nil
 }
@@ -158,7 +152,7 @@ func LoadManifest(path string) (*Manifest, error) {
 func (m *Manifest) Save(path string) error {
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
-		return fmt.Errorf("sérialisation du manifest impossible : %w", err)
+		return fmt.Errorf("failed to serialize manifest: %w", err)
 	}
 	data = append(data, '\n')
 	return pkg.WriteFile(path, data)
@@ -169,10 +163,10 @@ var kebabNameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 // ValidateName checks a module name: kebab-case, 3–64 chars.
 func ValidateName(name string) error {
 	if len(name) < 3 || len(name) > 64 {
-		return fmt.Errorf("le nom du module doit contenir entre 3 et 64 caractères")
+		return errors.New(i18n.T("module.error.name_length"))
 	}
 	if !kebabNameRE.MatchString(name) {
-		return fmt.Errorf("le nom du module doit être en kebab-case (minuscules, chiffres et tirets uniquement)")
+		return errors.New(i18n.T("module.error.name_kebab"))
 	}
 	return nil
 }
@@ -213,4 +207,36 @@ func displayName(name string) string {
 		out = append(out, c)
 	}
 	return string(out)
+}
+
+// pascalName converts a kebab-case name to PascalCase ("blog-manager" → "BlogManager").
+func pascalName(name string) string {
+	words := strings.Split(name, "-")
+	for i, w := range words {
+		words[i] = capitalize(w)
+	}
+	return strings.Join(words, "")
+}
+
+// camelName converts a kebab-case name to lower camelCase ("blog-manager" → "blogManager").
+func camelName(name string) string {
+	words := strings.Split(name, "-")
+	out := words[0]
+	for _, w := range words[1:] {
+		out += capitalize(w)
+	}
+	return out
+}
+
+// lowerName concatenates a kebab-case name without separators ("blog-manager" → "blogmanager").
+func lowerName(name string) string {
+	return strings.ReplaceAll(name, "-", "")
+}
+
+func capitalize(s string) string {
+	b := []byte(s)
+	if len(b) > 0 && b[0] >= 'a' && b[0] <= 'z' {
+		b[0] = b[0] - 'a' + 'A'
+	}
+	return string(b)
 }

@@ -136,7 +136,7 @@ func keychainAvailable() bool {
 func (s *keyringStore) Get(key string) (string, error) {
 	v, err := keyring.Get(ServiceName, key)
 	if err != nil {
-		return "", fmt.Errorf("lecture de la credential %q impossible : %w", key, err)
+		return "", fmt.Errorf("failed to read credential %q: %w", key, err)
 	}
 	return v, nil
 }
@@ -146,7 +146,7 @@ func (s *keyringStore) Set(key, value string) error {
 		return nil
 	}
 	if err := keyring.Set(ServiceName, key, value); err != nil {
-		return fmt.Errorf("stockage de la credential %q impossible : %w", key, err)
+		return fmt.Errorf("failed to store credential %q: %w", key, err)
 	}
 	return nil
 }
@@ -156,7 +156,7 @@ func (s *keyringStore) Delete(kind string) error {
 		if isKeyringNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("suppression de la credential %q impossible : %w", kind, err)
+		return fmt.Errorf("failed to delete credential %q: %w", kind, err)
 	}
 	return nil
 }
@@ -181,7 +181,7 @@ func (s *fallbackStore) Get(key string) (string, error) {
 	if v, ok := data[key]; ok {
 		return v, nil
 	}
-	return "", fmt.Errorf("credential %q absente", key)
+	return "", fmt.Errorf("credential %q missing", key)
 }
 
 func (s *fallbackStore) Set(key, value string) error {
@@ -216,7 +216,7 @@ func (s *fallbackStore) DeleteAll() error {
 	defer s.mu.Unlock()
 
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("suppression du fichier de credentials impossible : %w", err)
+		return fmt.Errorf("failed to delete the credentials file: %w", err)
 	}
 	return nil
 }
@@ -227,7 +227,7 @@ func (s *fallbackStore) load() (map[string]string, error) {
 	}
 	ciphertext, err := os.ReadFile(s.path)
 	if err != nil {
-		return nil, fmt.Errorf("lecture du fichier de credentials impossible : %w", err)
+		return nil, fmt.Errorf("failed to read the credentials file: %w", err)
 	}
 	plain, err := pkg.DecryptVault(s.secret, ciphertext)
 	if err != nil {
@@ -235,7 +235,7 @@ func (s *fallbackStore) load() (map[string]string, error) {
 	}
 	out := map[string]string{}
 	if err := json.Unmarshal(plain, &out); err != nil {
-		return nil, fmt.Errorf("décodage du fichier de credentials impossible : %w", err)
+		return nil, fmt.Errorf("failed to decode the credentials file: %w", err)
 	}
 	return out, nil
 }
@@ -243,14 +243,14 @@ func (s *fallbackStore) load() (map[string]string, error) {
 func (s *fallbackStore) save(data map[string]string) error {
 	plain, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("sérialisation des credentials impossible : %w", err)
+		return fmt.Errorf("failed to serialize credentials: %w", err)
 	}
 	ciphertext, err := pkg.EncryptVault(s.secret, plain)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("création du dossier de credentials impossible : %w", err)
+		return fmt.Errorf("failed to create the credentials directory: %w", err)
 	}
 	return os.WriteFile(s.path, ciphertext, 0o600)
 }

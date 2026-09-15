@@ -95,7 +95,7 @@ func newRandomSecret() []byte {
 func (s *keyringKeyStore) GetPublicKey() ([]byte, error) {
 	v, err := keyring.Get(signingServiceName, keyPublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("clé publique absente du keychain : %w", err)
+		return nil, fmt.Errorf("public key not in the keychain: %w", err)
 	}
 	return []byte(v), nil
 }
@@ -107,7 +107,7 @@ func (s *keyringKeyStore) SetPublicKey(data []byte) error {
 func (s *keyringKeyStore) GetPrivateKey() ([]byte, error) {
 	v, err := keyring.Get(signingServiceName, keyPrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("clé privée absente du keychain : %w", err)
+		return nil, fmt.Errorf("private key not in the keychain: %w", err)
 	}
 	return []byte(v), nil
 }
@@ -142,7 +142,7 @@ func (s *fallbackKeyStore) GetPublicKey() ([]byte, error) {
 	}
 	v, ok := data[keyPublicKey]
 	if !ok {
-		return nil, fmt.Errorf("clé publique absente")
+		return nil, fmt.Errorf("public key missing")
 	}
 	return decodeValue(v)
 }
@@ -167,7 +167,7 @@ func (s *fallbackKeyStore) GetPrivateKey() ([]byte, error) {
 	}
 	v, ok := data[keyPrivateKey]
 	if !ok {
-		return nil, fmt.Errorf("clé privée absente")
+		return nil, fmt.Errorf("private key missing")
 	}
 	return decodeValue(v)
 }
@@ -187,7 +187,7 @@ func (s *fallbackKeyStore) DeleteKeys() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("suppression du fichier de clés impossible : %w", err)
+		return fmt.Errorf("failed to delete the key file: %w", err)
 	}
 	return nil
 }
@@ -209,7 +209,7 @@ func (s *fallbackKeyStore) load() (map[string]string, error) {
 	}
 	ciphertext, err := os.ReadFile(s.path)
 	if err != nil {
-		return nil, fmt.Errorf("lecture du fichier de clés impossible : %w", err)
+		return nil, fmt.Errorf("failed to read the key file: %w", err)
 	}
 	plain, err := pkg.DecryptVault(s.secret, ciphertext)
 	if err != nil {
@@ -217,7 +217,7 @@ func (s *fallbackKeyStore) load() (map[string]string, error) {
 	}
 	out := map[string]string{}
 	if err := json.Unmarshal(plain, &out); err != nil {
-		return nil, fmt.Errorf("décodage du fichier de clés impossible : %w", err)
+		return nil, fmt.Errorf("failed to decode the key file: %w", err)
 	}
 	return out, nil
 }
@@ -225,14 +225,14 @@ func (s *fallbackKeyStore) load() (map[string]string, error) {
 func (s *fallbackKeyStore) save(data map[string]string) error {
 	plain, err := json.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("sérialisation des clés impossible : %w", err)
+		return fmt.Errorf("failed to serialize keys: %w", err)
 	}
 	ciphertext, err := pkg.EncryptVault(s.secret, plain)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("création du dossier de clés impossible : %w", err)
+		return fmt.Errorf("failed to create the key directory: %w", err)
 	}
 	return os.WriteFile(s.path, ciphertext, 0o600)
 }
@@ -247,7 +247,7 @@ func encodeValue(data []byte) string {
 func decodeValue(v string) ([]byte, error) {
 	out, err := base64.StdEncoding.DecodeString(v)
 	if err != nil {
-		return nil, fmt.Errorf("décodage de la clé stockée impossible : %w", err)
+		return nil, fmt.Errorf("failed to decode the stored key: %w", err)
 	}
 	return out, nil
 }

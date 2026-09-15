@@ -1,80 +1,114 @@
 #!/usr/bin/env bash
 #
-# dev-install.sh — Compile et installe le binaire `sentients` (mode dev)
-# pour qu'il soit disponible dans toute la session machine (PATH global).
+# dev-install.sh — Builds the `sentients` binary (dev mode), then installs it
+# so it is available for the whole machine session (global PATH).
+#
+# The build is always performed first, separately from the installation.
 #
 # Usage:
-#   ./scripts/dev-install.sh [--prefix=PATH] [--force]
+#   ./scripts/dev-install.sh [--prefix=PATH] [--build-only] [--install-only]
 #
-# Comportement:
-#   - Installe dans /usr/local/bin si disponible, sinon ~/.local/bin.
-#   - Ajoute le dossier destination au PATH de la session courante.
-#   - Désinstalle l'ancien binaire via ./scripts/dev-uninstall.sh si présent.
+# Behavior:
+#   1. BUILD  : compiles the binary (step 1, mandatory).
+#   2. INSTALL: copies the binary into /usr/local/bin when writable,
+#      otherwise ~/.local/bin, then adds the directory to the current session
+#      PATH. An already-installed binary is silently replaced.
+#
+# Options:
+#   --prefix=PATH   installation destination (overrides /usr/local/bin).
+#   --build-only    stops after the build (binary left in dist/).
+#   --install-only  only installs the binary already present in dist/.
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+BINARY="sentients"
+BUILD_DIR="$ROOT_DIR/dist"
+BUILD_BIN="$BUILD_DIR/$BINARY"
+
 PREFIX=""
-FORCE=false
+BUILD_ONLY=false
+INSTALL_ONLY=false
 for arg in "$@"; do
   case "$arg" in
     --prefix=*) PREFIX="${arg#--prefix=}" ;;
-    --force) FORCE=true ;;
-    *) echo "Usage: $0 [--prefix=PATH] [--force]" >&2; exit 1 ;;
+    --build-only) BUILD_ONLY=true ;;
+    --install-only) INSTALL_ONLY=true ;;
+    *) echo "Usage: $0 [--prefix=PATH] [--build-only] [--install-only]" >&2; exit 1 ;;
   esac
 done
 
-GO="$(command -v go || true)"
-if [ -z "$GO" ]; then
-  echo "Error: 'go' is required to build the CLI in dev mode." >&2
+if [ "$BUILD_ONLY" = true ] && [ "$INSTALL_ONLY" = true ]; then
+  echo "Error: --build-only and --install-only are mutually exclusive." >&2
   exit 1
 fi
 
-BINARY="sentients"
-TMP_DIR="$(mktemp -d -t sentients.XXXXXX)"
-TMP_BIN="$TMP_DIR/$BINARY"
-trap 'rm -rf "$TMP_DIR"' EXIT
+# ---- Step 1: BUILD -------------------------------------------------------
 
-echo "Building $BINARY (dev)..."
-GOFLAGS=-mod=mod CGO_ENABLED=0 go build \
-  -ldflags "-X main.version=dev -X main.commit=$(git rev-parse --short HEAD 2>/dev/null || echo none) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -o "$TMP_BIN" .
-
-if [ -n "$PREFIX" ]; then
-  INSTALL_DIR="$PREFIX"
-else
-  if [ -w /usr/local/bin ]; then
-    INSTALL_DIR="/usr/local/bin"
-  else
-    INSTALL_DIR="${HOME}/.local/bin"
+build() {
+  GO="$(command -v go || true)"
+  if [ -z "$GO" ]; then
+    echo "Error: 'go' is required to build the CLI in dev mode." >&2
+    exit 1
   fi
-fi
 
-mkdir -p "$INSTALL_DIR"
+  mkdir -p "$BUILD_DIR"
+  echo "=== Step 1/2 — Build (dev) ==="
+  GOFLAGS=-mod=mod CGO_ENABLED=0 go build \
+    -ldflags "-X main.version=dev -X main.commit=$(git rev-parse --short HEAD 2>/dev/null || echo none) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -o "$BUILD_BIN" .
+  echo "Built: $BUILD_BIN"
+}
 
-if [ -e "$INSTALL_DIR/$BINARY" ] && [ "$FORCE" != true ]; then
-  echo "Warning: $INSTALL_DIR/$BINARY already exists. Skipping overwrite (use --force)." >&2
-  echo "Existing binary: $("$INSTALL_DIR/$BINARY" --version 2>/dev/null || echo unknown)" >&2
-  exit 1
-fi
+# ---- Step 2: INSTALL -----------------------------------------------------
 
-install -m 0755 "$TMP_BIN" "$INSTALL_DIR/$BINARY"
+install_binary() {
+  if [ -n "$PREFIX" ]; then
+    INSTALL_DIR="$PREFIX"
+  else
+    if [ -w /usr/local/bin ]; then
+      INSTALL_DIR="/usr/local/bin"
+    else
+      INSTALL_DIR="${HOME}/.local/bin"
+    fi
+  fi
 
-# PATH de la session courante
-case ":$PATH:" in
-  *":$INSTALL_DIR:"*) ;;
-  *) export PATH="$INSTALL_DIR:$PATH" ;;
-esac
+  mkdir -p "$INSTALL_DIR"
 
-echo ""
-echo "Installed: $INSTALL_DIR/$BINARY"
-"$INSTALL_DIR/$BINARY" --version
-echo "Available in this session as: sentients"
+  echo "=== Step 2/2 — Install ==="
+  install -m 0755 "$BUILD_BIN" "$INSTALL_DIR/$BINARY"
 
-if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+  # Current session PATH
+  case ":$PATH:" in
+    *":$INSTALL_DIR:"*) ;;
+    *) export PATH="$INSTALL_DIR:$PATH" ;;
+  esac
+
   echo ""
-  echo "Add $INSTALL_DIR to your PATH to use it in every session:"
-  echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+  echo "Installed: $INSTALL_DIR/$BINARY"
+  "$INSTALL_DIR/$BINARY" --version
+  echo "Available in this session as: sentients"
+
+  if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+    echo ""
+    echo "Add $INSTALL_DIR to your PATH to use it in every session:"
+    echo "  export PATH=\"$INSTALL_DIR:\$PATH\""
+  fi
+}
+
+if [ "$INSTALL_ONLY" = true ]; then
+  if [ ! -f "$BUILD_BIN" ]; then
+    echo "Error: $BUILD_BIN not found — run the build step first (without --install-only)." >&2
+    exit 1
+  fi
+  install_binary
+else
+  build
+  if [ "$BUILD_ONLY" = true ]; then
+    echo "Build only — nothing installed."
+  else
+    install_binary
+  fi
 fi

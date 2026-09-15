@@ -75,7 +75,7 @@ func (s *Server) Handler() http.Handler {
 func writeData(w http.ResponseWriter, status int, data any) {
 	payload, err := json.Marshal(data)
 	if err != nil {
-		writeError(w, 500, "sérialisation interne impossible")
+		writeError(w, 500, "internal serialization error")
 		return
 	}
 	writeEnvelope(w, status, 200, "OK", payload)
@@ -101,7 +101,7 @@ func writeEnvelope(w http.ResponseWriter, status, code int, message string, data
 func decodeBody(w http.ResponseWriter, r *http.Request, out any) bool {
 	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(out); err != nil {
-		writeError(w, 400, "corps de requête invalide")
+		writeError(w, 400, "invalid request body")
 		return false
 	}
 	return true
@@ -121,7 +121,7 @@ func requireAuth(s *Server, w http.ResponseWriter, r *http.Request) bool {
 	if _, ok := s.bearerEmail(r); ok {
 		return true
 	}
-	writeError(w, 401, "Non authentifié")
+	writeError(w, 401, "Not authenticated")
 	return false
 }
 
@@ -136,7 +136,7 @@ func (s *Server) registerToken(token, email string) {
 
 func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeError(w, 405, "Méthode non autorisée")
+		writeError(w, 405, "Method not allowed")
 		return
 	}
 	var req struct {
@@ -147,7 +147,7 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Email == "invalid@example.com" || req.Password == "wrong" {
-		writeError(w, 401, "Identifiants invalides")
+		writeError(w, 401, "Invalid credentials")
 		return
 	}
 	token := "tok-" + req.Email
@@ -160,9 +160,9 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 			"roles":    []map[string]string{{"id": "role-1", "name": "Developer"}},
 		},
 		"token":  token,
-		"device": map[string]string{"id": "device-1", "name": "cli"},
+		"device": "device-1",
 		"organizations": []map[string]string{
-			{"id": "org-1", "name": "Mon Organisation", "slug": "mon-org"},
+			{"id": "org-1", "name": "My Organization", "slug": "my-org"},
 		},
 	})
 }
@@ -188,7 +188,7 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 func (s *Server) challenge(w http.ResponseWriter, r *http.Request) {
 	email, ok := s.bearerEmail(r)
 	if !ok {
-		writeError(w, 401, "Session invalide")
+		writeError(w, 401, "Invalid session")
 		return
 	}
 	if !strings.Contains(email, "mfa") {
@@ -199,8 +199,8 @@ func (s *Server) challenge(w http.ResponseWriter, r *http.Request) {
 		"mfaRequired": true,
 		"challenge":   "challenge-123",
 		"factors": []map[string]any{
-			{"id": "f-totp", "type": "totp", "label": "Application d'authentification", "enabled": true},
-			{"id": "f-recovery", "type": "recovery", "label": "Codes de récupération", "enabled": true},
+			{"id": "f-totp", "type": "totp", "label": "Authenticator app", "enabled": true},
+			{"id": "f-recovery", "type": "recovery", "label": "Recovery codes", "enabled": true},
 		},
 	})
 }
@@ -213,7 +213,7 @@ func (s *Server) verifyTOTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Code != "123456" {
-		writeError(w, 401, "Code TOTP invalide")
+		writeError(w, 401, "Invalid TOTP code")
 		return
 	}
 	writeData(w, http.StatusOK, map[string]any{"mfaVerified": true, "mfaToken": "mfa-totp-ok"})
@@ -227,7 +227,7 @@ func (s *Server) verifyRecovery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Code != "1111-2222" {
-		writeError(w, 401, "Code de récupération invalide")
+		writeError(w, 401, "Invalid recovery code")
 		return
 	}
 	writeData(w, http.StatusOK, map[string]any{"mfaVerified": true, "mfaToken": "mfa-recovery-ok"})
@@ -255,7 +255,7 @@ func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 4 && parts[1] == "versions" && parts[3] == "artifact":
 		s.handleArtifact(w, r, id, parts[2])
 	default:
-		writeError(w, 404, "Route inconnue")
+		writeError(w, 404, "Unknown route")
 	}
 }
 
@@ -285,7 +285,7 @@ func (s *Server) handleModulesRoot(w http.ResponseWriter, r *http.Request) {
 		// synchronized to this id after a successful publish.
 		id := uuid.NewString()
 		if _, exists := s.products[id]; exists {
-			writeError(w, 409, "Un module avec ce slug existe déjà")
+			writeError(w, 409, "A module with this slug already exists")
 			return
 		}
 		s.products[id] = &Product{
@@ -294,7 +294,7 @@ func (s *Server) handleModulesRoot(w http.ResponseWriter, r *http.Request) {
 		}
 		writeData(w, http.StatusCreated, s.products[id])
 	default:
-		writeError(w, 405, "Méthode non autorisée")
+		writeError(w, 405, "Method not allowed")
 	}
 }
 
@@ -303,7 +303,7 @@ func (s *Server) handleModule(w http.ResponseWriter, r *http.Request, id string)
 	prod, ok := s.products[id]
 	s.mu.Unlock()
 	if !ok {
-		writeError(w, 404, "Module introuvable")
+		writeError(w, 404, "Module not found")
 		return
 	}
 	switch r.Method {
@@ -325,7 +325,7 @@ func (s *Server) handleModule(w http.ResponseWriter, r *http.Request, id string)
 		s.mu.Unlock()
 		writeData(w, http.StatusOK, prod)
 	default:
-		writeError(w, 405, "Méthode non autorisée")
+		writeError(w, 405, "Method not allowed")
 	}
 }
 
@@ -333,7 +333,7 @@ func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request, id strin
 	s.mu.Lock()
 	if _, ok := s.products[id]; !ok {
 		s.mu.Unlock()
-		writeError(w, 404, "Module introuvable")
+		writeError(w, 404, "Module not found")
 		return
 	}
 	s.mu.Unlock()
@@ -361,7 +361,7 @@ func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request, id strin
 		vs := s.versions[id]
 		for _, v := range vs {
 			if v.VersionString == req.VersionString {
-				writeError(w, http.StatusConflict, "Une version identique existe déjà pour ce module")
+				writeError(w, http.StatusConflict, "An identical version already exists for this module")
 				return
 			}
 		}
@@ -379,13 +379,13 @@ func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request, id strin
 		s.versions[id] = append(vs, nv)
 		writeData(w, http.StatusCreated, nv)
 	default:
-		writeError(w, 405, "Méthode non autorisée")
+		writeError(w, 405, "Method not allowed")
 	}
 }
 
 func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request, productID, versionID string) {
 	if r.Method != http.MethodPost {
-		writeError(w, 405, "Méthode non autorisée")
+		writeError(w, 405, "Method not allowed")
 		return
 	}
 	var req struct {

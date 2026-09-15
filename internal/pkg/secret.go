@@ -11,11 +11,11 @@ import (
 func DataDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("résolution du dossier personnel impossible : %w", err)
+		return "", fmt.Errorf("failed to resolve the home directory: %w", err)
 	}
 	dir := filepath.Join(home, ".sentient-cli")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("création du dossier %s impossible : %w", dir, err)
+		return "", fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 	return dir, nil
 }
@@ -33,7 +33,7 @@ func MachineSecret() ([]byte, error) {
 	if FileExists(path) {
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("lecture du secret machine impossible : %w", err)
+			return nil, fmt.Errorf("failed to read the machine secret: %w", err)
 		}
 		if len(data) == 32 {
 			return data, nil
@@ -45,7 +45,7 @@ func MachineSecret() ([]byte, error) {
 		return nil, err
 	}
 	if err := os.WriteFile(path, key, 0o600); err != nil {
-		return nil, fmt.Errorf("écriture du secret machine impossible : %w", err)
+		return nil, fmt.Errorf("failed to write the machine secret: %w", err)
 	}
 	return key, nil
 }

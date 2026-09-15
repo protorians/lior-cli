@@ -1,17 +1,21 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
 // Well-known directory and file names within a Sentient project.
 const (
-	ConfigFileName      = ".sentient-cli.toml"
+	ConfigFileName      = "sentients.config.json"
 	SentientConfigName  = "sentient.config.toml"
 	ExternalModulesDir  = "external_modules"
 	PublicAssetsDir     = "public/assets"
+	AppSrcDir           = "src/app"
 	SentientDir         = ".sentients"
 	SentientBuildsDir   = ".sentients/build"
 	ManifestFileName    = "manifest.json"
@@ -40,7 +44,7 @@ func FindProjectRoot(start string) (string, error) {
 		var err error
 		dir, err = os.Getwd()
 		if err != nil {
-			return "", fmt.Errorf("impossible de déterminer le répertoire courant : %w", err)
+			return "", fmt.Errorf("%s: %w", i18n.T("config.error.cwd"), err)
 		}
 	}
 	for {
@@ -49,8 +53,8 @@ func FindProjectRoot(start string) (string, error) {
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", fmt.Errorf("aucun projet Sentient trouvé (recherche de %q ou %q) — exécutez 'sentients init'",
-				SentientConfigName, ExternalModulesDir)
+			return "", errors.New(i18n.Tf("config.error.no_project",
+				SentientConfigName, ExternalModulesDir))
 		}
 		dir = parent
 	}
@@ -74,6 +78,11 @@ func ModuleDir(root, module string) string {
 // ModuleAssetsDir returns the assets directory of a module.
 func ModuleAssetsDir(root, module string) string {
 	return filepath.Join(root, PublicAssetsDir, module)
+}
+
+// ModuleAppSrcDir returns the app source directory of a module.
+func ModuleAppSrcDir(root, module string) string {
+	return filepath.Join(root, AppSrcDir, module)
 }
 
 // BuildDir returns the `.sentients/build/` directory for a project root.
