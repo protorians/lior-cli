@@ -8,7 +8,7 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`), releases 0.0.8/0.0.9 ;
+> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.2.0 ;
 >   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
 
 ---
@@ -22,7 +22,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.0.9) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.2.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
@@ -364,7 +364,7 @@ dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun 
 1. **Vérifier le contexte** : être à la racine d'un projet Sentient (`sentients.config.json`,
    `sentient.config.toml` ou présence de `external_modules/`)
 2. **Demander le nom** (`kebab-case`, 3-64, pas de caractères spéciaux) et la **description** du module
-3. **Résoudre la source du mockup** (ordre de priorité) :
+3. **Résoudre la source du mockup module** (ordre de priorité) :
    - `--mockup` (champ `Creator.MockupDir`)
    - `SENTIENT_MODULE_MOCKUP` (répertoire de module de référence)
    - mockup **embarqué** `internal/module/mockups/hello-world/`
@@ -380,7 +380,9 @@ dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun 
    - `package.json` : description mise à jour
    - `README.md` : généré (nom, description, structure)
 6. **Scaffolder la page** : si la déclaration du module porte un `uri`/`url`, générer
-   `src/app/<uri>/page.tsx` à partir du page mockup (`SENTIENT_PAGE_MOCKUP`, sinon embarqué)
+   `src/app/<uri>/page.tsx` à partir du page mockup (ordre de priorité)
+   `--page-mockup` (champ `Creator.PageMockup`) → `SENTIENT_PAGE_MOCKUP` → page **embarquée**
+   `internal/module/mockups/page.tsx`
 7. **Afficher le résumé** : module créé, token généré, page créée (si uri), prochaines étapes
 
 #### Structure générée (mockup embarqué hello-world)
@@ -394,13 +396,13 @@ external_modules/<module-name>/
 ├── application/
 │   └── service/                # hello-world-api-service.ts (service de données)
 ├── domain/
-│   ├── enums/                  # statuts
-│   └── interfaces              # hello-world.interface.ts
+│   ├── enums/                  # hello-world-status.enum.ts (statuts)
+│   └── hello-world.interface.ts
 ├── infrastructure/
-│   └── routines/               # analytics routine
+│   └── routines/               # hello-world-analytics.routine.ts
 └── presentation/
-    ├── components/             # data-grid, columns, details-sheet, create-dialog
-    ├── providers/              # header provider (layout)
+    ├── components/             # hello-world-data-grid, -columns, -details-sheet, create-hello-world-dialog
+    ├── providers/              # hello-world-header.provider.tsx (layout)
     ├── views/                  # hello-world.view.tsx
     └── widgets/                # hello-world.widget.tsx
 ```
@@ -466,8 +468,8 @@ export default function <ModuleName>Page() {
 - Le token UUID est **unique** et généré à la création (injection dans le manifest scaffoldé)
 - Le nom du module ne peut pas entrer en conflit avec un module existant (`external_modules/`)
 - Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
-- `SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP` permettent de remplacer les mockups
-  (tests, templates d'équipe) — voir `internal/module/scaffold.go`
+- `--mockup` / `--page-mockup` (et `SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP`) permettent
+  de remplacer les mockups (tests, templates d'équipe) — voir `internal/module/scaffold.go`
 
 #### Sortie TUI
 

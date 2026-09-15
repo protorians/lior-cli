@@ -6,7 +6,7 @@ import {DataGrid, RowAction} from "@sentients/sdk/presentation/data-grid/data-gr
 import {DataGridSearchEngine} from "@sentients/sdk/presentation/data-grid/data-grid-search-engine";
 import {Empty, EmptyContent, EmptyDescription, EmptyMedia, EmptyTitle} from "@sentients/sdk/presentation/ui/empty";
 import {Button} from "@sentients/sdk/presentation/ui/button";
-import {WaitingActivity} from "@sentients/sdk/presentation/components/waiting-activity";
+import {Activity} from "@sentients/sdk/presentation/components/activity";
 import {PaginationState, Table} from "@tanstack/react-table";
 import {useRouter} from "next/navigation";
 import {ArchiveIcon, EyeIcon, PencilIcon, WandSparklesIcon} from "lucide-react";
@@ -73,7 +73,7 @@ export function HelloWorldDataGrid() {
             />
             {isLoading && (
                 <div className="flex-auto flex items-center justify-center">
-                    <WaitingActivity size={16}/>
+                    <Activity.Loader size={16}/>
                 </div>
             )}
         </div>

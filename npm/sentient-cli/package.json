@@ -1,6 +1,6 @@
 {
   "name": "@sentients/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sentient CLI - Create, maintain, and publish modules in the Sentient ecosystem",
   "license": "MIT",
   "repository": {

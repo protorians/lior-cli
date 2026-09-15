@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.2.0] - 2026-09-15
+
+### Added
+- **`create module --mockup` / `--page-mockup`** — le module et la page sont scaffolés depuis des répertoires/gabarits explicites (priorité sur `SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP`), avec repli silencieux sur les mockups embarqués si la source est inutilisable.
+
+### Changed
+- **Mockup hello-world aligné 1:1 sur le socle** — le mockup embarqué est désormais identique au module de référence `sentients-socle/external_modules/hello-world` (API SDK `View.*` / `Activity.*`, `AutoBreadcrumb`) ; les imports obsolètes (`Wrapper`, `WaitingActivity`, `AnimatedContent`) sont retirés.
+
+### Docs
+- `docs/specs/sentient.md` réalignée sur le code (arborescence `domain/hello-world.interface.ts`, flags de surcharge des mockups, metadata rel. 0.2.0) ; `docs/rapport-implementation.md` et `README.md` mis à jour.
+
+
 ## [v0.1.0] - 2026-09-15
 
 ### Added

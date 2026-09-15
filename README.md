@@ -26,7 +26,7 @@ go build -o sentients .
 | Commande | Description |
 |----------|-------------|
 | `sentients init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `protorians/sentients-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
-| `sentients create module [nom]` | Créer un module dans `external_modules/` depuis le mockup hello-world (renommé avec le nom du module) ou, à défaut, avec la structure standardisée |
+| `sentients create module [nom] [--mockup dir] [--page-mockup file]` | Créer un module dans `external_modules/` depuis le mockup hello-world (renommé avec le nom du module), surchargeable via `--mockup` / `--page-mockup` (`SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP`) |
 | `sentients connect` | Authentification via sentient-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `sentients disconnect` | Invalider le token côté serveur et supprimer les credentials |
 | `sentients pack [module]` | Construire l'archive `.smp` dans `.sentients/build/` |
@@ -67,6 +67,10 @@ go build -o sentients .
 |----------|-------------|
 | `SENTIENT_AUTH_API` | URL de base de l'API sentient-auth (authentications) |
 | `SENTIENT_CLI_DEBUG` | Active les logs détaillés (`--verbose` équivalent) |
+| `SENTIENT_CLI_LANG` | Force la langue d'interface (`fr-FR`, `en-US`) |
+| `SENTIENT_MODULE_MOCKUP` | Répertoire du module de référence pour `create module` (repli sur le mockup embarqué) |
+| `SENTIENT_PAGE_MOCKUP` | Gabarit `page.tsx` pour `create module` (repli sur le mockup embarqué) |
+| `SENTIENT_CLI_TEMPLATE_REPO` | Source du template `init` (repo GitHub, URL ZIP directe ou répertoire local) |
 
 ## Sécurité
 

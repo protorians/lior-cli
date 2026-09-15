@@ -39,10 +39,10 @@ const (
 // moduleMockupSource returns the custom module mockup directory to scaffold
 // from (Creator field first, then environment), or "" to use the embedded one.
 func (c *Creator) moduleMockupSource() string {
-	if c.MockupDir != "" && isModuleMockup(c.MockupDir) {
+	if c.MockupDir != "" && IsModuleMockup(c.MockupDir) {
 		return c.MockupDir
 	}
-	if p := os.Getenv(EnvModuleMockup); p != "" && isModuleMockup(p) {
+	if p := os.Getenv(EnvModuleMockup); p != "" && IsModuleMockup(p) {
 		return p
 	}
 	return ""
@@ -60,8 +60,8 @@ func (c *Creator) pageMockupSource() string {
 	return ""
 }
 
-// isModuleMockup reports whether dir looks like a scofoldable module mockup.
-func isModuleMockup(dir string) bool {
+// IsModuleMockup reports whether dir looks like a scofoldable module mockup.
+func IsModuleMockup(dir string) bool {
 	return pkg.DirExists(dir) &&
 		pkg.FileExists(filepath.Join(dir, config.ManifestFileName)) &&
 		pkg.FileExists(filepath.Join(dir, config.ModuleEntryFileName))

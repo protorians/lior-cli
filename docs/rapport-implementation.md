@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-12 — version courante du code : `dev` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *PLANNING*, pourtant largement implémentée).
+> Dernière mise à jour : 2026-09-15 — version courante du code : `dev` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.2.0).
 
 ---
 
@@ -154,6 +154,15 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > chiffré), `--no-color` pour des assertions stables ; job CI `e2e` ajouté.
 > Prod-ids du mock en UUID (alignés sur le store réel) → le republish passe
 > la validation du token et atteint le conflit de version (TC-012, exit 11).
+>
+> Itération du 2026-09-15 : **mockup hello-world aligné 1:1 sur le socle**
+> (le mockup embarqué est identique à `sentients-socle/external_modules/hello-world`
+> : composants `View.*` / `Activity.*`, `AutoBreadcrumb`, suppression des
+> `Wrapper/Header/Main/Footer` et `WaitingActivity`/`AnimatedContent`) ;
+> `create module` expose les flags **`--mockup` / `--page-mockup`** (priorité
+> sur les variables d'env, repli sur les mockups embarqués avec warning) ;
+> spec §5.2 réalignée (arborescence `domain/hello-world.interface.ts`, flags,
+> metadata rel. 0.2.0).
 
 ### 4.1 Sécurité — ✅ corrigé à l'itération du 2026-09-12
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et

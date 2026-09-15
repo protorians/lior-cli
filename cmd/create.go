@@ -31,8 +31,17 @@ Usage : sentients create module [name]`,
 	},
 }
 
+var (
+	createMockup     string
+	createPageMockup string
+)
+
 func init() {
+	createCmd.Flags().StringVar(&createMockup, "mockup", "", i18n.T("create.flag.mockup"))
+	createCmd.Flags().StringVar(&createPageMockup, "page-mockup", "", i18n.T("create.flag.page_mockup"))
 	i18nHelp(createCmd, "cmd.create.short", "cmd.create.long")
+	i18nFlag(createCmd, "mockup", "create.flag.mockup")
+	i18nFlag(createCmd, "page-mockup", "create.flag.page_mockup")
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
@@ -76,7 +85,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		description = strings.TrimSpace(d)
 	}
 
-	creator := &module.Creator{Root: root}
+	creator := &module.Creator{Root: root, MockupDir: createMockup, PageMockup: createPageMockup}
+	if createMockup != "" && !module.IsModuleMockup(createMockup) {
+		warn(i18n.Tf("create.warn.mockup_ignored", createMockup))
+	}
+	if createPageMockup != "" && !pkg.FileExists(createPageMockup) {
+		warn(i18n.Tf("create.warn.page_mockup_ignored", createPageMockup))
+	}
 	result, err := creator.Create(name, description)
 	if err != nil {
 		if module.IsExistsError(err) {
