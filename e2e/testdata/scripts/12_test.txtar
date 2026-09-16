@@ -5,9 +5,11 @@ exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 exec $SENTIENTS --no-color create module runner --domain com.test.runner
 exec $SENTIENTS --no-color create module matcher --domain com.test.matcher
 exec $SENTIENTS --no-color create module failing --domain com.test.failing
+exec $SENTIENTS --no-color create module untested --domain com.test.untested
 
 # TC-028 — `test` of a single module: package.json test script detected → OK.
 exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > external_modules/com.test.runner/package.json'
+exec sh -c 'mkdir -p external_modules/com.test.runner/__tests__ && printf "it(\"works\", () => {});\n" > external_modules/com.test.runner/__tests__/basic.ts'
 exec $SENTIENTS --no-color test com.test.runner
 stderr 'Testing: com.test.runner'
 stderr 'Module validation'
@@ -24,6 +26,14 @@ stderr 'Testing: com.test.matcher'
 stdout 'Status : ⚠ WARNING'
 stdout 'no test script'
 
+# A module with a test script but no test file is skipped instead of failing
+# with "No test files found".
+exec sh -c 'printf "{\"name\":\"untested\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > external_modules/com.test.untested/package.json'
+exec $SENTIENTS --no-color test com.test.untested
+stderr 'Testing: com.test.untested'
+stdout 'Status : ◆ SKIPPED'
+stdout 'no test file found'
+
 # Failing module → real vitest runner (in its node_modules) exits non-zero →
 # ERROR status and exit code 13.
 exec sh -c 'mkdir -p external_modules/com.test.failing/node_modules/.bin && printf "#!/bin/sh\necho \"[fixture] vitest run failed\"\nexit 42\n" > external_modules/com.test.failing/node_modules/.bin/vitest && chmod 755 external_modules/com.test.failing/node_modules/.bin/vitest'
@@ -35,6 +45,12 @@ stdout 'Status : ✗ ERROR'
 stdout 'exit=13'
 stdout 'Summary'
 stdout 'error'
+
+# The package manager chosen at install and the resolved test package are
+# persisted in sentients.config.json.
+grep '"packageManager": "bun"' sentients.config.json
+grep '"runner": "vitest"' sentients.config.json
+grep '"com.test.failing"' sentients.config.json
 
 # TC-029 — `test` without argument: report of all modules (table); a failing
 # suite makes the whole run exit non-zero.

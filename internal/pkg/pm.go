@@ -15,3 +15,23 @@ func DetectPackageManager() string {
 	}
 	return ""
 }
+
+// DevDependencyArgs returns the package-manager-specific arguments to add
+// packages as dev dependencies (installed within the package manager's scope).
+// It returns nil for an unsupported package manager.
+func DevDependencyArgs(pm string, packages ...string) []string {
+	var flag []string
+	switch pm {
+	case "bun":
+		flag = []string{"add", "-d"}
+	case "pnpm":
+		flag = []string{"add", "-D"}
+	case "yarn":
+		flag = []string{"add", "-D"}
+	case "npm":
+		flag = []string{"install", "-D"}
+	default:
+		return nil
+	}
+	return append(flag, packages...)
+}

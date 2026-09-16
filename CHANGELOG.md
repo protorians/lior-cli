@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.10.0] - 2026-09-16
+
+### Added
+- **`sentients test` piloté par le gestionnaire de paquets choisi à l'installation** — la commande
+  lit `project.packageManager` (`sentients.config.json`, écrit par `sentients init`), puis une
+  surcharge `test.packageManager`, avant la détection PATH. Le package de test est résolu par ordre
+  de priorité : flag `--runner`, config (`test.runner` / `test.modules.<domaine>.runner` avec les
+  sentinelles `script` et `builtin`), script `test` du `package.json`, catalogue principal installé
+  (`vitest`, `jest`, `mocha`, `ava`), puis runner intégré (`bun test`). Un package configuré mais
+  absent est **installé en dépendance de développement** dans le périmètre du gestionnaire
+  (`bun add -d`, `pnpm`/`yarn add -D`, `npm install -D`). Nouveau catalogue
+  `internal/moduletest/catalog.go` et helpers `pkg.DevDependencyArgs`.
+- **Sélection interactive du package de test** — lorsqu'aucun package n'est configuré, installé ou
+  intégré et que le module contient des tests, le développeur choisit parmi les packages principaux
+  (avec l'état d'installation) ou saisit un package personnalisé, puis valide son installation. Le
+  choix est effectué **avant** la trace pas-à-pas (aucune collision entre programmes Bubble Tea).
+- **Persistance dans `sentients.config.json`** — nouveau bloc `test` (`packageManager`, `runner`,
+  `modules.<domaine>.runner`) avec `TestConfig.RunnerFor`/`SetRunner` ; le package de test résolu et
+  le gestionnaire réellement utilisé y sont écrits automatiquement.
+- **Modules sans fichier de test ignorés** — un module dépourvu de fichier de test (`*.test.*`,
+  `*.spec.*`, `__tests__/`) est **ignoré** (statut `SKIPPED`, étape `NOTICE`) même si un script ou un
+  runner est configuré : la commande n'est pas lancée, ce qui évite l'échec « No test files found »
+  et le faux `ERROR` du runner.
+
+### Changed
+- **Spec `test` alignée** — `docs/specs/sentient.md` §5.15 (résolution du package de test, sélection
+  interactive, persistance, flag `--runner`, sortie TUI) et §6.1 (bloc `test` documenté).
+
 ## [v0.9.0] - 2026-09-16
 
 ### Added

@@ -28,7 +28,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.9.0) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.10.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
@@ -1397,36 +1397,53 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
 2. **Valider le module** (mêmes règles que `audit`) et rapporter l'étape « Validation du module »
    avec le décompte `N erreur(s), M avertissement(s)` ; chaque règle en échec alimente le
    récapitulatif par sa propre sévérité. Si erreurs → statut `ERROR` et arrêt du module.
-3. **Détecter le gestionnaire de paquets** (bun → pnpm → yarn → npm) et le rapporter ; aucun →
-   statut `WARNING` (étape en avertissement).
-4. **Résoudre la commande de test** (étape rapportée) :
+3. **Résoudre le gestionnaire de paquets** : celui **choisi à l'installation** (`project.packageManager`
+   écrit par `sentients init`), puis une surcharge `test.packageManager`, puis la détection PATH
+   (bun → pnpm → yarn → npm) ; l'étape rapporte la source (« choisi à l'installation » ou
+   « détecté »). Aucun → statut `WARNING` (étape en avertissement).
+4. **Résoudre le package de test** (étape rapportée), par ordre de priorité :
+   - Flag `--runner`, puis `test.modules.<module>.runner` / `test.runner` du
+     `sentients.config.json` ; un package absent est **installé en dépendance de développement**
+     via le gestionnaire (périmètre du gestionnaire : `bun add -d`, `pnpm/yarn add -D`,
+     `npm install -D`). Les sentinelles `script` (script `package.json`) et `builtin` (ex.
+     `bun test`) sont acceptées.
    - Script `test` du `package.json` du module puis du projet (comparé par clé exacte)
-   - Repli : **runner réel** (`vitest run`, `jest --ci --runInBand` — `node_modules` du module →
-     `node_modules` racine → PATH ; `bun test` lorsque le gestionnaire est `bun`), **uniquement si
+   - Repli : **package de test installé** du catalogue principal (`vitest run`,
+     `jest --ci --runInBand`, `mocha`, `ava` — `node_modules` du module → `node_modules` racine →
+     PATH), puis **runner intégré** (`bun test`) lorsque le gestionnaire est `bun`, **uniquement si
      le module contient des fichiers de test** (`*.test.*`, `*.spec.*` ou `__tests__/`)
-   - Aucun script ni runner ni fichier de test → statut `WARNING` (`no_test_script`), jamais un
-     faux « OK »
-5. **Exécuter la commande** sous une étape dédiée `RUNNING` qui se met à jour **en place** : elle
+   - Si aucun package n'est disponible, le développeur **choisit** parmi le catalogue (avec
+     l'état d'installation) ou saisit un package personnalisé, puis valide son installation
+     (mode interactif uniquement) ; le choix est persisté
+   - Aucun script ni runner ni fichier de test → statut `WARNING` (`no_test_script`, avec la liste
+     des packages disponibles), jamais un faux « OK »
+   - Un module **sans fichier de test** (`*.test.*`, `*.spec.*`, `__tests__/`) est **ignoré**
+     (statut `SKIPPED`, étape `NOTICE`, `test.no_tests`) même lorsqu'un script ou un runner est
+     configuré : la commande n'est **pas** lancée, ce qui évite l'échec « No test files found »
+5. **Persister** le package de test résolu (et le gestionnaire utilisé) dans la section `test` de
+   `sentients.config.json`, pour que les exécutions suivantes n'aient plus à détecter/choisir.
+6. **Exécuter la commande** sous une étape dédiée `RUNNING` qui se met à jour **en place** : elle
    affiche le sous-texte actif et diffuse la queue de sortie (`stdout`/`stderr`, 8 dernières
    lignes) en temps réel, puis bascule vers un statut terminal :
    - succès (code 0) → `SUCCESS` (sortie conservée dans les logs)
    - échec (code ≠ 0) → `ERROR` avec la première ligne d'erreur en détail et la sortie complète
      dans les logs
-6. **Plafond d'exécution** (`--timeout`, `0` = auto) : une suite bloquée est arrêtée après **2 min**
+7. **Plafond d'exécution** (`--timeout`, `0` = auto) : une suite bloquée est arrêtée après **2 min**
    par défaut ; le dépassement produit un `ERROR`.
-7. **Annulation** : `Ctrl+C` (ou `Esc` en interactif, `SIGINT` en non-interactif) interrompt
+8. **Annulation** : `Ctrl+C` (ou `Esc` en interactif, `SIGINT` en non-interactif) interrompt
    l'exécution, arrête l'**arbre de process** de la suite (groupe de process dédié) et affiche une
    carte de confirmation ; code de sortie **`130`**.
-8. **Mode all modules** : itérer sur chaque module et afficher le tableau de statut (nom, statut,
+9. **Mode all modules** : itérer sur chaque module et afficher le tableau de statut (nom, statut,
    erreurs), les logs par module puis le récapitulatif global.
-9. **Récapitulatif de sévérité** : chaque exécution se clôt par un bloc `Summary` — succès,
-   notice(s), avertissement(s), erreur(s), obsolète(s) (les étapes `RUNNING` ne sont pas comptées).
+10. **Récapitulatif de sévérité** : chaque exécution se clôt par un bloc `Summary` — succès,
+    notice(s), avertissement(s), erreur(s), obsolète(s) (les étapes `RUNNING` ne sont pas comptées).
 
 #### Flags
 
 | Flag | Défaut | Description |
 |------|--------|-------------|
 | `--timeout` | `0` (auto) | Plafond d'exécution d'une suite de tests (2 min par défaut) |
+| `--runner` | `""` | Package de test imposé (persisté dans `sentients.config.json`) |
 
 #### Vocabulaire d'étapes
 
@@ -1438,7 +1455,8 @@ avec mise à jour en place des étapes portant un identifiant.
 ```
   Testing: com.example.blog-manager
   ✓ Module validation — 0 error(s), 0 warning(s)
-  ✓ Package manager detection — bun detected
+  ✓ Package manager detection — bun (chosen at install)
+  ✓ Test package — vitest configured
   ✓ Test command resolution — bun run test
   ⠋ Test execution — bun run test
       ✓ tests 1 passed (12ms)
@@ -1448,11 +1466,12 @@ avec mise à jour en place des étapes portant un identifiant.
   ┌──────────────────────────────────────────┐
   │ Module : com.example.blog-manager        │
   │ Status : ✓ OK                            │
+  │ Runner : vitest                          │
   │ Command : bun run test                   │
   └──────────────────────────────────────────┘
 
   Summary
-  ✓ 4 success
+  ✓ 5 success
   ✓ 0 warning(s)
   ✗ 0 error(s)
 ```
@@ -1483,6 +1502,15 @@ Placé à la racine du projet Sentient, ce fichier permet de configurer la CLI.
     "verbose": false,
     "logLevel": "info"
   },
+  "test": {
+    "packageManager": "bun",
+    "runner": "vitest",
+    "modules": {
+      "com.example.blog-manager": {
+        "runner": "jest"
+      }
+    }
+  },
   "cli": {
     "lang": "fr-FR"
   }
@@ -1494,6 +1522,12 @@ Placé à la racine du projet Sentient, ce fichier permet de configurer la CLI.
 > `create`/`link`/etc., et `sentients.config.json` est écrit par `sentients init`.
 > `cli.lang` force la langue d'interface (NFR-007, FR-025) ; un champ vide garde l'auto-détection
 > (`SENTIENT_CLI_LANG` / locale OS).
+>
+> La section `test` est **écrite automatiquement** par `sentients test` : `packageManager` reprend
+> le gestionnaire choisi à l'installation (ou celui réellement utilisé), `runner` mémorise le
+> package de test par défaut et `modules.<domaine>.runner` surcharge un module. Les valeurs
+> `runner` acceptées sont un package du catalogue (`vitest`, `jest`, `mocha`, `ava`), un package
+> personnalisé, `builtin` (ex. `bun test`) ou `script` (le script `test` du `package.json`).
 
 ### 6.2 Fichier `manifest.json` (par module)
 

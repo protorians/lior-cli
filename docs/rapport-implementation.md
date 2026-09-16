@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.9.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.9.0).
+> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.10.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.10.0).
 
 ---
 
@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `sentient-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.9.0) |
+| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.10.0) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -123,12 +123,25 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Sortie tableau TUI ou JSON (`--output json`), résumé erreurs/warnings.
 
 ### `sentients test [module]` (first chunk of §2.4 future scope, v0.9.0)
-- Nouveau package **`internal/moduletest`** (`Tester`, `TestResult`) : validation du module +
-  détection du gestionnaire de paquets + résolution de la commande de test.
-- Résolution : script `test` du `package.json` du module puis du projet (clé exacte) ; repli sur un
-  **runner réel** (`vitest run`, `jest --ci --runInBand`, `bun test`) **uniquement si le module
-  contient des fichiers de test** (`*.test.*`, `*.spec.*`, `__tests__/`) ; sinon statut `WARNING`
+
+- Nouveau package **`internal/moduletest`** (`Tester`, `TestResult`, catalogue `catalog.go`) :
+  validation du module + résolution du package de test.
+- Gestionnaire de paquets : **choisi à l'installation** (`project.packageManager`), puis surcharge
+  `test.packageManager`, puis détection PATH (bun → pnpm → yarn → npm).
+- Résolution du package de test par priorité : `--runner`, config
+  (`test.runner` / `test.modules.<domaine>.runner`, sentinelles `script`/`builtin`), script `test`
+  du `package.json` (module puis projet), catalogue installé (`vitest run`,
+  `jest --ci --runInBand`, `mocha`, `ava`), runner intégré (`bun test`) — **uniquement si le module
+  contient des fichiers de test** (`*.test.*`, `*.spec.*`, `__tests__/`) ; sinon `WARNING`
   (`no_test_script`), jamais un faux « OK ».
+- **Skip sans fichier de test** : un module sans fichier de test est **ignoré** (statut `SKIPPED`,
+  étape `NOTICE`, `test.no_tests`) même si un script ou un runner est configuré — la commande n'est
+  pas lancée, ce qui évite l'échec « No test files found » du runner et le faux `ERROR`.
+- **Installation** : un package configuré mais absent est installé en dépendance de développement
+  dans le périmètre du gestionnaire (`pkg.DevDependencyArgs`). **Sélection interactive** (code
+  principal, état d'installation, package personnalisé) **avant** la trace pas-à-pas.
+- **Persistance** dans `sentients.config.json` (bloc `test` : `packageManager`, `runner`,
+  `modules`) via `TestConfig.RunnerFor`/`SetRunner`.
 - **Streaming** live de la sortie de test (queue de 8 lignes), **plafond** 2 min par défaut
   (dépassement → `ERROR`), **annulation** `Ctrl+C`/`Esc`/`SIGINT` (arbre de process, exit **130**).
 - **Exit code `13`** (échec de tests, spec §11.1) : le run échoue dès qu'un module a un statut
@@ -401,10 +414,13 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
      (`esbuild`/`tsup`, node_modules module → racine → PATH) qui compile l'entrée dans `dist/`,
 avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
    `esbuild`).
-   - **`sentients test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
-     package `internal/moduletest` (validation + résolution script/runner + streaming + plafond),
-     exit code **13** (échec de tests), extraction du runner partagé `internal/runner`, i18n
-     `en-US`/`fr-FR`, tests unitaires + scénario E2E `12_test.txtar` (TC-028/TC-029).
+- **`sentients test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
+      package `internal/moduletest` (validation + résolution script/runner + streaming + plafond),
+      exit code **13** (échec de tests), extraction du runner partagé `internal/runner`, i18n
+      `en-US`/`fr-FR`, tests unitaires + scénario E2E `12_test.txtar` (TC-028/TC-029). **Rehaussé en
+      v0.10.0** : gestionnaire de paquets choisi à l'installation + catalogue (vitest/jest/mocha/ava)
+      + installation dans le périmètre du gestionnaire + sélection interactive + persistance de la
+      section `test` de `sentients.config.json` (cf. §2.4).
 7. **Future spec** : `sentients watch` (hot-reload), `sentients deploy`,
    `sentients marketplace` (§2.4 future scope) — `sentients auth` (OAuth2 PKCE) ✅ fait au
    2026-09-16.

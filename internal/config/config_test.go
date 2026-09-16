@@ -51,6 +51,45 @@ func TestLoadMissingFileUsesDefaults(t *testing.T) {
 	}
 }
 
+func TestTestConfigRunnerPersistence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "sentients.config.json")
+
+	cfg := Default()
+	cfg.Project.PackageManager = "bun"
+	cfg.Test.PackageManager = "pnpm"
+	cfg.Test.SetRunner("", "vitest")
+	cfg.Test.SetRunner("com.test.blog", "jest")
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Test.PackageManager != "pnpm" {
+		t.Errorf("Test.PackageManager = %q, want pnpm", loaded.Test.PackageManager)
+	}
+	if got := loaded.Test.RunnerFor("com.test.other"); got != "vitest" {
+		t.Errorf("RunnerFor(autre) = %q, want vitest (défaut)", got)
+	}
+	if got := loaded.Test.RunnerFor("com.test.blog"); got != "jest" {
+		t.Errorf("RunnerFor(blog) = %q, want jest (override)", got)
+	}
+}
+
+func TestTestConfigSetRunnerClearsEntry(t *testing.T) {
+	cfg := Default()
+	cfg.Test.SetRunner("com.test.blog", "jest")
+	cfg.Test.SetRunner("com.test.blog", "")
+	if got := cfg.Test.RunnerFor("com.test.blog"); got != "" {
+		t.Errorf("RunnerFor après suppression = %q, want vide", got)
+	}
+	if len(cfg.Test.Modules) != 0 {
+		t.Errorf("Modules = %v, want vide après suppression", cfg.Test.Modules)
+	}
+}
+
 func TestFindProjectRoot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ExternalModulesDir), 0o755); err != nil {

@@ -38,7 +38,7 @@ go build -o sentients .
 | `sentients link` / `unlink` | Associer un module local à un module distant du store (token) |
 | `sentients audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
 | `sentients debug [module]` | Valider le module et lancer un build de diagnostic |
-| `sentients test [module]` | Exécuter les tests du module (script `test`, vitest/jest, `bun test`) ; exit `13` en cas d'échec |
+| `sentients test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `sentients.config.json` ; exit `13` en cas d'échec |
 | `sentients -v` / `--version` | Afficher la version |
 | `sentients help` | Aide contextuelle |
 
@@ -59,9 +59,21 @@ go build -o sentients .
   "debug": {
     "verbose": false,
     "logLevel": "info"
+  },
+  "test": {
+    "packageManager": "bun",
+    "runner": "vitest",
+    "modules": {
+      "com.example.blog-manager": { "runner": "jest" }
+    }
   }
 }
 ```
+
+> Le bloc `test` est écrit automatiquement par `sentients test` : `packageManager` reprend le
+> gestionnaire choisi à l'installation, `runner` le package de test par défaut et
+> `modules.<domaine>.runner` une surcharge par module (`vitest`, `jest`, `mocha`, `ava`, un package
+> personnalisé, `builtin` ou `script`).
 
 ## Variables d'environnement
 

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -25,6 +24,8 @@ import (
 const (
 	// testTimeout caps a test run so a stuck suite cannot hang the CLI.
 	testTimeout = 2 * time.Minute
+	// installTimeout caps the installation of a test package.
+	installTimeout = 5 * time.Minute
 	// outputTail is the number of recent output lines kept for a running step.
 	outputTail = 8
 	// outputLogCap bounds the output retained in the final log block.
@@ -42,8 +43,31 @@ type TestResult struct {
 	Logs   []string
 	// Command is the resolved test command (informational only).
 	Command string
+	// Runner is the test package used ("vitest", "builtin", "script", …) so
+	// the caller can persist it in the project config.
+	Runner string
+	// PackageManager is the package manager used for this run, persisted as a
+	// fallback when the project config does not pin one.
+	PackageManager string
 	// Steps is the ordered trace of the stages executed for this module.
 	Steps []Step
+}
+
+// RunnerOption is one catalog entry shown to the developer when a test
+// package must be chosen.
+type RunnerOption struct {
+	// Package is the catalog package name.
+	Package string
+	// Installed reports whether the package is already available.
+	Installed bool
+}
+
+// RunnerChoice is the developer's test-package selection. An empty Package
+// means the run should be skipped.
+type RunnerChoice struct {
+	Package string
+	// Install requests the package be installed before running.
+	Install bool
 }
 
 // Tester runs tests for modules.
@@ -54,6 +78,17 @@ type Tester struct {
 	Reporter func(Step)
 	// Timeout, when > 0, overrides the hard cap for a test run.
 	Timeout time.Duration
+	// Config is the project `test` section (runner per module, package manager).
+	Config config.TestConfig
+	// ProjectPackageManager is the package manager chosen at init
+	// (project.packageManager), used as a fallback for Config.PackageManager.
+	ProjectPackageManager string
+	// Runner overrides any configured runner (the --runner flag).
+	Runner string
+	// choices holds the interactive test-package selections per module. It is
+	// populated by the caller (outside the step runner) via SetRunnerChoice so
+	// no Bubble Tea prompt collides with the live step trace.
+	choices map[string]RunnerChoice
 }
 
 // testTimeout returns the effective cap for a test run.
@@ -138,8 +173,10 @@ func (t *Tester) TestModuleCtx(ctx context.Context, name string) (*TestResult, e
 		return result, nil
 	}
 
-	// Step 2 — detect the package manager (bun → pnpm → yarn → npm).
-	pm := t.detectPackageManager()
+	// Step 2 — resolve the package manager. The one chosen at install
+	// (project.packageManager) wins, then a test-specific override, then PATH
+	// detection (bun → pnpm → yarn → npm).
+	pm, fromConfig := t.effectivePackageManager()
 	if pm == "" {
 		result.Status = "WARNING"
 		t.emit(result, Step{
@@ -150,17 +187,27 @@ func (t *Tester) TestModuleCtx(ctx context.Context, name string) (*TestResult, e
 		result.Logs = append(result.Logs, i18n.T("test.npm_none"))
 		return result, nil
 	}
+	result.PackageManager = pm
+	pmDetail := i18n.Tf("test.step.package_manager.detail", pm)
+	if fromConfig {
+		pmDetail = i18n.Tf("test.step.package_manager.config", pm)
+	}
 	t.emit(result, Step{
 		Label:  i18n.T("test.step.package_manager"),
 		Status: tui.StatusSuccess,
-		Detail: i18n.Tf("test.step.package_manager.detail", pm),
+		Detail: pmDetail,
 	})
 
-	// Step 3 — resolve the test command. The module's own package.json `test`
-	// script wins; the project root one is the fallback. Without a script, a
-	// real test runner (vitest / jest / bun test) is used only when the module
-	// actually contains test files — otherwise validation is the only step.
-	tc := t.findTestCommand(pm, moduleDir)
+	// Step 3 — resolve the test command. A configured/flagged test package
+	// wins; otherwise the module's own package.json `test` script (then the
+	// project root), an installed test package, or the package manager's
+	// built-in runner. When nothing is available and the module contains test
+	// files, the developer is offered the main test packages (and their
+	// installation) in interactive mode.
+	tc, err := t.resolveRunner(ctx, name, moduleDir, pm, result)
+	if err != nil {
+		return result, err
+	}
 	if tc == nil {
 		result.Status = "WARNING"
 		t.emit(result, Step{
@@ -169,8 +216,23 @@ func (t *Tester) TestModuleCtx(ctx context.Context, name string) (*TestResult, e
 			Detail: i18n.T("test.step.resolve.none"),
 		})
 		result.Logs = append(result.Logs, i18n.T("test.no_test_script"))
+		result.Logs = append(result.Logs, i18n.Tf("test.hint.runners", strings.Join(TestPackageNames(), ", ")))
 		return result, nil
 	}
+
+	// A module without any test file has nothing to run: skip it rather than
+	// launching a resolved runner that would fail with "no test files found".
+	if !moduleHasTests(moduleDir) {
+		result.Status = "SKIPPED"
+		t.emit(result, Step{
+			Label:  i18n.T("test.step.no_tests"),
+			Status: tui.StatusNotice,
+			Detail: i18n.T("test.step.no_tests.detail"),
+		})
+		result.Logs = append(result.Logs, i18n.T("test.no_tests"))
+		return result, nil
+	}
+	result.Runner = tc.runner
 	result.Command = strings.Join(tc.cmd, " ")
 	t.emit(result, Step{
 		Label:  i18n.T("test.step.resolve"),
@@ -358,14 +420,22 @@ func (t *Tester) TestAllCtx(ctx context.Context) ([]*TestResult, error) {
 	return results, nil
 }
 
-// detectPackageManager returns the first resolvable package manager.
-func (t *Tester) detectPackageManager() string {
-	for _, pm := range []string{"bun", "pnpm", "yarn", "npm"} {
-		if _, err := exec.LookPath(pm); err == nil {
-			return pm
+// effectivePackageManager returns the package manager to use and whether it
+// comes from the project config (chosen at install) rather than PATH
+// detection. A configured but unavailable manager falls back to detection so a
+// moved project stays runnable.
+func (t *Tester) effectivePackageManager() (string, bool) {
+	for _, pm := range []string{t.Config.PackageManager, t.ProjectPackageManager} {
+		pm = strings.TrimSpace(pm)
+		if pm == "" {
+			continue
 		}
+		if pkg.HasCommand(pm) {
+			return pm, true
+		}
+		return pkg.DetectPackageManager(), false
 	}
-	return ""
+	return pkg.DetectPackageManager(), false
 }
 
 // testCommand is a resolved test command and the directory it belongs to.
@@ -373,63 +443,296 @@ type testCommand struct {
 	cmd    []string
 	dir    string
 	detail string
+	// runner is the resolved test package ("vitest", "script", "builtin", a
+	// custom package name) so the caller can persist it.
+	runner string
 }
 
-func (t *Tester) findTestCommand(pm, moduleDir string) *testCommand {
-	// A `test` script in the module's own package.json, then the project root.
+// scriptCommand resolves the package.json `test` script (module then root).
+func (t *Tester) scriptCommand(pm, moduleDir string) *testCommand {
 	for _, candidate := range []string{
 		filepath.Join(moduleDir, "package.json"),
 		filepath.Join(t.Root, "package.json"),
 	} {
 		if _, ok := readPackageScript(candidate, "test"); ok {
 			cmd := []string{pm, "run", "test"}
-			return &testCommand{cmd: cmd, dir: filepath.Dir(candidate), detail: strings.Join(cmd, " ")}
+			return &testCommand{cmd: cmd, dir: filepath.Dir(candidate), detail: strings.Join(cmd, " "), runner: ScriptRunner}
 		}
 	}
+	return nil
+}
 
-	// No package.json script: a real runner is only usable when the module
-	// contains test files — otherwise there is nothing to run.
-	if !moduleHasTests(moduleDir) {
-		return nil
+// runnerCommand builds the command for a test package. BuiltinRunner maps to
+// the package manager's built-in runner; anything else resolves the installed
+// binary (module → root node_modules → PATH) and appends the catalog arguments.
+func (t *Tester) runnerCommand(pm, moduleDir, name string) *testCommand {
+	if name == BuiltinRunner {
+		cmd := []string{pm, "test"}
+		return &testCommand{cmd: cmd, dir: moduleDir, detail: strings.Join(cmd, " "), runner: BuiltinRunner}
 	}
-	bin := t.findTestRunner(pm, moduleDir)
+	bin := FindRunnerBinary(moduleDir, t.Root, name)
 	if bin == "" {
 		return nil
 	}
-	cmd := []string{bin, "run"}
-	if bin == "bun" {
-		cmd = []string{bin, "test"}
+	args := []string{bin}
+	if tp, ok := FindTestPackage(name); ok {
+		args = append(args, tp.Args...)
 	}
 	return &testCommand{
-		cmd:    cmd,
+		cmd:    args,
 		dir:    moduleDir,
-		detail: i18n.Tf("test.step.resolve.detail", filepath.Base(bin)),
+		detail: i18n.Tf("test.step.resolve.detail", strings.Join(args, " ")),
+		runner: name,
 	}
 }
 
-// findTestRunner resolves a real test runner for the module: a package-local
-// vitest/jest binary (module or root node_modules), then PATH, falling back to
-// `bun test` when the package manager is bun itself.
-func (t *Tester) findTestRunner(pm, moduleDir string) string {
-	for _, bin := range []string{
-		filepath.Join(moduleDir, "node_modules", ".bin", "vitest"),
-		filepath.Join(moduleDir, "node_modules", ".bin", "jest"),
-		filepath.Join(t.Root, "node_modules", ".bin", "vitest"),
-		filepath.Join(t.Root, "node_modules", ".bin", "jest"),
-	} {
-		if pkg.FileExists(bin) {
-			return bin
+// runnerOptions lists the catalog test packages and their installation state.
+func (t *Tester) runnerOptions(moduleDir string) []RunnerOption {
+	opts := make([]RunnerOption, 0, len(TestPackages))
+	for _, tp := range TestPackages {
+		opts = append(opts, RunnerOption{
+			Package:   tp.Name,
+			Installed: InstalledRunner(moduleDir, t.Root, tp.Name),
+		})
+	}
+	return opts
+}
+
+// moduleDir returns the directory of a module.
+func (t *Tester) moduleDir(module string) string {
+	return filepath.Join(t.Root, config.ExternalModulesDir, module)
+}
+
+// RunnerOptions lists the catalog test packages offered to the developer and
+// whether each is already installed for the module.
+func (t *Tester) RunnerOptions(module string) []RunnerOption {
+	return t.runnerOptions(t.moduleDir(module))
+}
+
+// NeedsRunnerChoice reports whether a module requires the developer to pick a
+// test package: it contains test files but has no configured runner, no
+// package.json `test` script and no installed test package.
+func (t *Tester) NeedsRunnerChoice(module string) bool {
+	if strings.TrimSpace(t.Runner) != "" || t.Config.RunnerFor(module) != "" {
+		return false
+	}
+	pm, _ := t.effectivePackageManager()
+	if pm == "" {
+		return false
+	}
+	moduleDir := t.moduleDir(module)
+	if t.scriptCommand(pm, moduleDir) != nil {
+		return false
+	}
+	if pm == "bun" {
+		return false
+	}
+	for _, tp := range TestPackages {
+		if InstalledRunner(moduleDir, t.Root, tp.Name) {
+			return false
 		}
 	}
-	for _, bin := range []string{"vitest", "jest"} {
-		if pkg.HasCommand(bin) {
-			return bin
+	return moduleHasTests(moduleDir)
+}
+
+// SetRunnerChoice stores the interactive test-package selection for a module.
+func (t *Tester) SetRunnerChoice(module string, choice RunnerChoice) {
+	if t.choices == nil {
+		t.choices = map[string]RunnerChoice{}
+	}
+	t.choices[module] = choice
+}
+
+// resolveRunner determines how to run a module's tests. It returns nil (with
+// no error) when no runner is available and the developer did not choose one.
+func (t *Tester) resolveRunner(ctx context.Context, module, moduleDir, pm string, result *TestResult) (*testCommand, error) {
+	// 1. An explicit runner: the --runner flag, then the project config.
+	configured := strings.TrimSpace(t.Runner)
+	if configured == "" {
+		configured = t.Config.RunnerFor(module)
+	}
+	if configured != "" {
+		if configured == ScriptRunner {
+			return t.scriptCommand(pm, moduleDir), nil
+		}
+		tc := t.runnerCommand(pm, moduleDir, configured)
+		if tc == nil {
+			ok, err := t.ensureInstalled(ctx, module, moduleDir, pm, configured, result)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, nil
+			}
+			tc = t.runnerCommand(pm, moduleDir, configured)
+		}
+		if tc == nil {
+			t.emit(result, Step{
+				Label:  i18n.T("test.step.runner"),
+				Status: tui.StatusWarning,
+				Detail: i18n.Tf("test.step.runner.missing_bin", RunnerBinary(configured)),
+			})
+			return nil, nil
+		}
+		t.emit(result, Step{
+			Label:  i18n.T("test.step.runner"),
+			Status: tui.StatusSuccess,
+			Detail: i18n.Tf("test.step.runner.configured", configured),
+		})
+		return tc, nil
+	}
+
+	// 2. The module's (then the project's) package.json `test` script.
+	if tc := t.scriptCommand(pm, moduleDir); tc != nil {
+		return tc, nil
+	}
+
+	// 3. An already-installed catalog test package.
+	for _, tp := range TestPackages {
+		if !InstalledRunner(moduleDir, t.Root, tp.Name) {
+			continue
+		}
+		if tc := t.runnerCommand(pm, moduleDir, tp.Name); tc != nil {
+			t.emit(result, Step{
+				Label:  i18n.T("test.step.runner"),
+				Status: tui.StatusSuccess,
+				Detail: i18n.Tf("test.step.runner.detected", tp.Name),
+			})
+			return tc, nil
 		}
 	}
-	if pm == "bun" && pkg.HasCommand("bun") {
-		return "bun"
+
+	// 4. The package manager's built-in runner (e.g. `bun test`) when the
+	// module actually contains test files.
+	if moduleHasTests(moduleDir) && pm == "bun" {
+		tc := t.runnerCommand(pm, moduleDir, BuiltinRunner)
+		t.emit(result, Step{
+			Label:  i18n.T("test.step.runner"),
+			Status: tui.StatusSuccess,
+			Detail: i18n.Tf("test.step.runner.builtin", pm),
+		})
+		return tc, nil
 	}
-	return ""
+
+	// 5. Nothing available: use the developer's interactive choice (made
+	// before the run), which may install a test package within the package
+	// manager's scope.
+	if !moduleHasTests(moduleDir) {
+		return nil, nil
+	}
+	choice := t.choices[module]
+	name := strings.TrimSpace(choice.Package)
+	if name == "" {
+		return nil, nil
+	}
+	if choice.Install || !InstalledRunner(moduleDir, t.Root, name) {
+		ok, err := t.ensureInstalled(ctx, module, moduleDir, pm, name, result)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, nil
+		}
+	}
+	tc := t.runnerCommand(pm, moduleDir, name)
+	if tc == nil {
+		t.emit(result, Step{
+			Label:  i18n.T("test.step.runner"),
+			Status: tui.StatusWarning,
+			Detail: i18n.Tf("test.step.runner.missing_bin", RunnerBinary(name)),
+		})
+		return nil, nil
+	}
+	t.emit(result, Step{
+		Label:  i18n.T("test.step.runner"),
+		Status: tui.StatusSuccess,
+		Detail: i18n.Tf("test.step.runner.configured", name),
+	})
+	return tc, nil
+}
+
+// ensureInstalled installs a test package as a dev dependency of the module
+// when it is not already available. It reports the installation as a step and
+// returns whether the runner is usable.
+func (t *Tester) ensureInstalled(ctx context.Context, module, moduleDir, pm, name string, result *TestResult) (bool, error) {
+	if name == BuiltinRunner || InstalledRunner(moduleDir, t.Root, name) {
+		return true, nil
+	}
+	args := pkg.DevDependencyArgs(pm, name)
+	if args == nil {
+		t.emit(result, Step{
+			Label:  i18n.T("test.step.runner"),
+			Status: tui.StatusError,
+			Detail: i18n.Tf("test.step.runner.install_error", name, i18n.T("test.step.runner.unsupported_pm")),
+		})
+		return false, nil
+	}
+
+	stepID := "install:" + module
+	installDetail := i18n.Tf("test.step.runner.installing", name)
+	t.report(Step{ID: stepID, Label: i18n.T("test.step.runner"), Status: tui.StatusRunning, Detail: installDetail})
+
+	var (
+		mu    sync.Mutex
+		lines []string
+	)
+	onLine := func(line string) {
+		mu.Lock()
+		defer mu.Unlock()
+		lines = append(lines, line)
+		if len(lines) > outputLogCap {
+			lines = lines[len(lines)-outputLogCap:]
+		}
+		t.report(Step{
+			ID:     stepID,
+			Label:  i18n.T("test.step.runner"),
+			Status: tui.StatusRunning,
+			Detail: installDetail,
+			Output: lastN(lines, outputTail),
+		})
+	}
+
+	cmd := append([]string{pm}, args...)
+	outcome := runner.Run(ctx, moduleDir, cmd, 0, installTimeout, onLine)
+	if ctx.Err() != nil {
+		return false, tui.ErrCancelled
+	}
+
+	mu.Lock()
+	output := strings.Join(lines, "\n")
+	tail := lastN(lines, outputTail)
+	mu.Unlock()
+
+	if outcome.Err != nil || outcome.TimedOut {
+		reason := i18n.T("test.step.runner.install_timeout")
+		if outcome.Err != nil {
+			reason = outcome.Err.Error()
+			if output != "" {
+				reason = firstLine(output)
+			}
+		}
+		t.emit(result, Step{
+			ID:     stepID,
+			Label:  i18n.T("test.step.runner"),
+			Status: tui.StatusError,
+			Detail: i18n.Tf("test.step.runner.install_error", name, reason),
+			Output: tail,
+		})
+		result.Logs = append(result.Logs, i18n.Tf("test.step.runner.install_error", name, reason))
+		if output != "" {
+			result.Logs = append(result.Logs, output)
+		}
+		return false, nil
+	}
+
+	t.emit(result, Step{
+		ID:     stepID,
+		Label:  i18n.T("test.step.runner"),
+		Status: tui.StatusSuccess,
+		Detail: i18n.Tf("test.step.runner.installed", name),
+		Output: tail,
+	})
+	return true, nil
 }
 
 // readPackageScript returns the value of a package.json script if present.
