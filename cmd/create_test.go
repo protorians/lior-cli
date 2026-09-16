@@ -66,13 +66,14 @@ export default function HelloWorldPage() {
 
 	createMockup = mockupDir
 	createPageMockup = pageMockup
-	defer func() { createMockup, createPageMockup = "", "" }()
+	createDomain = "com.example.blog-manager"
+	defer func() { createMockup, createPageMockup, createDomain = "", "", "" }()
 
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "blog-manager")
+	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
 	if !pkg.FileExists(filepath.Join(moduleDir, "marker.txt")) {
 		t.Error("the custom --mockup directory must be scaffolded (marker.txt missing)")
 	}
@@ -96,19 +97,20 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 	}
 
 	createMockup = filepath.Join(root, "not-a-mockup")
-	defer func() { createMockup = "" }()
+	createDomain = "com.example.blog-manager"
+	defer func() { createMockup, createDomain = "", "" }()
 
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate: %v", err)
 	}
 
-	if !pkg.FileExists(filepath.Join(root, "external_modules", "blog-manager", "package.json")) {
+	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "package.json")) {
 		t.Error("an unusable --mockup must fall back to the embedded mockup (package.json missing)")
 	}
 }
 
 func TestCreateCommandFlagsRegistered(t *testing.T) {
-	for _, name := range []string{"mockup", "page-mockup"} {
+	for _, name := range []string{"domain", "id", "name", "version", "icon", "url", "description", "mockup", "page-mockup"} {
 		if f := createCmd.Flag(name); f == nil {
 			t.Errorf("createCmd must expose the --%s flag", name)
 		}
@@ -158,7 +160,8 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	writeRequirementMockup(t, mockupDir, `{"analytics": true}`)
 
 	createMockup = mockupDir
-	defer func() { createMockup = "" }()
+	createDomain = "com.example.blog-manager"
+	defer func() { createMockup, createDomain = "", "" }()
 
 	err := runCreate(&cobra.Command{}, []string{"blog-manager"})
 	if err == nil {
@@ -167,7 +170,7 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	if !strings.Contains(err.Error(), "analytics") || !strings.Contains(err.Error(), "external_modules/") {
 		t.Errorf("error must mention the missing requirement and the lookup dirs, got: %v", err)
 	}
-	if pkg.DirExists(filepath.Join(root, "external_modules", "blog-manager")) {
+	if pkg.DirExists(filepath.Join(root, "external_modules", "com.example.blog-manager")) {
 		t.Error("the module dir must be rolled back when creation is blocked")
 	}
 }
@@ -191,12 +194,13 @@ func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
 	writeRequirementMockup(t, mockupDir, `{"analytics": true}`)
 
 	createMockup = mockupDir
-	defer func() { createMockup = "" }()
+	createDomain = "com.example.blog-manager"
+	defer func() { createMockup, createDomain = "", "" }()
 
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate with an internal required module must succeed: %v", err)
 	}
-	if !pkg.FileExists(filepath.Join(root, "external_modules", "blog-manager", "index.tsx")) {
+	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx")) {
 		t.Error("the module must have been created")
 	}
 }

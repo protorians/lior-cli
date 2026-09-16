@@ -99,8 +99,8 @@ func TestSignAndVerifyArchive(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	archive := filepath.Join(dir, "blog-manager-0.1.0.smp")
-	if err := os.WriteFile(archive, []byte("contenu de l'archive .smp"), 0o600); err != nil {
+	archive := filepath.Join(dir, "blog-manager-0.1.0.SenMod")
+	if err := os.WriteFile(archive, []byte("contenu de l'archive .SenMod"), 0o600); err != nil {
 		t.Fatalf("écriture de l'archive impossible : %v", err)
 	}
 

@@ -23,7 +23,7 @@ var publishCmd = &cobra.Command{
 	Short: "Publish a module to the store",
 	Long: `Builds and publishes a module to the store via the sentient-connect API.
 
-Checks authentication, validates the manifest, builds the .smp archive,
+Checks authentication, validates the manifest, builds the .SenMod archive,
 then sends it to the store.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

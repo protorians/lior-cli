@@ -33,9 +33,9 @@ Full lifecycle: init → create → develop → debug → audit → pack → sig
 	Example: `  sentients init
   sentients create module
   sentients connect
-  sentients pack blog-manager
-  sentients sign blog-manager
-  sentients publish blog-manager
+  sentients pack com.example.blog-manager
+  sentients sign com.example.blog-manager
+  sentients publish com.example.blog-manager
   sentients audit`,
 	SilenceUsage:  true,
 	SilenceErrors: true,

@@ -21,6 +21,8 @@ const (
 	SentientBuildsDir   = ".sentients/build"
 	ManifestFileName    = "manifest.json"
 	ModuleEntryFileName = "index.tsx"
+	// ArchiveExt is the extension of built module archives (`<name>-<version>.SenMod`).
+	ArchiveExt = ".SenMod"
 )
 
 // IsProjectRoot reports whether dir looks like a Sentient project root.

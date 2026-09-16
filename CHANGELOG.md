@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+
+## [v0.4.0] - 2026-09-16
+
+### Added
+- **`create module` interactif** — la création demande d'abord le **domaine** du module (forme `com.organization.domain`) puis l'**identifiant** (kebab-case, ex. `hello-world`), suivis du nom de l'application et d'informations optionnelles (version, icône lucide-react, url de la page, description). De nouveaux drapeaux `--domain`, `--id`, `--name`, `--version`, `--icon`, `--url` et `--description` permettent de tout fournir en non-interactif ; l'argument positionnel reste un raccourci pour l'identifiant.
+- **Manifest** — l'identité du module scaffolé est complète : champs `id`, `domain`, `key`, `name`, `description`, `version`, `icon` et `uri` renseignés depuis le spec de création (défaut : version `0.0.0`, url de page = identifiant). Validations ajoutées : domaine reverse-DNS, version SemVer, icône PascalCase.
+- **`pack <module>@<version>`** — construction d'une version précise du module via le séparateur `@` (ex. `com.example.blog-manager@2.1.0`) ; la version du manifeste reste utilisée sinon.
+- **`pack`** — l'archive embarque désormais la **page déployée** (`src/app/<url>/` d'après le `uri` du manifest, repli sur l'identifiant) en plus du module et de ses assets.
+
+### Changed
+- **Archives `.SenMod` (changement cassant)** — les archives construites passent de `.smp` à `.SenMod` (`<module>-<version>.SenMod`) ; les fichiers de signature deviennent `<module>-<version>.SenMod.sig`. La constante `config.ArchiveExt` centralise l'extension.
+- **`create module` par domaine** — le module est scaffolé sous `external_modules/<domain>/` (et `public/assets/<domain>/`) et adressé partout par son **domaine** (pack, sign, debug, audit, link) ; les modules requis peuvent aussi être résolus par leur `id` de manifest.
+- **Audit** — la règle `domain` du manifest vérifie la forme reverse-DNS et s'assure que le répertoire du module porte son domaine.
+- **Mockup hello-world** — `@sentients/sdk` passe de `workspace:*` à `latest`.
+
 ### Technical Details
 - **CI / Release** — le pipeline de release crée désormais une **pre-release GitHub** à chaque push sur les branches `alpha`, `beta` ou `rc` : la version `v<base>-<canal>.<n>` est calculée depuis le `app.config.json` (le suffixe `.<n>` est incrémenté selon les tags `v<base>-<canal>.*` déjà publiés), le tag est poussé automatiquement, la release est marquée pre-release (`prerelease: auto`) et la publication npm reste réservée aux versions stables.
 
@@ -64,7 +79,7 @@ All notable changes to this project will be documented in this file.
 - **Authentification sentient-auth** — la base URL n'est plus codée en dur : résolution `SENTIENT_AUTH_API` → registre workspace → registre embarqué ; le champ `device` devient une chaîne ; timeouts configurés par application (`api.timeout`).
 - **Configuration JSON** — `sentients.config.json` remplace le TOML (`.sentient-cli.toml`) avec des clés camelCase ; le parser TOML est retiré.
 - **User-Agent standardisé** `Protorians/5.0 (…) Senteints/<version>` sur toutes les requêtes HTTP de la CLI et de l'installeur npm.
-- **`pack`** inclut désormais `src/app/<module.url>/` dans l'archive `.smp`.
+- **`pack`** inclut désormais `src/app/<module.url>/` dans l'archive `.SenMod`.
 
 ### Removed
 - `scripts/release.sh` — le release passe par les tags git et les workflows CI/GoReleaser.
@@ -84,7 +99,7 @@ All notable changes to this project will be documented in this file.
     exécutés avec la session après sign-in ;
   - Store sur l'API **developer-store** : `ListModules`/`GetModule`/`UpdateModule`/`Publish` passent par
     `/api/developer-store/modules/**` — la publication suit le pipeline produit → version → artefact
-    (checksum SHA-256 hex + signature Ed25519 base64 du `.smp.sig` + poids).
+    (checksum SHA-256 hex + signature Ed25519 base64 du `.SenMod.sig` + poids).
 
 ### Docs
 - `docs/specs/sentient.md` §5.3/5.4/5.6/5.7, §6.3 et §8 (endpoints + DTOs) réalignés sur les contrats documentés ;
@@ -194,9 +209,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **create module** — Créer un module standardisé dans `external_modules/`
 - **connect** — Authentification via sentient-connect (email + mot de passe, MFA TOTP / backup codes)
 - **disconnect** — Invalider le token côté serveur et supprimer les credentials
-- **pack** — Construire l'archive `.smp` dans `.sentients/build/`
+- **pack** — Construire l'archive `.SenMod` dans `.sentients/build/`
 - **sign keygen** — Générer une paire de clés Ed25519 pour la signature
-- **sign [module]** — Signer l'archive `.smp` d'un module (Ed25519)
+- **sign [module]** — Signer l'archive `.SenMod` d'un module (Ed25519)
 - **sign verify [module]** — Vérifier la signature d'un module
 - **publish** — Auditer, packer et publier un module sur le store
 - **link / unlink** — Associer un module local à un module distant du store (token)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/protorians/sentient-cli/internal/config"
 	"github.com/protorians/sentient-cli/internal/i18n"
@@ -16,9 +17,10 @@ import (
 // MaxArchiveSize is the maximum allowed archive size (store limit: 50 MB).
 const MaxArchiveSize = 50 * 1024 * 1024
 
-// Packer builds `.smp` archives (renamed ZIP) for a module.
+// Packer builds `.SenMod` archives (renamed ZIP) for a module.
 type Packer struct {
-	Root string
+	Root    string
+	Version string
 }
 
 // PackResult describes a created archive.
@@ -45,15 +47,28 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 		return nil, err
 	}
 
+	version := p.Version
+	if version == "" {
+		version = m.Version
+	} else if !isSemver(version) {
+		return nil, errors.New(i18n.Tf("pack.error.version", version))
+	}
+
 	buildDir := config.BuildDir(p.Root)
 	if err := pkg.CreateDir(buildDir); err != nil {
 		return nil, err
 	}
 
-	archivePath := filepath.Join(buildDir, fmt.Sprintf("%s-%s.smp", name, m.Version))
+	archivePath := filepath.Join(buildDir, fmt.Sprintf("%s-%s%s", name, version, config.ArchiveExt))
 
+	// The app sources live in `src/app/<url>/`: the page folder of the
+	// deployed module manifest (its `uri`, falling back to the identifier).
+	pageDir := strings.TrimPrefix(m.URI, "/")
+	if pageDir == "" {
+		pageDir = m.ID
+	}
 	moduleSrc := config.ModuleDir(p.Root, name)
-	appSrc := config.ModuleAppSrcDir(p.Root, name)
+	appSrc := config.ModuleAppSrcDir(p.Root, pageDir)
 	assetsSrc := config.ModuleAssetsDir(p.Root, name)
 
 	if err := p.createArchive(archivePath, moduleSrc, appSrc, assetsSrc); err != nil {
@@ -71,7 +86,7 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 
 	return &PackResult{
 		Module:  name,
-		Version: m.Version,
+		Version: version,
 		Path:    archivePath,
 		Size:    info.Size(),
 	}, nil

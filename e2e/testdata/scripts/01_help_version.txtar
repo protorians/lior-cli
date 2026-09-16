@@ -8,7 +8,7 @@ stdout '  pack '
 exec $SENTIENTS --no-color help pack
 stdout 'Builds a module'
 stdout 'Usage:'
-stdout '  sentients pack \[module\] \[flags\]'
+stdout '  sentients pack \[<module>\[@<version>\]\] \[flags\]'
 
 # TC-021 — `sentients -v` / `--version` affiche la version.
 exec $SENTIENTS --no-color -v

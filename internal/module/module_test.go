@@ -19,14 +19,23 @@ func setupProject(t *testing.T) (root string, creator *Creator) {
 	return root, creator
 }
 
+// specFor builds a ModuleSpec whose folder domain is derived from the
+// identifier.
+func specFor(id, desc string) ModuleSpec {
+	return ModuleSpec{Domain: "com.example." + id, ID: id, Description: desc}
+}
+
 func TestCreateModuleStructure(t *testing.T) {
 	root, creator := setupProject(t)
-	res, err := creator.Create("blog-manager", "Gestion de blog")
+	res, err := creator.Create(specFor("blog-manager", "Gestion de blog"))
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if res.Token == "" {
 		t.Error("Token vide")
+	}
+	if res.Domain != "com.example.blog-manager" || res.ID != "blog-manager" {
+		t.Errorf("CreateResult identity = %s / %s", res.Domain, res.ID)
 	}
 
 	expected := []string{
@@ -47,7 +56,7 @@ func TestCreateModuleStructure(t *testing.T) {
 		"presentation/widgets/blog-manager.widget.tsx",
 	}
 	for _, rel := range expected {
-		p := filepath.Join(root, "external_modules", "blog-manager", filepath.FromSlash(rel))
+		p := filepath.Join(root, "external_modules", "com.example.blog-manager", filepath.FromSlash(rel))
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("fichier attendu manquant : %s (%v)", p, err)
 		}
@@ -60,7 +69,7 @@ func TestCreateModuleStructure(t *testing.T) {
 	}
 
 	// No mockup spelling must survive the rename.
-	dir := filepath.Join(root, "external_modules", "blog-manager")
+	dir := filepath.Join(root, "external_modules", "com.example.blog-manager")
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -76,10 +85,10 @@ func TestCreateModuleStructure(t *testing.T) {
 
 func TestCreateModuleDescriptionInIndex(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("blog-manager", "Gestion de blog et d'articles"); err != nil {
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager", Description: "Gestion de blog et d'articles"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(root, "external_modules", "blog-manager", "index.tsx"))
+	data, err := os.ReadFile(filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx"))
 	if err != nil {
 		t.Fatalf("lecture index.tsx: %v", err)
 	}
@@ -92,22 +101,22 @@ func TestCreateModuleDescriptionInIndex(t *testing.T) {
 func TestCreateModuleDuplicate(t *testing.T) {
 	_ = t.TempDir()
 	_, creator := setupProject(t)
-	if _, err := creator.Create("blog", ""); err != nil {
+	if _, err := creator.Create(specFor("blog", "")); err != nil {
 		t.Fatalf("premier Create: %v", err)
 	}
-	if _, err := creator.Create("blog", ""); err == nil {
+	if _, err := creator.Create(specFor("blog", "")); err == nil {
 		t.Error("second Create doit échouer sur un module existant")
 	}
 }
 
 func TestArchiveStructure(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("blog-manager", ""); err != nil {
+	if _, err := creator.Create(specFor("blog-manager", "")); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// assets dir
-	assetPath := filepath.Join(root, "public", "assets", "blog-manager", "logo.svg")
+	// assets dir (named after the module domain)
+	assetPath := filepath.Join(root, "public", "assets", "com.example.blog-manager", "logo.svg")
 	if err := os.MkdirAll(filepath.Dir(assetPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +124,7 @@ func TestArchiveStructure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// app src dir (spec FR-010)
+	// app src dir (spec FR-010), driven by the manifest uri (/blog-manager)
 	appSrcPath := filepath.Join(root, "src", "app", "blog-manager", "page.tsx")
 	if err := os.MkdirAll(filepath.Dir(appSrcPath), 0o755); err != nil {
 		t.Fatal(err)
@@ -125,7 +134,7 @@ func TestArchiveStructure(t *testing.T) {
 	}
 
 	packer := &Packer{Root: root}
-	res, err := packer.Pack("blog-manager")
+	res, err := packer.Pack("com.example.blog-manager")
 	if err != nil {
 		t.Fatalf("Pack: %v", err)
 	}
@@ -157,10 +166,10 @@ func TestArchiveStructure(t *testing.T) {
 
 	joined := strings.Join(names, "\n")
 	for _, want := range []string{
-		"external_modules/blog-manager/manifest.json",
-		"external_modules/blog-manager/index.tsx",
+		"external_modules/com.example.blog-manager/manifest.json",
+		"external_modules/com.example.blog-manager/index.tsx",
 		"src/app/blog-manager/page.tsx",
-		"public/assets/blog-manager/logo.svg",
+		"public/assets/com.example.blog-manager/logo.svg",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("l'archive doit contenir %q (contenu: %s)", want, joined)
@@ -171,18 +180,18 @@ func TestArchiveStructure(t *testing.T) {
 func TestPackRejectsInvalidModule(t *testing.T) {
 	root := t.TempDir()
 	packer := &Packer{Root: root}
-	if _, err := packer.Pack("absent"); err == nil {
+	if _, err := packer.Pack("com.example.absent"); err == nil {
 		t.Error("Pack d'un module inexistant doit échouer")
 	}
 }
 
 func TestValidateModuleOnCleanModule(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("blog-manager", ""); err != nil {
+	if _, err := creator.Create(specFor("blog-manager", "")); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	v := &Validator{Root: root}
-	res, err := v.ValidateModule("blog-manager")
+	res, err := v.ValidateModule("com.example.blog-manager")
 	if err != nil {
 		t.Fatalf("ValidateModule: %v", err)
 	}
@@ -193,21 +202,21 @@ func TestValidateModuleOnCleanModule(t *testing.T) {
 
 func TestValidateModuleMissingToken(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("blog-manager", ""); err != nil {
+	if _, err := creator.Create(specFor("blog-manager", "")); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	// Invalider le token
-	m, err := LoadManifest(filepath.Join(root, "external_modules", "blog-manager", "manifest.json"))
+	m, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.Token = "pas-un-uuid"
-	if err := m.Save(filepath.Join(root, "external_modules", "blog-manager", "manifest.json")); err != nil {
+	if err := m.Save(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json")); err != nil {
 		t.Fatal(err)
 	}
 
 	v := &Validator{Root: root}
-	res, err := v.ValidateModule("blog-manager")
+	res, err := v.ValidateModule("com.example.blog-manager")
 	if err != nil {
 		t.Fatalf("ValidateModule: %v", err)
 	}
@@ -218,15 +227,15 @@ func TestValidateModuleMissingToken(t *testing.T) {
 
 func TestLinkedModulesFiltersUnlinked(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("mod-a", ""); err != nil {
+	if _, err := creator.Create(specFor("mod-a", "")); err != nil {
 		t.Fatalf("Create mod-a: %v", err)
 	}
-	if _, err := creator.Create("mod-b", ""); err != nil {
+	if _, err := creator.Create(specFor("mod-b", "")); err != nil {
 		t.Fatalf("Create mod-b: %v", err)
 	}
 
 	linker := &Linker{Root: root}
-	if _, err := linker.Link("mod-a", RemoteInfo{Token: "m_abc123def456"}); err != nil {
+	if _, err := linker.Link("com.example.mod-a", RemoteInfo{Token: "m_abc123def456"}); err != nil {
 		t.Fatalf("Link: %v", err)
 	}
 
@@ -235,12 +244,12 @@ func TestLinkedModulesFiltersUnlinked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LinkedModules: %v", err)
 	}
-	if len(linked) != 1 || linked[0] != "mod-a" {
+	if len(linked) != 1 || linked[0] != "com.example.mod-a" {
 		t.Errorf("seul mod-a doit être lié, obtenu: %v", linked)
 	}
 
 	// Unlink rétablit un token UUID local → aucun module lié restant.
-	if err := linker.Unlink("mod-a"); err != nil {
+	if err := linker.Unlink("com.example.mod-a"); err != nil {
 		t.Fatalf("Unlink: %v", err)
 	}
 	linked, err = linker.LinkedModules()
@@ -254,12 +263,12 @@ func TestLinkedModulesFiltersUnlinked(t *testing.T) {
 
 func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("blog-manager", ""); err != nil {
+	if _, err := creator.Create(specFor("blog-manager", "")); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
 	linker := &Linker{Root: root}
-	result, err := linker.Link("blog-manager", RemoteInfo{
+	result, err := linker.Link("com.example.blog-manager", RemoteInfo{
 		Token:         "m_abc123def456",
 		Name:          "Blog Manager",
 		Description:   "Gestion de blog et d'articles",
@@ -279,7 +288,7 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	}
 
 	// Manifest enriched with remote metadata (fields absent after create).
-	m, err := LoadManifest(filepath.Join(root, "external_modules", "blog-manager", "manifest.json"))
+	m, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +308,7 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	}
 
 	// Existing local metadata must NOT be overwritten.
-	if _, err := linker.Link("blog-manager", RemoteInfo{
+	if _, err := linker.Link("com.example.blog-manager", RemoteInfo{
 		Token:       "m_new_token",
 		Name:        "Nom Distant",
 		Description: "Description distante",
@@ -307,7 +316,7 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("second Link: %v", err)
 	}
-	m, err = LoadManifest(filepath.Join(root, "external_modules", "blog-manager", "manifest.json"))
+	m, err = LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +333,7 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 
 func TestLinkedModulesStateFileIgnoresTokenFormat(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("mod-a", ""); err != nil {
+	if _, err := creator.Create(specFor("mod-a", "")); err != nil {
 		t.Fatalf("Create mod-a: %v", err)
 	}
 
@@ -332,7 +341,7 @@ func TestLinkedModulesStateFileIgnoresTokenFormat(t *testing.T) {
 	// recognised as "linked" once recorded in the state file.
 	remoteToken := pkg.NewUUID()
 	linker := &Linker{Root: root}
-	if _, err := linker.Link("mod-a", RemoteInfo{Token: remoteToken}); err != nil {
+	if _, err := linker.Link("com.example.mod-a", RemoteInfo{Token: remoteToken}); err != nil {
 		t.Fatalf("Link: %v", err)
 	}
 
@@ -340,11 +349,11 @@ func TestLinkedModulesStateFileIgnoresTokenFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LinkedModules: %v", err)
 	}
-	if len(linked) != 1 || linked[0] != "mod-a" {
+	if len(linked) != 1 || linked[0] != "com.example.mod-a" {
 		t.Errorf("mod-a (état) doit être lié, obtenu: %v", linked)
 	}
 
-	if err := linker.Unlink("mod-a"); err != nil {
+	if err := linker.Unlink("com.example.mod-a"); err != nil {
 		t.Fatalf("Unlink: %v", err)
 	}
 	linked, err = linker.LinkedModules()

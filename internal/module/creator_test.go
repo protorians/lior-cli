@@ -16,12 +16,24 @@ func TestModuleExists(t *testing.T) {
 		t.Error("an absent module must not exist")
 	}
 
-	// External module (external_modules/<name>/).
-	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir, "ext-mod"), 0o755); err != nil {
+	// External module (external_modules/<domain>/).
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir, "com.ext.mod"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if !ModuleExists(root, "ext-mod") {
-		t.Error("an external_modules/ module must be found")
+	if !ModuleExists(root, "com.ext.mod") {
+		t.Error("an external_modules/ module must be found by its folder domain")
+	}
+
+	// External module referenced by its manifest id.
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir, "com.example.analytics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManifest("analytics", "")
+	if err := m.Save(filepath.Join(root, config.ExternalModulesDir, "com.example.analytics", config.ManifestFileName)); err != nil {
+		t.Fatal(err)
+	}
+	if !ModuleExists(root, "analytics") {
+		t.Error("an external_modules/ module must be found by its manifest id")
 	}
 
 	// Internal module (src/modules/<name>/).
@@ -35,7 +47,7 @@ func TestModuleExists(t *testing.T) {
 
 func TestMissingRequirements(t *testing.T) {
 	root, creator := setupProject(t)
-	if _, err := creator.Create("dep-a", ""); err != nil {
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.dep-a", ID: "dep-a"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, config.InternalModulesDir, "int-b"), 0o755); err != nil {

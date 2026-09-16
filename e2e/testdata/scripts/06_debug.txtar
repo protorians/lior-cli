@@ -2,26 +2,26 @@ mkdir project
 cd project
 mkdir external_modules
 exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
-exec $SENTIENTS --no-color create module matcher
-exec $SENTIENTS --no-color create module runner
+exec $SENTIENTS --no-color create module matcher --domain com.test.matcher
+exec $SENTIENTS --no-color create module runner --domain com.test.runner
 
 # TC-015 — `debug` of a single module: build script detected → OK.
-exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > external_modules/runner/package.json'
-exec $SENTIENTS --no-color debug runner
-stderr 'Debugging: runner'
+exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > external_modules/com.test.runner/package.json'
+exec $SENTIENTS --no-color debug com.test.runner
+stderr 'Debugging: com.test.runner'
 stdout 'Status : ✓ OK'
 stdout 'bun run build'
 
 # Module without a build script but with TypeScript → tsc --noEmit fallback → OK.
-exec sh -c 'printf "export const helper: number = 42;\n" > external_modules/matcher/helper.ts'
+exec sh -c 'printf "export const helper: number = 42;\n" > external_modules/com.test.matcher/helper.ts'
 exec sh -c 'printf "{\"compilerOptions\":{}}\n" > tsconfig.json'
-exec $SENTIENTS --no-color debug matcher
-stderr 'Debugging: matcher'
+exec $SENTIENTS --no-color debug com.test.matcher
+stderr 'Debugging: com.test.matcher'
 stdout 'Status : ✓ OK'
 stdout 'tsc --noEmit'
 
 # TC-016 — `debug` without argument: report of all modules (table).
 exec $SENTIENTS --no-color debug
 stderr 'Debugging all modules'
-stdout 'matcher'
-stdout 'runner'
+stdout 'com.test.matcher'
+stdout 'com.test.runner'

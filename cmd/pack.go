@@ -11,10 +11,13 @@ import (
 )
 
 var packCmd = &cobra.Command{
-	Use:   "pack [module]",
-	Short: "Build a module archive (.smp)",
-	Long: `Builds a module and creates a compressed .smp archive
+	Use:   "pack [<module>[@<version>]]",
+	Short: "Build a module archive (.SenMod)",
+	Long: `Builds a module and creates a compressed .SenMod archive
 (moved to .sentients/build/).
+
+The version can be given with an '@' separator (e.g. com.example.blog-manager@1.2.0)
+to build a specific version; otherwise the manifest version is used.
 
 Without an argument, a selector lets you choose the module.`,
 	Args: cobra.MaximumNArgs(1),
@@ -33,13 +36,13 @@ func runPack(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	name, err := resolveModule(root, args)
+	name, version, err := resolveModuleWithVersion(root, args)
 	if err != nil {
 		return err
 	}
 
 	result, err := tui.RunWithSpinner(i18n.T("pack.spinner"), func() (*module.PackResult, error) {
-		p := &module.Packer{Root: root}
+		p := &module.Packer{Root: root, Version: version}
 		return p.Pack(name)
 	})
 	if err != nil {

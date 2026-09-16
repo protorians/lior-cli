@@ -9,11 +9,11 @@ import (
 	"github.com/protorians/sentient-cli/internal/module"
 )
 
-func createTestModule(t *testing.T, root, name string) {
+func createTestModule(t *testing.T, root, id string) {
 	t.Helper()
 	creator := &module.Creator{Root: root}
-	if _, err := creator.Create(name, "Test module"); err != nil {
-		t.Fatalf("Creator.Create(%q): %v", name, err)
+	if _, err := creator.Create(module.ModuleSpec{Domain: "com.test." + id, ID: id, Description: "Test module"}); err != nil {
+		t.Fatalf("Creator.Create(%q): %v", id, err)
 	}
 }
 
@@ -31,12 +31,12 @@ func TestDebugModuleValid(t *testing.T) {
 	createTestModule(t, root, "my-module")
 
 	debugger := &Debugger{Root: root}
-	result, err := debugger.DebugModule("my-module")
+	result, err := debugger.DebugModule("com.test.my-module")
 	if err != nil {
 		t.Fatalf("DebugModule: %v", err)
 	}
-	if result.Module != "my-module" {
-		t.Errorf("Module = %q, want my-module", result.Module)
+	if result.Module != "com.test.my-module" {
+		t.Errorf("Module = %q, want com.test.my-module", result.Module)
 	}
 	// Without a package manager or build script, should succeed with validation only
 	if result.Status != "OK" && result.Status != "WARNING" {
@@ -58,7 +58,7 @@ func TestDebugModuleInvalidManifest(t *testing.T) {
 	createTestModule(t, root, "bad-mod")
 
 	// Corrupt the manifest token
-	manifestPath := filepath.Join(root, config.ExternalModulesDir, "bad-mod", "manifest.json")
+	manifestPath := filepath.Join(root, config.ExternalModulesDir, "com.test.bad-mod", "manifest.json")
 	manifest, _ := module.LoadManifest(manifestPath)
 	manifest.Token = "invalid-token"
 	if err := manifest.Save(manifestPath); err != nil {
@@ -66,7 +66,7 @@ func TestDebugModuleInvalidManifest(t *testing.T) {
 	}
 
 	debugger := &Debugger{Root: root}
-	result, err := debugger.DebugModule("bad-mod")
+	result, err := debugger.DebugModule("com.test.bad-mod")
 	if err != nil {
 		t.Fatalf("DebugModule: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestDebugAllSkipsNonModules(t *testing.T) {
 func TestFindBuildCommandPrefersModulePackage(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "my-module")
-	moduleDir := filepath.Join(root, config.ExternalModulesDir, "my-module")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test.my-module")
 
 	// Root defines only a "build:prod" script; the module defines "build".
 	rootPkg := filepath.Join(root, "package.json")
@@ -151,7 +151,7 @@ func TestFindBuildCommandPrefersModulePackage(t *testing.T) {
 func TestFindBuildCommandRootFallback(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "my-module")
-	moduleDir := filepath.Join(root, config.ExternalModulesDir, "my-module")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test.my-module")
 
 	// Only the project root exposes a "debug" script.
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"scripts":{"debug":"vite --debug"}}`), 0o644); err != nil {
@@ -174,7 +174,7 @@ func TestFindBuildCommandRootFallback(t *testing.T) {
 func TestFindBuildCommandNoSubstringFalsePositive(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "my-module")
-	moduleDir := filepath.Join(root, config.ExternalModulesDir, "my-module")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test.my-module")
 
 	// Only "build:prod" exists — plain "build" must NOT match.
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"scripts":{"build:prod":"tsc"}}`), 0o644); err != nil {

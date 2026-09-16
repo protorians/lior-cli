@@ -99,12 +99,12 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 	root := t.TempDir()
 	creator := &Creator{Root: root, MockupDir: mockupDir, PageMockup: pageMockup}
 
-	res, err := creator.Create("blog-manager", "Gestion de blog d'articles")
+	res, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager", Description: "Gestion de blog d'articles"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "blog-manager")
+	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
 
 	// Files renamed with the new module name.
 	for _, rel := range []string{
@@ -143,7 +143,7 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 	indexPath := filepath.Join(moduleDir, "index.tsx")
 	assertFileContains(t, indexPath,
 		"blogManagerModule",
-		"mod.sentients.blogmanager",
+		"com.example.blog-manager",
 		"key: 'BLOG_MANAGER'",
 		"name: 'Blog Manager'",
 		"uri: '/blog-manager'",
@@ -181,6 +181,9 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 	if manifest.ID != "blog-manager" {
 		t.Errorf("id = %q, want blog-manager", manifest.ID)
 	}
+	if manifest.Domain != "com.example.blog-manager" {
+		t.Errorf("domain = %q, want com.example.blog-manager", manifest.Domain)
+	}
 	if manifest.Name != "Blog Manager" {
 		t.Errorf("name = %q, want Blog Manager", manifest.Name)
 	}
@@ -195,13 +198,13 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 
 	// Page content renamed.
 	assertFileContains(t, wantPage,
-		`import {BlogManagerView} from "@/external_modules/blog-manager/presentation/views/blog-manager.view";`,
+		`import {BlogManagerView} from "@/external_modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
 		"function BlogManagerPage()",
 		"<BlogManagerView/>",
 	)
 }
 
-func TestCreateFromMockupWithoutURISkipsPage(t *testing.T) {
+func TestCreateFromMockupPatchesDefaultURI(t *testing.T) {
 	mockupDir, pageMockup := writeScaffoldFixture(t)
 
 	// Remove the uri from the declaration.
@@ -217,19 +220,32 @@ func TestCreateFromMockupWithoutURISkipsPage(t *testing.T) {
 
 	root := t.TempDir()
 	creator := &Creator{Root: root, MockupDir: mockupDir, PageMockup: pageMockup}
-	res, err := creator.Create("blog-manager", "")
+	res, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if res.Page != "" {
-		t.Errorf("Page = %q, attendu vide sans uri déclarée", res.Page)
+	// The uri is always patched to the effective page url (default: id), so
+	// the page is scaffolded at src/app/blog-manager/.
+	wantPage := filepath.Join(root, "src", "app", "blog-manager", "page.tsx")
+	if res.Page != wantPage {
+		t.Errorf("Page = %q, want %q", res.Page, wantPage)
 	}
-	if pkg.PathExists(filepath.Join(root, "src")) {
-		t.Error("src/app ne doit pas être créé quand la déclaration n'a pas d'url")
+	if !pkg.FileExists(wantPage) {
+		t.Fatalf("page non générée: %s", wantPage)
 	}
-	if _, err := LoadManifest(filepath.Join(root, "external_modules", "blog-manager", "manifest.json")); err != nil {
+	assertFileContains(t, filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx"),
+		"uri: '/blog-manager'",
+	)
+	manifest, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
+	if err != nil {
 		t.Fatalf("manifest invalide sans description: %v", err)
+	}
+	if manifest.URI != "/blog-manager" {
+		t.Errorf("uri = %q, want /blog-manager", manifest.URI)
+	}
+	if manifest.Menu.Items[0].URL != "/blog-manager" {
+		t.Errorf("menu url = %q, want /blog-manager", manifest.Menu.Items[0].URL)
 	}
 }
 
@@ -240,16 +256,16 @@ func TestCreateUsesEnvModuleMockup(t *testing.T) {
 
 	root := t.TempDir()
 	creator := &Creator{Root: root}
-	res, err := creator.Create("blog-manager", "")
+	res, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
 	// The custom mockup (not the embedded one) must have been scaffolded.
-	moduleDir := filepath.Join(root, "external_modules", "blog-manager")
+	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
 	assertFileContains(t, filepath.Join(moduleDir, "index.tsx"),
 		"blogManagerModule",
-		"mod.sentients.blogmanager",
+		"com.example.blog-manager",
 		"key: 'BLOG_MANAGER'",
 		"uri: '/blog-manager'",
 	)
@@ -263,10 +279,10 @@ func TestCreateUsesEnvModuleMockup(t *testing.T) {
 	// An invalid custom mockup path falls back to the embedded templates.
 	t.Setenv(EnvModuleMockup, filepath.Join(t.TempDir(), "absent"))
 	root2 := t.TempDir()
-	if _, err := (&Creator{Root: root2}).Create("blog-manager", ""); err != nil {
+	if _, err := (&Creator{Root: root2}).Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
 		t.Fatalf("Create avec mockup env invalide: %v", err)
 	}
-	moduleDir2 := filepath.Join(root2, "external_modules", "blog-manager")
+	moduleDir2 := filepath.Join(root2, "external_modules", "com.example.blog-manager")
 	if !pkg.FileExists(filepath.Join(moduleDir2, "package.json")) {
 		t.Error("le fallback doit utiliser le mockup embarqué")
 	}
@@ -276,7 +292,7 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 	root := t.TempDir()
 	creator := &Creator{Root: root}
 
-	res, err := creator.Create("blog-manager", "Gestion de blog et d'articles")
+	res, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager", Description: "Gestion de blog et d'articles"})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -284,7 +300,7 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 		t.Errorf("token non UUID: %q", res.Token)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "blog-manager")
+	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
 	for _, rel := range []string{
 		"manifest.json",
 		"index.tsx",
@@ -306,7 +322,7 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 
 	assertFileContains(t, filepath.Join(moduleDir, "index.tsx"),
 		"blogManagerModule",
-		"mod.sentients.blogmanager",
+		"com.example.blog-manager",
 		"key: 'BLOG_MANAGER'",
 		`description: 'Gestion de blog et d\'articles',`,
 		"uri: '/blog-manager'",
@@ -322,7 +338,7 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 		t.Errorf("Page = %q, want %q", res.Page, wantPage)
 	}
 	assertFileContains(t, wantPage,
-		`import {BlogManagerView} from "@/external_modules/blog-manager/presentation/views/blog-manager.view";`,
+		`import {BlogManagerView} from "@/external_modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
 		"function BlogManagerPage()",
 	)
 }
@@ -332,11 +348,11 @@ func TestCreateFromMockupEmptyDescriptionStaysEmpty(t *testing.T) {
 	root := t.TempDir()
 	creator := &Creator{Root: root, MockupDir: mockupDir}
 
-	if _, err := creator.Create("blog-manager", ""); err != nil {
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	manifest, err := LoadManifest(filepath.Join(root, "external_modules", "blog-manager", "manifest.json"))
+	manifest, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}

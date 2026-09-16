@@ -29,9 +29,9 @@ go build -o sentients .
 | `sentients create module [nom] [--mockup dir] [--page-mockup file]` | Créer un module dans `external_modules/` depuis le mockup hello-world (renommé avec le nom du module), surchargeable via `--mockup` / `--page-mockup` (`SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP`) |
 | `sentients connect` | Authentification via sentient-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `sentients disconnect` | Invalider le token côté serveur et supprimer les credentials |
-| `sentients pack [module]` | Construire l'archive `.smp` dans `.sentients/build/` |
+| `sentients pack [module]` | Construire l'archive `.SenMod` dans `.sentients/build/` |
 | `sentients sign keygen` | Générer une paire de clés Ed25519 pour la signature |
-| `sentients sign [module]` | Signer l'archive `.smp` d'un module |
+| `sentients sign [module]` | Signer l'archive `.SenMod` d'un module |
 | `sentients sign verify [module]` | Vérifier la signature d'un module |
 | `sentients publish [module]` | Auditer, packer et publier un module sur le store |
 | `sentients link` / `unlink` | Associer un module local à un module distant du store (token) |
@@ -78,7 +78,7 @@ go build -o sentients .
 - Repli : fichier chiffré AES-256-GCM (`~/.sentient-cli/credentials.enc`)
 - Clés de signature Ed25519 dans le keychain (service `sentient-cli-signing`),
   avec fichier chiffré en repli (`~/.sentient-cli/signing.enc`)
-- Archives `.smp` : ZIP contenant uniquement `external_modules/<module>/` +
+- Archives `.SenMod` : ZIP contenant uniquement `external_modules/<module>/` +
   `public/assets/<module>/` + `src/app/<module>/` — aucun token ni credential
 
 ## Tests

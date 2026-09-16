@@ -402,7 +402,7 @@ func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request, productI
 	s.mu.Unlock()
 	writeData(w, http.StatusCreated, map[string]any{
 		"url":       "https://store.sentient.dev/modules/" + slug,
-		"key":       "artifacts/" + productID + "/" + versionID + ".smp",
+		"key":       "artifacts/" + productID + "/" + versionID + ".SenMod",
 		"checksum":  req.Checksum,
 		"signature": req.Signature,
 		"sizeBytes": req.SizeBytes,

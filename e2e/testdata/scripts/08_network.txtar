@@ -4,7 +4,7 @@ mkdir project
 cd project
 mkdir external_modules
 exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > sentients.config.json'
-exec $SENTIENTS --no-color create module blog-manager
+exec $SENTIENTS --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
 # TC-007 — wrong credentials: explicit failure (exit 2 / ExitAuth).
 env SENTIENT_CLI_CONNECT_EMAIL=invalid@example.com
@@ -35,13 +35,13 @@ stdout '✓ Connected as dev@example.com'
 
 # TC-011 — publish: product created + version + artifact; remote token synced
 # into the manifest.
-exec $SENTIENTS --no-color publish blog-manager
+exec $SENTIENTS --no-color publish com.example.blog-manager
 stdout '✓ Published successfully'
 stdout 'URL : https://store.sentient.dev/modules/blog-manager'
-exec grep -q '"token": "[0-9a-f-]' external_modules/blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
 
 # TC-012 — same version already published: 409 conflict (exit 11 / ExitPublish).
-! exec $SENTIENTS --no-color publish blog-manager
+! exec $SENTIENTS --no-color publish com.example.blog-manager
 stderr 'An identical version already exists'
-exec sh -c '"$SENTIENTS" --no-color publish blog-manager >/dev/null 2>&1; echo $?'
+exec sh -c '"$SENTIENTS" --no-color publish com.example.blog-manager >/dev/null 2>&1; echo $?'
 stdout '^11$'

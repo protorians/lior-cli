@@ -16,13 +16,13 @@ import (
 
 var signCmd = &cobra.Command{
 	Use:   "sign [module]",
-	Short: "Sign .smp archives (Ed25519)",
+	Short: "Sign .SenMod archives (Ed25519)",
 	Long: `Manages Ed25519 digital signatures for modules: generates keys,
-signs the .smp archives and verifies signatures.
+signs the .SenMod archives and verifies signatures.
 
 Subcommands:
   sign keygen            Generate an Ed25519 key pair
-  sign <module>          Sign a module's .smp archive
+  sign <module>          Sign a module's .SenMod archive
   sign verify <module>   Verify a module's signature
 
 Without arguments, shows the SHA-256 fingerprint of the public key.`,
@@ -60,7 +60,7 @@ var signVerifyCmd = &cobra.Command{
 	Use:   "verify [module]",
 	Short: "Verify a module's signature",
 	Long: `Verifies the validity of a module's .sig file against its
-.smp archive, using the public key stored in the keychain.`,
+.SenMod archive, using the public key stored in the keychain.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return verifySignature(args)
@@ -137,7 +137,7 @@ func runSignKeygen() error {
 	return nil
 }
 
-// signModule signs a module's .smp archive (spec §5.13.2).
+// signModule signs a module's .SenMod archive (spec §5.13.2).
 func signModule(args []string) error {
 	root, err := requireProjectRoot()
 	if err != nil {

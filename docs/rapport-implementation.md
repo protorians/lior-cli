@@ -61,12 +61,12 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Invalidation serveur best-effort (`POST /api/auth/logout`) + suppression locale, avec confirmation.
 
 ### `sentients pack [module]` (FR-010, FR-011)
-- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.sentients/build/<module>-<version>.smp`.
+- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.sentients/build/<module>-<version>.SenMod`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
 ### `sentients sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
 - Paires de clés **Ed25519**, stockées dans le keychain (service `sentient-cli-signing`).
-- Signature binaire 64 octets dans `<archive>.smp.sig` ; vérification sur archive + clé publique.
+- Signature binaire 64 octets dans `<archive>.SenMod.sig` ; vérification sur archive + clé publique.
 - Fingerprint SHA-256 de la clé publique (commande `sign` sans argument).
 
 ### `sentients publish [module]` (FR-012, FR-013)
@@ -76,7 +76,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   1. résolution/création du produit module (`POST /api/developer-store/modules`) ;
   2. création de la version (`POST .../versions`) ;
   3. déclaration de l'artefact (`POST .../versions/:versionId/artifact` : `manifest` +
-     checksum SHA-256 + signature `.smp.sig` + `size`).
+     checksum SHA-256 + signature `.SenMod.sig` + `size`).
 - Conflit SemVer → bump patch interactif (jusqu'à 5 essais) ; après succès, le manifest local
   est synchronisé (version publiée + **token produit résolu**).
 

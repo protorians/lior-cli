@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/protorians/sentient-cli/internal/config"
 	"github.com/protorians/sentient-cli/internal/i18n"
@@ -106,4 +107,25 @@ func selectModule(modules []string) (string, error) {
 		return "", err
 	}
 	return selected, nil
+}
+
+// splitModuleSpec splits a "name@version" argument into its components. The
+// version part is optional and empty when absent.
+func splitModuleSpec(arg string) (name, version string) {
+	if i := strings.IndexByte(arg, '@'); i >= 0 {
+		return arg[:i], arg[i+1:]
+	}
+	return arg, ""
+}
+
+// resolveModuleWithVersion behaves like resolveModule but accepts an optional
+// "@version" suffix on the positional argument (e.g. "blog-manager@1.2.0").
+func resolveModuleWithVersion(root string, args []string) (name, version string, err error) {
+	clean := args
+	if len(args) > 0 {
+		name, version = splitModuleSpec(args[0])
+		clean = []string{name}
+	}
+	name, err = resolveModule(root, clean)
+	return name, version, err
 }

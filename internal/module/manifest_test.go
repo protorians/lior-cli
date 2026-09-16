@@ -25,6 +25,67 @@ func TestValidateName(t *testing.T) {
 	}
 }
 
+func TestValidateDomain(t *testing.T) {
+	valid := []string{"com.example.app", "com.organization.domain", "io.sentient-sdk.a", "fr.dev.demo"}
+	for _, d := range valid {
+		if err := ValidateDomain(d); err != nil {
+			t.Errorf("ValidateDomain(%q) = %v, want nil", d, err)
+		}
+	}
+
+	invalid := []string{"", "blog-manager", "justonelabel", "com", "com.", ".com", "com..example", "com/example", "é.com"}
+	for _, d := range invalid {
+		if err := ValidateDomain(d); err == nil {
+			t.Errorf("ValidateDomain(%q) = nil, want error", d)
+		}
+	}
+}
+
+func TestValidateVersion(t *testing.T) {
+	valid := []string{"", "0.0.0", "1.2.3", "10.20.30", "2.0.0-beta.1", "1.0.0+build.5", "v1.0.0"}
+	for _, v := range valid {
+		if err := ValidateVersion(v); err != nil {
+			t.Errorf("ValidateVersion(%q) = %v, want nil", v, err)
+		}
+	}
+
+	invalid := []string{"1", "1.2", "1.0", "abc"}
+	for _, v := range invalid {
+		if err := ValidateVersion(v); err == nil {
+			t.Errorf("ValidateVersion(%q) = nil, want error", v)
+		}
+	}
+}
+
+func TestValidateIcon(t *testing.T) {
+	valid := []string{"", "Puzzle", "PuzzleIcon", "WandSparklesIcon"}
+	for _, ic := range valid {
+		if err := ValidateIcon(ic); err != nil {
+			t.Errorf("ValidateIcon(%q) = %v, want nil", ic, err)
+		}
+	}
+
+	invalid := []string{"puzzle", "puzzle-icon", "Puzzle Icon", "1st", "éIco"}
+	for _, ic := range invalid {
+		if err := ValidateIcon(ic); err == nil {
+			t.Errorf("ValidateIcon(%q) = nil, want error", ic)
+		}
+	}
+}
+
+func TestDisplayName(t *testing.T) {
+	cases := map[string]string{
+		"":             "",
+		"blog-manager": "Blog Manager",
+		"myapp":        "Myapp",
+	}
+	for in, want := range cases {
+		if got := DisplayName(in); got != want {
+			t.Errorf("DisplayName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestNewManifest(t *testing.T) {
 	m := NewManifest("blog-manager", "Gestion de blog")
 

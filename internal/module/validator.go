@@ -100,10 +100,12 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	// entry exists
 	entryPath := filepath.Join(moduleDir, manifest.Entry)
 	add(res, "manifest.json", "entry", pkg.FileExists(entryPath), "entry file present")
-	// domain format warning (canonical format uses concatenated lower name)
-	expectedDomain := "mod.sentients." + lowerName(name)
-	addLevel(res, "manifest.json", "domain", manifest.Domain == expectedDomain,
-		"domain in mod.sentients.<lowerName> format", LevelWarning)
+	// domain format warning (reverse-DNS dotted form, e.g. com.organization.domain)
+	addLevel(res, "manifest.json", "domain", domainRE.MatchString(manifest.Domain),
+		"domain in reverse-DNS format (e.g. com.organization.domain)", LevelWarning)
+	// the module directory must be named after its domain
+	addLevel(res, "manifest.json", "domain directory", manifest.Domain == name,
+		"manifest domain matches the module directory (external_modules/<domain>)", LevelWarning)
 	// permissions must be an array (spec rule, WARNING severity)
 	addLevel(res, "manifest.json", "permissions", rawPermissionsIsArray(manifestPath),
 		"permissions is an array", LevelWarning)

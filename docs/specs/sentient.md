@@ -65,8 +65,8 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `sentients create module` — Création de module dans `external_modules/`
 - `sentients connect` — Authentification développeur (credentials + MFA)
 - `sentients disconnect` — Suppression des credentials
-- `sentients pack` — Build + compression d'un module (`.smp`)
-- `sentients sign` — Signature numérique Ed25519 des archives `.smp` (keygen / sign / verify)
+- `sentients pack` — Build + compression d'un module (`.SenMod`)
+- `sentients sign` — Signature numérique Ed25519 des archives `.SenMod` (keygen / sign / verify)
 - `sentients publish` — Publication dans le store via Sentient Connect
 - `sentients link` — Liaison module local ↔ module en ligne
 - `sentients unlink` — Dé liaison module local ↔ module en ligne
@@ -107,7 +107,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-007 | `sentients connect` supporte le MFA (TOTP, backup codes) |
 | FR-008 | `sentients connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
 | FR-009 | `sentients disconnect` supprime toutes les credentials stockées |
-| FR-010 | `sentients pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.url>/` en `.smp` |
+| FR-010 | `sentients pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.url>/` en `.SenMod` |
 | FR-011 | `sentients pack` déplace l'archive vers `.sentients/build/` |
 | FR-012 | `sentients publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
 | FR-013 | `sentients publish` demande les métadonnées du module si non définies |
@@ -119,7 +119,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-019 | `sentients help` affiche l'aide contextuelle des commandes |
 | FR-020 | `sentients -v` / `sentients --version` affiche la version actuelle |
 | FR-021 | `sentients sign keygen` génère une paire de clés Ed25519 et la stocke dans le keychain système |
-| FR-022 | `sentients sign <module>` signe l'archive `.smp` du module et produit un fichier `.sig` |
+| FR-022 | `sentients sign <module>` signe l'archive `.SenMod` du module et produit un fichier `.sig` |
 | FR-023 | `sentients sign verify <module>` vérifie la validité de la signature `.sig` d'un module |
 | FR-024 | `sentients sign` affiche le fingerprint SHA-256 de la clé publique du développeur |
 | FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `SENTIENT_CLI_LANG` → `cli.lang` de `sentients.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
@@ -146,9 +146,9 @@ init → create → develop → debug → audit → pack → sign → link → p
 | SEC-004 | Chiffrement des données sensibles au repos (AES-256-GCM pour les caches) |
 | SEC-005 | Validation stricte des inputs (UUID, noms de module, URLs) |
 | SEC-006 | Mode MFA obligatoire si activé sur le compte développeur |
-| SEC-007 | Les archives `.smp` ne contiennent jamais de credentials ou tokens |
+| SEC-007 | Les archives `.SenMod` ne contiennent jamais de credentials ou tokens |
 | SEC-008 | Les clés de signature Ed25519 sont stockées dans le keychain OS, jamais en clair sur disque |
-| SEC-009 | La signature numérique garantit l'intégrité et l'authenticité des archives `.smp` avant publication |
+| SEC-009 | La signature numérique garantit l'intégrité et l'authenticité des archives `.SenMod` avant publication |
 
 ### Exigences techniques
 
@@ -206,7 +206,7 @@ sentient-cli/
 │   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence)
 │   │   ├── mockups/               # hello-world/ + page.tsx (mockups embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
-│   │   ├── packer.go              # Compression .smp (limite 50 MB)
+│   │   ├── packer.go              # Compression .SenMod (limite 50 MB)
 │   │   ├── linker.go              # Liaison local ↔ distant + état .sentients/links.json
 │   │   ├── validator.go           # Validation module
 │   │   └── module_test.go         # Tests unitaires
@@ -262,7 +262,7 @@ sentient-cli/
 | `net/http` | Client API (stdlib) | — |
 | `crypto/aes`, `crypto/cipher` | Chiffrement (stdlib) | — |
 | `crypto/ed25519` | Signature numérique Ed25519 (stdlib) | — |
-| `archive/zip` | Compression .smp (stdlib) | — |
+| `archive/zip` | Compression .SenMod (stdlib) | — |
 
 > Le parsing TOML (`BurntSushi/toml`) a été retiré : la configuration est uniquement JSON
 > (`sentients.config.json`). `sentient.config.toml` ne sert plus que de marqueur de projet.
@@ -605,7 +605,7 @@ Supprimer toutes les credentials stockées et déconnecter le développeur.
 
 #### Purpose
 
-Construire le build d'un module et créer une archive `.smp` compressée.
+Construire le build d'un module et créer une archive `.SenMod` compressée.
 
 #### Comportement
 
@@ -620,16 +620,16 @@ Construire le build d'un module et créer une archive `.smp` compressée.
    - Source assets : `public/assets/<module>/` (si existe)
    - Destination : `.sentients/build/`
 5. **Créer l'archive ZIP** :
-   - Nom : `<module>-<version>.smp` (le `.smp` est un ZIP renommé)
+   - Nom : `<module>-<version>.SenMod` (le `.SenMod` est un ZIP renommé)
    - Contenu : dossiers `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.url>` (si existe)
    - Préfixe dans l'archive : `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.url>`
 6. **Déplacer** l'archive vers `.sentients/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
-#### Structure de l'archive `.smp`
+#### Structure de l'archive `.SenMod`
 
 ```
-<smp-file>.smp (ZIP)
+<SenMod-file>.SenMod (ZIP)
 ├── external_modules/<module>/
 │   ├── manifest.json
 │   ├── index.tsx
@@ -659,7 +659,7 @@ Construire le build d'un module et créer une archive `.smp` compressée.
 
   ✓ Archive créée avec succès
     Module : blog-manager v0.1.0
-    Fichier : .sentients/build/blog-manager-0.1.0.smp
+    Fichier : .sentients/build/blog-manager-0.1.0.SenMod
     Taille : 12.4 KB
 ```
 
@@ -689,7 +689,7 @@ Construire et publier un module dans le store via l'API `sentient-connect`.
      (`POST /api/developer-store/modules` — `{name, slug, type, primaryCategory}`)
    - Créer la **version** (`POST /api/developer-store/modules/:id/versions` — `{versionString, buildNumber, …}`)
    - **Déclarer l'artefact** (`POST /api/developer-store/modules/:id/versions/:versionId/artifact` —
-     `manifest` JSON, `checksum` SHA-256 hex, `signature` base64 (.smp.sig), `size`)
+     `manifest` JSON, `checksum` SHA-256 hex, `signature` base64 (.SenMod.sig), `size`)
    - Headers : `Authorization: Bearer <token>`
 6. **Gérer la réponse** :
    - **Succès** → afficher l'URL du module dans le store
@@ -1007,7 +1007,7 @@ sentients v0.0.9 (darwin/arm64) abc1234
 
 #### Purpose
 
-Gérer les signatures numériques Ed25519 des modules : générer des clés, signer les archives `.smp`
+Gérer les signatures numériques Ed25519 des modules : générer des clés, signer les archives `.SenMod`
 et vérifier les signatures. La signature garantit l'intégrité et l'authenticité des modules
 avant publication.
 
@@ -1016,7 +1016,7 @@ avant publication.
 | Sous-commande | Description |
 |---------------|-------------|
 | `sentients sign keygen` | Générer une paire de clés Ed25519 et la stocker dans le keychain |
-| `sentients sign <module>` | Signer l'archive `.smp` d'un module |
+| `sentients sign <module>` | Signer l'archive `.SenMod` d'un module |
 | `sentients sign verify <module>` | Vérifier la signature d'un module |
 
 ---
@@ -1058,19 +1058,19 @@ avant publication.
 1. **Vérifier le contexte** : être à la racine d'un projet Sentient
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.smp` existe** dans `.sentients/build/`
+4. **Vérifier que l'archive `.SenMod` existe** dans `.sentients/build/`
    - Si absente → erreur avec suggestion d'exécuter `sentients pack <module>`
 5. **Charger la clé privée** depuis le keychain
    - Si absente → erreur avec suggestion d'exécuter `sentients sign keygen`
 6. **Signer l'archive** :
-   - Lire le contenu de l'archive `.smp`
+   - Lire le contenu de l'archive `.SenMod`
    - Signer avec `ed25519.Sign(privateKey, archiveData)`
    - Écrire la signature dans `<archive>.sig` (même dossier que l'archive)
 7. **Afficher le résumé** : module, version, fingerprint du signataire, chemin du `.sig`
 
 ###### Contraintes
 
-- L'archive `.smp` doit exister (résultat de `sentients pack`)
+- L'archive `.SenMod` doit exister (résultat de `sentients pack`)
 - La clé privée doit exister dans le keychain
 - Si un fichier `.sig` existe déjà pour cette archive → demander confirmation (écraser)
 - Le fichier `.sig` est un binaire contenant uniquement la signature Ed25519 (64 octets)
@@ -1084,8 +1084,8 @@ avant publication.
 
   ✓ Archive signée avec succès
     Module   : blog-manager v0.1.0
-    Archive  : .sentients/build/blog-manager-0.1.0.smp
-    Signature : .sentients/build/blog-manager-0.1.0.smp.sig
+    Archive  : .sentients/build/blog-manager-0.1.0.SenMod
+    Signature : .sentients/build/blog-manager-0.1.0.SenMod.sig
     Signataire : a1b2c3d4... (fingerprint SHA-256)
 ```
 
@@ -1098,17 +1098,17 @@ avant publication.
 1. **Vérifier le contexte** : être à la racine d'un projet Sentient
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.smp` et le fichier `.sig` existent**
+4. **Vérifier que l'archive `.SenMod` et le fichier `.sig` existent**
 5. **Charger la clé publique** depuis le keychain
    - Si absente → erreur avec suggestion d'exécuter `sentients sign keygen`
 6. **Vérifier la signature** :
-   - Lire l'archive `.smp` et le fichier `.sig`
+   - Lire l'archive `.SenMod` et le fichier `.sig`
    - Vérifier avec `ed25519.Verify(publicKey, archiveData, signature)`
 7. **Afficher le résultat** : ✓ Signature valide ou ✗ Signature invalide
 
 ###### Contraintes
 
-- L'archive `.smp` ET le fichier `.sig` doivent exister
+- L'archive `.SenMod` ET le fichier `.sig` doivent exister
 - La clé publique doit exister dans le keychain
 - En cas de signature invalide → afficher un message d'erreur explicite (possiblement archive corrompue ou clé incorrecte)
 
@@ -1120,7 +1120,7 @@ avant publication.
 
   ✓ Signature valide
     Module    : blog-manager v0.1.0
-    Archive   : .sentients/build/blog-manager-0.1.0.smp
+    Archive   : .sentients/build/blog-manager-0.1.0.SenMod
     Signataire : a1b2c3d4...
 ```
 
@@ -1132,7 +1132,7 @@ avant publication.
 
   ✗ Signature invalide
     Module   : blog-manager v0.1.0
-    Archive  : .sentients/build/blog-manager-0.1.0.smp
+    Archive  : .sentients/build/blog-manager-0.1.0.SenMod
     → L'archive a pu être modifiée ou la clé de vérification est incorrecte.
 ```
 
@@ -1189,7 +1189,7 @@ sentient-cli/
 
 sentient-cli-signing/
 ├── signing_public_key   # Clé publique Ed25519 (fingerprint du développeur)
-└── signing_private_key  # Clé privée Ed25519 (signature des archives .smp)
+└── signing_private_key  # Clé privée Ed25519 (signature des archives .SenMod)
 ```
 
 ---
@@ -1215,7 +1215,7 @@ sentient-cli-signing/
 
 ### 7.2 Chiffrement des archives
 
-- Les archives `.smp` ne contiennent **jamais** de credentials, tokens ou données sensibles
+- Les archives `.SenMod` ne contiennent **jamais** de credentials, tokens ou données sensibles
 - Le `manifest.json` ne contient que les métadonnées publiques du module
 - Le token UUID est un identifiant public, pas un secret
 
@@ -1329,8 +1329,8 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
 | `manifest` | JSON | oui | Contenu du `manifest.json` |
-| `checksum` | string | oui | SHA-256 hex de l'archive `.smp` |
-| `signature` | string | non | Signature Ed25519 (base64 du `.smp.sig`, vide si non signé) |
+| `checksum` | string | oui | SHA-256 hex de l'archive `.SenMod` |
+| `signature` | string | non | Signature Ed25519 (base64 du `.SenMod.sig`, vide si non signé) |
 | `size` | number | oui | Taille de l'archive en octets |
 
 ---
@@ -1574,7 +1574,7 @@ Suite E2E réelle (11 scripts txtar) : `01_help_version`, `02_init`, `02b_init_b
 | TC-020 | `sentients help` avec commande |
 | TC-021 | `sentients -v` affiche la version |
 | TC-022 | `sentients sign keygen` génère et stocke les clés Ed25519 |
-| TC-023 | `sentients sign <module>` signe l'archive `.smp` et produit un `.sig` |
+| TC-023 | `sentients sign <module>` signe l'archive `.SenMod` et produit un `.sig` |
 | TC-024 | `sentients sign verify <module>` vérifie une signature valide |
 | TC-025 | `sentients sign verify <module>` échoue sur archive modifiée ou signature invalide |
 
@@ -1617,7 +1617,7 @@ Product: sentient-cli v1.0.0
 │   │
 │   └── Epic E-008 : Signature numérique
 │       ├── Story S-019 : `sentients sign keygen` (génération clés Ed25519)
-│       ├── Story S-020 : `sentients sign <module>` (signature archive .smp)
+│       ├── Story S-020 : `sentients sign <module>` (signature archive .SenMod)
 │       └── Story S-021 : `sentients sign verify <module>` (vérification signature)
 │
 └── Release 0.3.0 (Qualité)
@@ -1644,7 +1644,7 @@ Product: sentient-cli v1.0.0
 | R-003 | Taille du binaire trop élevée | Faible | Faible | `ldflags -s -w`, UPX compression optionnelle |
 | R-004 | Breaking changes API `sentient-connect` | Faible | Élevé | Versioning API, détection automatique de la version |
 | R-005 | Conflits de noms de modules | Moyenne | Moyen | Validation stricte, vérification d'unicité avant création |
-| R-006 | Archive `.smp` corrompue ou falsifiée | Faible | Élevé | Signature numérique Ed25519 (`sentients sign`), vérification avant publication |
+| R-006 | Archive `.SenMod` corrompue ou falsifiée | Faible | Élevé | Signature numérique Ed25519 (`sentients sign`), vérification avant publication |
 | R-007 | MFA bloquant (appareil perdu) | Faible | Élevé | Backup codes, procédure de récupération via `sentient-connect` web |
 
 ---

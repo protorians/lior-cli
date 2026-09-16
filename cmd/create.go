@@ -15,17 +15,20 @@ import (
 var createCmd = &cobra.Command{
 	Use:   "create module [name]",
 	Short: "Create a new module",
-	Long: `Creates a new module in external_modules/ from the embedded
-hello-world mockup, renamed with the given module name: manifest.json,
+	Long: `Creates a new module in external_modules/{domain}/ from the embedded
+hello-world mockup, renamed with the given identifier (manifest.json,
 index.tsx, package.json, application/, domain/, infrastructure/,
-presentation/.
+presentation/).
 
-When the module declaration declares a uri/url, a page is also scaffolded
-in src/app/ from the embedded page mockup.
+Interactive creation asks for the module domain (reverse-DNS form like
+com.organization.domain), the identifier (kebab-case like hello-world),
+the application name, and optional version / icon / page url / description.
+The optional page url drives both the scaffolded src/app/{url}/ page and
+the manifest.json uri of the deployed module (default: the identifier).
 
 The module's unique UUID token is generated automatically.
 
-Usage : sentients create module [name]`,
+Usage : sentients create module [name] [--domain com.org.app] [--id hello-world]`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runCreate(cmd, args)
@@ -33,8 +36,15 @@ Usage : sentients create module [name]`,
 }
 
 var (
-	createMockup     string
-	createPageMockup string
+	createMockup      string
+	createPageMockup  string
+	createDomain      string
+	createID          string
+	createAppName     string
+	createVersion     string
+	createIcon        string
+	createURL         string
+	createDescription string
 )
 
 // createSkipInstallEnv disables the dependency installation step of
@@ -44,9 +54,17 @@ const createSkipInstallEnv = "SENTIENT_CLI_SKIP_INSTALL"
 func init() {
 	createCmd.Flags().StringVar(&createMockup, "mockup", "", i18n.T("create.flag.mockup"))
 	createCmd.Flags().StringVar(&createPageMockup, "page-mockup", "", i18n.T("create.flag.page_mockup"))
+	createCmd.Flags().StringVar(&createDomain, "domain", "", i18n.T("create.flag.domain"))
+	createCmd.Flags().StringVar(&createID, "id", "", i18n.T("create.flag.id"))
+	createCmd.Flags().StringVar(&createAppName, "name", "", i18n.T("create.flag.name"))
+	createCmd.Flags().StringVar(&createVersion, "version", "", i18n.T("create.flag.version"))
+	createCmd.Flags().StringVar(&createIcon, "icon", "", i18n.T("create.flag.icon"))
+	createCmd.Flags().StringVar(&createURL, "url", "", i18n.T("create.flag.url"))
+	createCmd.Flags().StringVar(&createDescription, "description", "", i18n.T("create.flag.description"))
 	i18nHelp(createCmd, "cmd.create.short", "cmd.create.long")
-	i18nFlag(createCmd, "mockup", "create.flag.mockup")
-	i18nFlag(createCmd, "page-mockup", "create.flag.page_mockup")
+	for _, name := range []string{"mockup", "page-mockup", "domain", "id", "name", "version", "icon", "url", "description"} {
+		i18nFlag(createCmd, name, "create.flag."+name)
+	}
 }
 
 func runCreate(cmd *cobra.Command, args []string) error {
@@ -63,31 +81,26 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	name := ""
-	if len(args) > 0 {
-		name = args[0]
-	}
-	if name == "" {
-		if !tui.IsInteractive() {
-			return pkg.NewError(i18n.T("cat.input"), i18n.T("create.error.no_name"), pkg.ExitError)
-		}
-		n, err := tui.AskText(i18n.T("create.prompt.name"), "")
-		if err != nil {
-			return err
-		}
-		name = strings.TrimSpace(n)
-	}
-	if err := module.ValidateName(name); err != nil {
-		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	spec := module.ModuleSpec{
+		Domain:      strings.TrimSpace(createDomain),
+		ID:          strings.TrimSpace(createID),
+		AppName:     strings.TrimSpace(createAppName),
+		Description: strings.TrimSpace(createDescription),
+		Version:     strings.TrimSpace(createVersion),
+		Icon:        strings.TrimSpace(createIcon),
+		URL:         strings.TrimSpace(createURL),
 	}
 
-	description := ""
-	if tui.IsInteractive() {
-		d, err := tui.AskText(i18n.T("create.prompt.description"), "")
-		if err != nil {
-			return err
+	// The positional argument is a convenience shorthand for the identifier.
+	if len(args) > 0 {
+		if spec.ID != "" && spec.ID != args[0] {
+			return pkg.NewError(i18n.T("cat.module"), i18n.T("create.error.id_conflict"), pkg.ExitError)
 		}
-		description = strings.TrimSpace(d)
+		spec.ID = args[0]
+	}
+
+	if err := collectCreateSpec(&spec); err != nil {
+		return err
 	}
 
 	creator := &module.Creator{Root: root, MockupDir: createMockup, PageMockup: createPageMockup}
@@ -97,7 +110,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	if createPageMockup != "" && !pkg.FileExists(createPageMockup) {
 		warn(i18n.Tf("create.warn.page_mockup_ignored", createPageMockup))
 	}
-	result, err := creator.Create(name, description)
+	result, err := creator.Create(spec)
 	if err != nil {
 		if module.IsExistsError(err) {
 			return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
@@ -155,5 +168,79 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		s.Info.Render("sentients publish"),
 	))
 	fmt.Println()
+	return nil
+}
+
+// collectCreateSpec completes the module spec with the interactive prompts
+// (domain and identifier first) and validates the final values.
+func collectCreateSpec(spec *module.ModuleSpec) error {
+	if tui.IsInteractive() {
+		// The domain and the identifier are asked first.
+		if spec.Domain == "" {
+			d, err := tui.AskText(i18n.T("create.prompt.domain"), "com.organization.domain")
+			if err != nil {
+				return err
+			}
+			spec.Domain = strings.TrimSpace(d)
+		}
+		if spec.ID == "" {
+			id, err := tui.AskText(i18n.T("create.prompt.id"), "")
+			if err != nil {
+				return err
+			}
+			spec.ID = strings.TrimSpace(id)
+		}
+		if spec.AppName == "" {
+			n, err := tui.AskText(i18n.T("create.prompt.app_name"), module.DisplayName(spec.ID))
+			if err != nil {
+				return err
+			}
+			spec.AppName = strings.TrimSpace(n)
+		}
+		if spec.Version == "" {
+			v, err := tui.AskText(i18n.T("create.prompt.version"), "0.0.0")
+			if err != nil {
+				return err
+			}
+			spec.Version = strings.TrimSpace(v)
+		}
+		if spec.Icon == "" {
+			icon, err := tui.AskText(i18n.T("create.prompt.icon"), "PuzzleIcon")
+			if err != nil {
+				return err
+			}
+			spec.Icon = strings.TrimSpace(icon)
+		}
+		if spec.URL == "" {
+			u, err := tui.AskText(i18n.T("create.prompt.url"), spec.ID)
+			if err != nil {
+				return err
+			}
+			spec.URL = strings.TrimSpace(u)
+		}
+		if spec.Description == "" {
+			desc, err := tui.AskText(i18n.T("create.prompt.description"), "")
+			if err != nil {
+				return err
+			}
+			spec.Description = strings.TrimSpace(desc)
+		}
+	}
+
+	if spec.Domain == "" {
+		return pkg.NewError(i18n.T("cat.module"), i18n.T("create.error.no_domain"), pkg.ExitError)
+	}
+	if err := module.ValidateDomain(spec.Domain); err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
+	if err := module.ValidateName(spec.ID); err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
+	if err := module.ValidateVersion(spec.Version); err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
+	if err := module.ValidateIcon(spec.Icon); err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
 	return nil
 }

@@ -29,7 +29,7 @@ func Fingerprint(pub ed25519.PublicKey) string {
 	return hex.EncodeToString(hash[:])
 }
 
-// SignArchive signs an .smp archive file and writes the signature to a .sig file.
+// SignArchive signs a .SenMod archive file and writes the signature to a .sig file.
 func SignArchive(archivePath string, privKey ed25519.PrivateKey) (string, error) {
 	data, err := os.ReadFile(archivePath)
 	if err != nil {
@@ -46,7 +46,7 @@ func SignArchive(archivePath string, privKey ed25519.PrivateKey) (string, error)
 	return sigPath, nil
 }
 
-// VerifySignature verifies a .sig file against an .smp archive.
+// VerifySignature verifies a .sig file against a .SenMod archive.
 func VerifySignature(archivePath, sigPath string, pubKey ed25519.PublicKey) (bool, error) {
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
@@ -93,12 +93,12 @@ func SaveKeyPair(store KeyStore, pub ed25519.PublicKey, priv ed25519.PrivateKey)
 	return nil
 }
 
-// FindArchive finds the .smp archive for a module in .sentients/build/.
+// FindArchive finds the .SenMod archive for a module in .sentients/build/.
 func FindArchive(root, moduleName, version string) (string, error) {
 	buildDir := config.BuildDir(root)
-	path := filepath.Join(buildDir, moduleName+"-"+version+".smp")
+	path := filepath.Join(buildDir, moduleName+"-"+version+config.ArchiveExt)
 	if !pkg.FileExists(path) {
-		return "", errors.New(i18n.Tf("sign.error.archive_not_found", moduleName+"-"+version+".smp", buildDir))
+		return "", errors.New(i18n.Tf("sign.error.archive_not_found", moduleName+"-"+version+config.ArchiveExt, buildDir))
 	}
 	return path, nil
 }

@@ -160,9 +160,19 @@ func (m *Manifest) Save(path string) error {
 	return pkg.WriteFile(path, data)
 }
 
-var kebabNameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
+var (
+	kebabNameRE = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
-// ValidateName checks a module name: kebab-case, 3–64 chars.
+	// domainRE matches a reverse-DNS dotted module domain
+	// (e.g. com.organization.domain): at least two lowercase labels of
+	// alphanumerics and hyphens (no leading/trailing hyphen, label ≤ 63 chars).
+	domainRE = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
+
+	// iconRE matches a lucide component name (PascalCase).
+	iconRE = regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
+)
+
+// ValidateName checks a module identifier: kebab-case, 3–64 chars.
 func ValidateName(name string) error {
 	if len(name) < 3 || len(name) > 64 {
 		return errors.New(i18n.T("module.error.name_length"))
@@ -171,6 +181,37 @@ func ValidateName(name string) error {
 		return errors.New(i18n.T("module.error.name_kebab"))
 	}
 	return nil
+}
+
+// ValidateDomain checks a module domain: a reverse-DNS dotted form like
+// `com.organization.domain`.
+func ValidateDomain(domain string) error {
+	if !domainRE.MatchString(domain) {
+		return errors.New(i18n.T("module.error.domain"))
+	}
+	return nil
+}
+
+// ValidateVersion checks an optional SemVer version. An empty version is
+// accepted (the creation default 0.0.0 applies).
+func ValidateVersion(version string) error {
+	if version == "" || isSemver(version) {
+		return nil
+	}
+	return errors.New(i18n.T("module.error.version"))
+}
+
+// ValidateIcon checks an optional lucide icon component name (PascalCase).
+func ValidateIcon(icon string) error {
+	if icon == "" || iconRE.MatchString(icon) {
+		return nil
+	}
+	return errors.New(i18n.T("module.error.icon"))
+}
+
+// DisplayName returns the Title Case display name of a kebab-case identifier.
+func DisplayName(name string) string {
+	return displayName(name)
 }
 
 func upperSnake(name string) string {

@@ -68,24 +68,24 @@ func IsModuleMockup(dir string) bool {
 }
 
 // scaffoldFromMockup copies a reference module directory into `moduleDir` and
-// rewrites every component/identifier carrying the mockup module name with
-// `name`.
-func scaffoldFromMockup(mockup, moduleDir, name, description string) error {
+// rewrites every component/identifier carrying the mockup module name with the
+// module spec (identifier for the naming).
+func scaffoldFromMockup(mockup, moduleDir string, spec ModuleSpec) error {
 	if err := pkg.CopyDir(mockup, moduleDir); err != nil {
 		return fmt.Errorf("failed to copy module mockup: %w", err)
 	}
 
-	if err := renameAndRewriteTree(moduleDir, moduleReplacements(name)); err != nil {
+	if err := renameAndRewriteTree(moduleDir, moduleReplacements(spec.ID)); err != nil {
 		return err
 	}
-	return finishScaffold(moduleDir, name, description)
+	return finishScaffold(moduleDir, spec)
 }
 
 // scaffoldEmbeddedModule writes the embedded reference mockup into `moduleDir`,
-// renaming components and identifiers with `name` and forcing the new module
-// identity onto the metadata files.
-func scaffoldEmbeddedModule(moduleDir, name, description string) error {
-	repls := moduleReplacements(name)
+// renaming components and identifiers with the module spec and forcing the new
+// module identity onto the metadata files.
+func scaffoldEmbeddedModule(moduleDir string, spec ModuleSpec) error {
+	repls := moduleReplacements(spec.ID)
 	if err := fs.WalkDir(embeddedTemplates, embeddedModulePrefix, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -112,19 +112,22 @@ func scaffoldEmbeddedModule(moduleDir, name, description string) error {
 	}); err != nil {
 		return err
 	}
-	return finishScaffold(moduleDir, name, description)
+	return finishScaffold(moduleDir, spec)
 }
 
-// finishScaffold applies the shared post-copy work: manifest identity, module
-// descriptions and the README.
-func finishScaffold(moduleDir, name, description string) error {
-	if err := patchManifestIdentity(moduleDir, name, description); err != nil {
+// finishScaffold applies the shared post-copy work: manifest/declaration
+// identity, descriptions and the README.
+func finishScaffold(moduleDir string, spec ModuleSpec) error {
+	if err := patchManifestIdentity(moduleDir, spec); err != nil {
 		return err
 	}
-	if err := patchDeclarationDescriptions(moduleDir, name, description); err != nil {
+	if err := patchDeclarationIdentity(moduleDir, spec); err != nil {
 		return err
 	}
-	if err := pkg.WriteString(filepath.Join(moduleDir, "README.md"), mockupReadmeTemplate(name, description)); err != nil {
+	if err := patchPackageDescription(moduleDir, spec); err != nil {
+		return err
+	}
+	if err := pkg.WriteString(filepath.Join(moduleDir, "README.md"), mockupReadmeTemplate(spec)); err != nil {
 		return fmt.Errorf("failed to write README.md: %w", err)
 	}
 	return nil
@@ -137,15 +140,16 @@ type moduleRepl struct {
 }
 
 // moduleReplacements maps every spelling of the mockup module name used in the
-// hello-world reference module onto its counterpart for `name`.
-func moduleReplacements(name string) []moduleRepl {
+// hello-world reference module onto its counterpart for `id` (the kebab-case
+// module identifier).
+func moduleReplacements(id string) []moduleRepl {
 	return []moduleRepl{
-		{old: "Hello World", new: displayName(name)},
-		{old: "HelloWorld", new: pascalName(name)},
-		{old: "helloWorld", new: camelName(name)},
-		{old: "hello-world", new: name},
-		{old: "HELLO_WORLD", new: upperSnake(name)},
-		{old: "helloworld", new: lowerName(name)},
+		{old: "Hello World", new: displayName(id)},
+		{old: "HelloWorld", new: pascalName(id)},
+		{old: "helloWorld", new: camelName(id)},
+		{old: "hello-world", new: id},
+		{old: "HELLO_WORLD", new: upperSnake(id)},
+		{old: "helloworld", new: lowerName(id)},
 	}
 }
 
@@ -206,24 +210,18 @@ func isTextFile(path string) bool {
 	return textExtensions[strings.ToLower(filepath.Ext(path))]
 }
 
-// effectiveDescription returns the description to write (trimmed). An empty
-// description is kept empty so the metadata stays "absent" for a later link.
-func effectiveDescription(name, description string) string {
-	return description
-}
-
 var (
 	manifestIDRe      = regexp.MustCompile(`("id"\s*:\s*"[^"]*")`)
 	jsonDescriptionRe = regexp.MustCompile(`("description"\s*:\s*)"[^"]*"`)
-	tsDescriptionLine = regexp.MustCompile(`(?m)^(\s*)(description:).*$`)
 	manifestTokenRe   = regexp.MustCompile(`"token":`)
 	declaredURIAttrRe = regexp.MustCompile(`(?m)^\s*(?:uri|url)\s*[:=]\s*['"]([^'"]+)['"]`)
 )
 
 // patchManifestIdentity ensures the scaffolded manifest.json carries the new
 // module identity: a unique UUID token (the mockup has none) and the provided
-// description (the mockup description is demo-specific).
-func patchManifestIdentity(moduleDir, name, description string) error {
+// spec metadata (identifier, domain, key, application name, description,
+// version, icon and url).
+func patchManifestIdentity(moduleDir string, spec ModuleSpec) error {
 	manifestPath := filepath.Join(moduleDir, config.ManifestFileName)
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
@@ -239,46 +237,101 @@ func patchManifestIdentity(moduleDir, name, description string) error {
 		text = strings.Replace(text, m, m+",\n  \"token\": \""+pkg.NewUUID()+"\"", 1)
 	}
 
-	if desc, err := json.Marshal(effectiveDescription(name, description)); err == nil {
-		text = jsonDescriptionRe.ReplaceAllString(text, "${1}"+string(desc))
+	text = patchJSONField(text, "id", spec.ID)
+	text = patchJSONField(text, "domain", spec.Domain)
+	text = patchJSONField(text, "key", upperSnake(spec.ID))
+	text = patchJSONField(text, "name", spec.AppName)
+	text = patchJSONField(text, "description", spec.Description)
+	text = patchJSONField(text, "version", spec.Version)
+	if spec.Icon != "" {
+		text = patchJSONField(text, "icon", spec.Icon)
 	}
+	text = patchJSONField(text, "uri", "/"+spec.URL)
+	text = patchJSONField(text, "url", "/"+spec.URL)
 
 	return pkg.WriteString(manifestPath, text)
 }
 
-// patchDeclarationDescriptions rewrites the demo description of the module
-// declaration (index.tsx) and package.json with the provided description.
-func patchDeclarationDescriptions(moduleDir, name, description string) error {
-	desc := effectiveDescription(name, description)
-
+// patchDeclarationIdentity rewrites the module declaration (index.tsx) identity
+// and menu fields of the scaffolded module.
+func patchDeclarationIdentity(moduleDir string, spec ModuleSpec) error {
 	indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
-	if data, err := os.ReadFile(indexPath); err == nil {
-		escaped := strings.ReplaceAll(desc, "'", `\'`)
-		updated := tsDescriptionLine.ReplaceAllString(string(data), "${1}${2} '"+escaped+"',")
-		if err := os.WriteFile(indexPath, []byte(updated), 0o644); err != nil {
-			return fmt.Errorf("failed to update %s: %w", indexPath, err)
-		}
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		return fmt.Errorf("failed to read scaffolded declaration: %w", err)
 	}
-
-	packagePath := filepath.Join(moduleDir, "package.json")
-	if pkg.FileExists(packagePath) {
-		data, err := os.ReadFile(packagePath)
-		if err != nil {
-			return fmt.Errorf("failed to read scaffolded package.json: %w", err)
-		}
-		descLit, _ := json.Marshal(desc)
-		updated := jsonDescriptionRe.ReplaceAllString(string(data), "${1}"+string(descLit))
-		if err := os.WriteFile(packagePath, []byte(updated), 0o644); err != nil {
-			return fmt.Errorf("failed to update package.json: %w", err)
-		}
+	text := string(data)
+	text = patchJSField(text, "identifier", spec.Domain)
+	text = patchJSField(text, "key", upperSnake(spec.ID))
+	text = patchJSField(text, "version", spec.Version)
+	text = patchJSField(text, "name", spec.AppName)
+	text = patchJSField(text, "description", spec.Description)
+	if spec.Icon != "" {
+		text = patchJSField(text, "icon", spec.Icon)
+	}
+	text = patchJSField(text, "uri", "/"+spec.URL)
+	text = patchJSField(text, "url", "/"+spec.URL)
+	if err := os.WriteFile(indexPath, []byte(text), 0o644); err != nil {
+		return fmt.Errorf("failed to update %s: %w", indexPath, err)
 	}
 	return nil
 }
 
-// scaffoldPage generates `src/app/<uri>/page.tsx` from a page mockup file when
-// the module declaration declares a `uri`/`url`. It returns the created page
-// path ("" when the declaration has no url or the mockup is unavailable).
-func scaffoldPage(root, moduleDir, name, pageMockup string) string {
+// patchPackageDescription updates the description of the scaffolded
+// package.json.
+func patchPackageDescription(moduleDir string, spec ModuleSpec) error {
+	packagePath := filepath.Join(moduleDir, "package.json")
+	if !pkg.FileExists(packagePath) {
+		return nil
+	}
+	data, err := os.ReadFile(packagePath)
+	if err != nil {
+		return fmt.Errorf("failed to read scaffolded package.json: %w", err)
+	}
+	descLit, _ := json.Marshal(spec.Description)
+	updated := jsonDescriptionRe.ReplaceAllString(string(data), "${1}"+strings.ReplaceAll(string(descLit), "$", "$$"))
+	if err := os.WriteFile(packagePath, []byte(updated), 0o644); err != nil {
+		return fmt.Errorf("failed to update package.json: %w", err)
+	}
+	return nil
+}
+
+// patchJSONField rewrites the value of a top-level JSON string field (fields at
+// the standard two-space indent, i.e. not nested). The value is JSON-encoded
+// before insertion. When the field is absent it is inserted as the new last
+// top-level field (right before the final closing brace of the manifest).
+func patchJSONField(text, field, value string) string {
+	re := regexp.MustCompile(`(?m)^ {2}"` + regexp.QuoteMeta(field) + `"\s*:\s*"[^"]*"`)
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return text
+	}
+	replacement := strings.ReplaceAll(string(encoded), "$", "$$")
+	if re.MatchString(text) {
+		return re.ReplaceAllString(text, `  "`+field+`": `+replacement)
+	}
+	lastBrace := regexp.MustCompile(`(?m)\n\}$`)
+	return lastBrace.ReplaceAllString(text, ",\n  \""+field+"\": "+replacement+"\n}")
+}
+
+// patchJSField rewrites a `field: 'value'` line of the declarative module
+// declaration (index.tsx), preserving the leading indentation and the trailing
+// comma. When the field is absent it is inserted as the last member of the
+// declarative object (before the closing brace that precedes `export default`).
+func patchJSField(text, field, value string) string {
+	re := regexp.MustCompile(`(?m)^(\s*)(?:` + regexp.QuoteMeta(field) + `):.*$`)
+	escaped := strings.ReplaceAll(value, "'", `\'`)
+	escaped = strings.ReplaceAll(escaped, "$", "$$")
+	if re.MatchString(text) {
+		return re.ReplaceAllString(text, "${1}"+field+": '"+escaped+"',")
+	}
+	closing := regexp.MustCompile(`\n}\n\nexport default`)
+	return closing.ReplaceAllString(text, "\n    "+field+": '"+escaped+"',\n}\n\nexport default")
+}
+
+// scaffoldPage generates `src/app/<url>/page.tsx` from a page mockup file.
+// It returns the created page path ("" when the mockup is unavailable).
+func scaffoldPage(root, moduleDir string, spec ModuleSpec, pageMockup string) string {
 	uri := declaredURI(filepath.Join(moduleDir, config.ModuleEntryFileName))
 	if uri == "" {
 		return ""
@@ -288,12 +341,12 @@ func scaffoldPage(root, moduleDir, name, pageMockup string) string {
 	if err != nil {
 		return ""
 	}
-	return writeScaffoldedPage(root, name, uri, applyReplacements(string(data), moduleReplacements(name)))
+	return writeScaffoldedPage(root, spec, rewritePageBody(string(data), spec))
 }
 
-// scaffoldEmbeddedPage generates `src/app/<uri>/page.tsx` from the embedded page
-// mockup, when the module declaration declares a `uri`/`url`.
-func scaffoldEmbeddedPage(root, moduleDir, name string) string {
+// scaffoldEmbeddedPage generates `src/app/<url>/page.tsx` from the embedded
+// page mockup.
+func scaffoldEmbeddedPage(root, moduleDir string, spec ModuleSpec) string {
 	uri := declaredURI(filepath.Join(moduleDir, config.ModuleEntryFileName))
 	if uri == "" {
 		return ""
@@ -303,16 +356,20 @@ func scaffoldEmbeddedPage(root, moduleDir, name string) string {
 	if err != nil {
 		return ""
 	}
-	return writeScaffoldedPage(root, name, uri, applyReplacements(string(data), moduleReplacements(name)))
+	return writeScaffoldedPage(root, spec, rewritePageBody(string(data), spec))
 }
 
-// writeScaffoldedPage writes a page body at `src/app/<uri>/page.tsx`.
-func writeScaffoldedPage(root, name, uri, body string) string {
-	pageDir := strings.Trim(uri, "/")
-	if pageDir == "" {
-		pageDir = name
-	}
-	pagePath := filepath.Join(root, config.AppSrcDir, pageDir, "page.tsx")
+// rewritePageBody renames the mockup components in a page body and rewrites the
+// module import path to the module domain
+// (`@/external_modules/<domain>/...`).
+func rewritePageBody(body string, spec ModuleSpec) string {
+	body = applyReplacements(body, moduleReplacements(spec.ID))
+	return strings.ReplaceAll(body, "external_modules/"+spec.ID+"/", "external_modules/"+spec.Domain+"/")
+}
+
+// writeScaffoldedPage writes a page body at `src/app/<url>/page.tsx`.
+func writeScaffoldedPage(root string, spec ModuleSpec, body string) string {
+	pagePath := filepath.Join(root, config.AppSrcDir, spec.URL, "page.tsx")
 	if err := pkg.WriteString(pagePath, body); err != nil {
 		return ""
 	}
@@ -334,13 +391,13 @@ func declaredURI(indexPath string) string {
 }
 
 // mockupReadmeTemplate documents a module scaffolded from the reference mockup.
-func mockupReadmeTemplate(name, description string) string {
+func mockupReadmeTemplate(spec ModuleSpec) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("# %s\n\n", displayName(name)))
-	if desc := effectiveDescription(name, description); desc != "" {
+	b.WriteString(fmt.Sprintf("# %s\n\n", spec.AppName))
+	if desc := spec.Description; desc != "" {
 		b.WriteString(desc + "\n\n")
 	}
-	b.WriteString(fmt.Sprintf("Sentient module `%s`.\n\n", name))
+	b.WriteString(fmt.Sprintf("Sentient module `%s` (`%s`).\n\n", spec.Domain, spec.ID))
 	b.WriteString("## Structure\n\n")
 	b.WriteString("- `manifest.json` — module metadata\n")
 	b.WriteString("- `index.tsx` — module declaration (identifier, widgets, service, routines, uri)\n")

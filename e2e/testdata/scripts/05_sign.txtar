@@ -2,8 +2,8 @@ mkdir project
 cd project
 mkdir external_modules
 exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
-exec $SENTIENTS --no-color create module blog-manager
-exec $SENTIENTS --no-color pack blog-manager
+exec $SENTIENTS --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec $SENTIENTS --no-color pack com.example.blog-manager
 
 # TC-022 — `sign keygen` generates the Ed25519 pair (file vault, isolated HOME).
 exec $SENTIENTS --no-color sign keygen
@@ -17,21 +17,21 @@ stdout 'Developer signing key:'
 stdout 'Fingerprint'
 
 # TC-023 — `sign <module>` signs the archive and produces a 64-byte .sig.
-exec $SENTIENTS --no-color sign blog-manager
+exec $SENTIENTS --no-color sign com.example.blog-manager
 stdout '✓ Archive signed successfully'
-exists .sentients/build/blog-manager-1.0.0.smp.sig
-exec sh -c 'wc -c < .sentients/build/blog-manager-1.0.0.smp.sig'
+exists .sentients/build/com.example.blog-manager-1.0.0.SenMod.sig
+exec sh -c 'wc -c < .sentients/build/com.example.blog-manager-1.0.0.SenMod.sig'
 stdout '^[[:space:]]*64[[:space:]]*$'
 
 # TC-024 — `sign verify` accepts a valid signature.
-exec $SENTIENTS --no-color sign verify blog-manager
+exec $SENTIENTS --no-color sign verify com.example.blog-manager
 stdout '✓ Valid signature'
 
 # TC-025 — tampered archive: verification fails (exit 12), after re-pack to
 # start from a healthy archive.
-exec $SENTIENTS --no-color pack blog-manager
-exec sh -c 'printf "x" >> .sentients/build/blog-manager-1.0.0.smp'
-! exec $SENTIENTS --no-color sign verify blog-manager
+exec $SENTIENTS --no-color pack com.example.blog-manager
+exec sh -c 'printf "x" >> .sentients/build/com.example.blog-manager-1.0.0.SenMod'
+! exec $SENTIENTS --no-color sign verify com.example.blog-manager
 stderr 'invalid signature'
-exec sh -c '"$SENTIENTS" --no-color sign verify blog-manager >/dev/null 2>&1; echo $?'
+exec sh -c '"$SENTIENTS" --no-color sign verify com.example.blog-manager >/dev/null 2>&1; echo $?'
 stdout '^12$'

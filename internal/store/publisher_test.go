@@ -152,7 +152,7 @@ func TestGetModuleNotFound(t *testing.T) {
 }
 
 func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "test-module-0.1.0.smp")
+	archivePath := filepath.Join(t.TempDir(), "test-module-0.1.0.SenMod")
 	if err := os.WriteFile(archivePath, []byte("fake-zip-content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 				http.Error(w, "manifest id = "+m.ID, http.StatusBadRequest)
 				return
 			}
-			raiton(w, http.StatusCreated, `{"url":"https://cdn.sentient.dev/artifacts/prod-new/version-1.smp","key":"prod-new/version-1","checksum":"`+body.Checksum+`","sizeBytes":17}`)
+			raiton(w, http.StatusCreated, `{"url":"https://cdn.sentient.dev/artifacts/prod-new/version-1.SenMod","key":"prod-new/version-1","checksum":"`+body.Checksum+`","sizeBytes":17}`)
 		default:
 			http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
 		}
@@ -234,7 +234,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 	if resp.Version != "0.1.0" {
 		t.Errorf("Version = %q, want 0.1.0", resp.Version)
 	}
-	if resp.URL != "https://cdn.sentient.dev/artifacts/prod-new/version-1.smp" {
+	if resp.URL != "https://cdn.sentient.dev/artifacts/prod-new/version-1.SenMod" {
 		t.Errorf("URL = %q, want CDN URL", resp.URL)
 	}
 	if len(calls) != 3 {
@@ -243,7 +243,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 }
 
 func TestPublishReusesLinkedProduct(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "m-0.1.0.smp")
+	archivePath := filepath.Join(t.TempDir(), "m-0.1.0.SenMod")
 	if err := os.WriteFile(archivePath, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -288,14 +288,14 @@ func TestPublishMissingArchive(t *testing.T) {
 	client := testClient(server.URL)
 	manifest := module.NewManifest("mod", "")
 	manifest.Token = ""
-	_, err := client.Publish(t.Context(), "/nonexistent/archive.smp", &manifest)
+	_, err := client.Publish(t.Context(), "/nonexistent/archive.SenMod", &manifest)
 	if err == nil {
 		t.Error("Publish doit échouer avec un fichier inexistant")
 	}
 }
 
 func TestPublishServerError(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "mod.smp")
+	archivePath := filepath.Join(t.TempDir(), "mod.SenMod")
 	if err := os.WriteFile(archivePath, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}

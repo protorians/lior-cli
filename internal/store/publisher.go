@@ -302,7 +302,7 @@ func (c *Client) declareArtifact(ctx context.Context, productID, versionID, arch
 	return &out, nil
 }
 
-// artifactSignature base64-encodes the `.smp.sig` signature file when present
+// artifactSignature base64-encodes the `.SenMod.sig` signature file when present
 // (produced by `sentients sign`). The signature stays empty when absent.
 func artifactSignature(archivePath string) (string, error) {
 	raw, err := os.ReadFile(archivePath + ".sig")
