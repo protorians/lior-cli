@@ -154,8 +154,8 @@ jobs:
   publish-npm:
     name: Publish @sentients/cli to npm
     runs-on: ubuntu-latest
-    needs: release
-    if: needs.release.result == 'success' && needs.prepare.outputs.prerelease != 'true'
+    needs: [release, prepare]
+    if: needs.release.result == 'success'
     steps:
       - uses: actions/checkout@v5
 
@@ -163,6 +163,21 @@ jobs:
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve npm dist-tag
+        id: dist-tag
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          if [[ "${PRERELEASE}" == "true" ]]; then
+            TAG="${VERSION#*-}"
+            TAG="${TAG%%[.-]*}"
+          else
+            TAG="latest"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "::notice::npm dist-tag: ${TAG}"
 
       - name: Check NPM_TOKEN presence
         id: npm-token
@@ -186,6 +201,6 @@ jobs:
       - name: Publish to npm
         if: steps.npm-token.outputs.available == 'true'
         working-directory: npm/sentient-cli
-        run: npm publish --access public
+        run: npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
