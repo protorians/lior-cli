@@ -15,6 +15,7 @@ const (
 	ExitBuild          = 10
 	ExitPublish        = 11
 	ExitSigning        = 12
+	ExitCancelled      = 130 // operation cancelled by the user (128 + SIGINT)
 )
 
 // Error is a categorized CLI error rendered as

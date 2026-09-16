@@ -1,13 +1,19 @@
 package debug
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
+	"github.com/protorians/sentient-cli/internal/tui"
 )
 
 func createTestModule(t *testing.T, root, id string) {
@@ -45,6 +51,192 @@ func TestDebugModuleValid(t *testing.T) {
 	}
 }
 
+func TestDebugModuleCtxCancelled(t *testing.T) {
+	root := setupDebugProject(t)
+	createTestModule(t, root, "my-module")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test.my-module")
+	if err := os.WriteFile(filepath.Join(moduleDir, "package.json"),
+		[]byte(`{"scripts":{"build":"echo hi"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pathShim := t.TempDir()
+	writeFakeBin(t, filepath.Join(pathShim, "bun"))
+	t.Setenv("PATH", pathShim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	debugger := &Debugger{Root: root}
+	result, err := debugger.DebugModuleCtx(ctx, "com.test.my-module")
+	if !errors.Is(err, tui.ErrCancelled) {
+		t.Fatalf("err = %v, want tui.ErrCancelled", err)
+	}
+	if result == nil || result.Status != "CANCELLED" {
+		t.Fatalf("status = %v, want CANCELLED", result)
+	}
+}
+
+// writeSleepingBun writes a fake package manager that prints a line then
+// blocks, standing in for a dev server / watcher.
+func writeSleepingBun(t *testing.T, path, line string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\nif [ \"$1\" = \"run\" ]; then echo \"" + line + "\"; sleep 30; fi\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDebugModuleDevScriptStopsAfterWindow(t *testing.T) {
+	root := setupDebugProject(t)
+	createTestModule(t, root, "my-module")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test.my-module")
+	if err := os.WriteFile(filepath.Join(moduleDir, "package.json"),
+		[]byte(`{"scripts":{"dev":"vite"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pathShim := t.TempDir()
+	writeSleepingBun(t, filepath.Join(pathShim, "bun"), "ready on :5173")
+	t.Setenv("PATH", pathShim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	debugger := &Debugger{Root: root, Timeout: 1500 * time.Millisecond}
+	start := time.Now()
+	result, err := debugger.DebugModule("com.test.my-module")
+	if err != nil {
+		t.Fatalf("DebugModule: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 6*time.Second {
+		t.Fatalf("un script dev doit être arrêté après sa fenêtre, durée %s", elapsed)
+	}
+	if result.Status != "OK" {
+		t.Errorf("status = %q, want OK", result.Status)
+	}
+
+	buildNotice := false
+	for _, s := range result.Steps {
+		if s.ID == "build:com.test.my-module" && s.Status == tui.StatusNotice {
+			buildNotice = true
+		}
+	}
+	if !buildNotice {
+		t.Errorf("attendu une étape build en notice pour le script dev arrêté : %v", result.Steps)
+	}
+}
+
+func TestRunStreamCapturesOutput(t *testing.T) {
+	d := &Debugger{}
+	var mu sync.Mutex
+	var lines []string
+	out := d.runStream(context.Background(), t.TempDir(),
+		[]string{"sh", "-c", "echo first; echo second"},
+		0, 5*time.Second, func(s string) {
+			mu.Lock()
+			lines = append(lines, s)
+			mu.Unlock()
+		})
+	if out.err != nil {
+		t.Fatalf("outcome = %+v, want success", out)
+	}
+	got := strings.Join(lines, "\n")
+	for _, want := range []string{"first", "second"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("sortie non capturée %q : %v", want, lines)
+		}
+	}
+}
+
+func TestRunStreamStartWindowStopsScript(t *testing.T) {
+	d := &Debugger{}
+	out := d.runStream(context.Background(), t.TempDir(),
+		[]string{"sh", "-c", "sleep 30"}, 500*time.Millisecond, 0, func(string) {})
+	if !out.started {
+		t.Fatalf("outcome = %+v, want started", out)
+	}
+}
+
+func TestRunStreamTimeoutMarksTimedOut(t *testing.T) {
+	d := &Debugger{}
+	out := d.runStream(context.Background(), t.TempDir(),
+		[]string{"sh", "-c", "sleep 30"}, 0, 300*time.Millisecond, func(string) {})
+	if !out.timedOut {
+		t.Fatalf("outcome = %+v, want timedOut", out)
+	}
+}
+
+func TestDebugModuleBuildTimeoutFails(t *testing.T) {
+	root := setupDebugProject(t)
+	createTestModule(t, root, "my-module")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test.my-module")
+	if err := os.WriteFile(filepath.Join(moduleDir, "package.json"),
+		[]byte(`{"scripts":{"build":"tsc"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	pathShim := t.TempDir()
+	writeSleepingBun(t, filepath.Join(pathShim, "bun"), "compiling")
+	t.Setenv("PATH", pathShim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	debugger := &Debugger{Root: root, Timeout: 300 * time.Millisecond}
+	result, err := debugger.DebugModule("com.test.my-module")
+	if err != nil {
+		t.Fatalf("DebugModule: %v", err)
+	}
+	if result.Status != "ERROR" {
+		t.Errorf("status = %q, want ERROR (build dépassé)", result.Status)
+	}
+}
+
+func TestDebugModuleReportsAndRecordsSteps(t *testing.T) {
+	root := setupDebugProject(t)
+	createTestModule(t, root, "my-module")
+
+	var reported []Step
+	debugger := &Debugger{Root: root, Reporter: func(s Step) { reported = append(reported, s) }}
+	result, err := debugger.DebugModule("com.test.my-module")
+	if err != nil {
+		t.Fatalf("DebugModule: %v", err)
+	}
+	if len(reported) == 0 {
+		t.Fatal("l'exécution doit rapporter des étapes en direct")
+	}
+	if len(result.Steps) == 0 {
+		t.Fatal("l'exécution doit enregistrer des étapes pour le résumé")
+	}
+
+	// The validation stage is surfaced live as a single aggregate line.
+	validation := false
+	for _, s := range reported {
+		if s.Label == i18n.T("debug.step.validate") {
+			validation = true
+		}
+	}
+	if !validation {
+		t.Errorf("étape de validation absente du flux : %v", reported)
+	}
+}
+
+func TestDebugModuleSummaryCountsWarningFinding(t *testing.T) {
+	root := setupDebugProject(t)
+	createTestModule(t, root, "my-module")
+
+	debugger := &Debugger{Root: root}
+	result, err := debugger.DebugModule("com.test.my-module")
+	if err != nil {
+		t.Fatalf("DebugModule: %v", err)
+	}
+
+	// A freshly created module carries a domain warning, so the recap must
+	// report at least one warning even though the overall status stays OK.
+	counts := tui.Summarize(result.Steps)
+	if counts[tui.StatusWarning] == 0 {
+		t.Errorf("le résumé doit compter l'avertissement de domaine : %v", result.Steps)
+	}
+}
+
 func TestDebugModuleMissing(t *testing.T) {
 	root := setupDebugProject(t)
 	debugger := &Debugger{Root: root}
@@ -76,6 +268,10 @@ func TestDebugModuleInvalidManifest(t *testing.T) {
 	}
 	if result.Errors == 0 {
 		t.Error("Errors doit être > 0 pour un manifest invalide")
+	}
+	counts := tui.Summarize(result.Steps)
+	if counts[tui.StatusError] == 0 {
+		t.Errorf("le résumé doit compter au moins une erreur : %v", result.Steps)
 	}
 }
 

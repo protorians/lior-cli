@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.8.0] - 2026-09-16
+
+### Added
+- **`debug` pas-à-pas et résumé de sévérité** — `sentients debug [module]` rapporte désormais chaque étape (validation, détection du gestionnaire de paquets, résolution de la commande de build, exécution) au fur et à mesure de sa complétion, et clôt l'exécution par un récapitulatif par sévérité (succès, notice, avertissement, erreur, obsolète). Les findings de validation et les replis (bundler, `tsc`) sont comptés distinctement.
+- **Sortie de build en temps réel** — les commandes de build diffusent leur `stdout`/`stderr` ligne par ligne sous une étape « en cours » (`RUNNING`), qui montre la sous-tâche active et sa queue de sortie avant de basculer vers un statut terminal.
+- **Fenêtre d'exécution `--timeout`** — un script `debug`/`dev` (serveur/watch qui ne se termine jamais) est arrêté après une fenêtre de démarrage (15 s par défaut) et signalé comme démarré ; un build one-shot est plafonné (5 min par défaut). `--timeout` ajuste les deux.
+- **Annulation avec confirmation** — `Ctrl+C` (ou `Esc`, ou `SIGINT` en mode non interactif) annule le débogage : l'arbre de process du build est arrêté (SIGINT puis SIGKILL du groupe), une carte de confirmation est affichée et le code de sortie `130` est retourné.
+
+### Changed
+- **`debug` ne bloque plus sur un serveur dev** — les commandes étaient exécutées via `CombinedOutput` (sortie tamponnée, aucune information pendant l'exécution, blocage infini) ; elles s'exécutent désormais en streaming dans un groupe de process dédié (`internal/debug/proc_unix.go` / `proc_windows.go`).
+- **Trace TUI** — introduction d'un vocabulaire d'étapes partagé (`internal/tui/step.go`) : statuts `RUNNING`/`SUCCESS`/`NOTICE`/`WARNING`/`ERROR`/`DEPRECATED`, mise à jour d'une étape en place par identifiant, et rendu live du tail de sortie.
+
 ## [v0.7.0] - 2026-09-16
 
 ### Added

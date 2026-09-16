@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/protorians/sentient-cli/internal/debug"
 	"github.com/protorians/sentient-cli/internal/i18n"
@@ -10,6 +13,8 @@ import (
 	"github.com/protorians/sentient-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
+
+var debugTimeout time.Duration
 
 var debugCmd = &cobra.Command{
 	Use:   "debug [module]",
@@ -27,6 +32,8 @@ Without an argument, all modules are debugged.`,
 }
 
 func init() {
+	debugCmd.Flags().DurationVar(&debugTimeout, "timeout", 0, i18n.T("debug.flag.timeout"))
+	i18nFlag(debugCmd, "timeout", "debug.flag.timeout")
 	i18nHelp(debugCmd, "cmd.debug.short", "cmd.debug.long")
 }
 
@@ -36,7 +43,7 @@ func runDebug(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	debugger := &debug.Debugger{Root: root}
+	debugger := &debug.Debugger{Root: root, Timeout: debugTimeout}
 
 	if len(args) > 0 {
 		return runDebugSingle(debugger, args[0])
@@ -45,9 +52,13 @@ func runDebug(cmd *cobra.Command, args []string) error {
 }
 
 func runDebugSingle(debugger *debug.Debugger, name string) error {
-	result, err := tui.RunWithSpinner(i18n.Tf("debug.spinner.single", name), func() (*debug.DebugResult, error) {
-		return debugger.DebugModule(name)
+	result, err := tui.RunWithSteps(i18n.Tf("debug.spinner.single", name), func(ctx context.Context, report func(tui.Step)) (*debug.DebugResult, error) {
+		debugger.Reporter = report
+		return debugger.DebugModuleCtx(ctx, name)
 	})
+	if errors.Is(err, tui.ErrCancelled) {
+		return pkg.NewError(i18n.T("cat.debug"), i18n.T("debug.cancelled"), pkg.ExitCancelled)
+	}
 	if err != nil {
 		return pkg.NewError(i18n.T("cat.debug"), err.Error(), pkg.ExitBuild)
 	}
@@ -57,9 +68,13 @@ func runDebugSingle(debugger *debug.Debugger, name string) error {
 }
 
 func runDebugAll(debugger *debug.Debugger) error {
-	results, err := tui.RunWithSpinner(i18n.T("debug.spinner.all"), func() ([]*debug.DebugResult, error) {
-		return debugger.DebugAll()
+	results, err := tui.RunWithSteps(i18n.T("debug.spinner.all"), func(ctx context.Context, report func(tui.Step)) ([]*debug.DebugResult, error) {
+		debugger.Reporter = report
+		return debugger.DebugAllCtx(ctx)
 	})
+	if errors.Is(err, tui.ErrCancelled) {
+		return pkg.NewError(i18n.T("cat.debug"), i18n.T("debug.cancelled"), pkg.ExitCancelled)
+	}
 	if err != nil {
 		return pkg.NewError(i18n.T("cat.debug"), err.Error(), pkg.ExitBuild)
 	}
@@ -68,6 +83,7 @@ func runDebugAll(debugger *debug.Debugger) error {
 	fmt.Println()
 
 	t := tui.NewTable([]string{i18n.T("label.module"), i18n.T("label.status"), i18n.T("label.errors")})
+	var steps []tui.Step
 	for _, r := range results {
 		status := s.Success.Render("✓ " + r.Status)
 		if r.Status == "ERROR" {
@@ -76,6 +92,7 @@ func runDebugAll(debugger *debug.Debugger) error {
 			status = s.Warning.Render("⚠ " + r.Status)
 		}
 		t.AddRow(r.Module, status, fmt.Sprintf("%d", r.Errors))
+		steps = append(steps, r.Steps...)
 	}
 
 	fmt.Print(t.Render())
@@ -88,6 +105,10 @@ func runDebugAll(debugger *debug.Debugger) error {
 			fmt.Println()
 		}
 	}
+
+	// Closing recap: severity breakdown of the whole run.
+	fmt.Println(s.SummaryBlock(tui.Summarize(steps)))
+	fmt.Println()
 
 	return nil
 }
@@ -117,6 +138,10 @@ func printDebugResult(result *debug.DebugResult) {
 		logs := debug.FormatDebugLogs(result.Module, result.Logs)
 		fmt.Println(s.LogsBlock(i18n.T("debug.logs"), logs))
 	}
+
+	// Closing recap: success / notice / warning / error / deprecated breakdown.
+	fmt.Println()
+	fmt.Println(s.SummaryBlock(tui.Summarize(result.Steps)))
 
 	fmt.Println()
 }

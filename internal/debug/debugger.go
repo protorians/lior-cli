@@ -1,20 +1,44 @@
 package debug
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/protorians/sentient-cli/internal/config"
 	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/sentient-cli/internal/tui"
 )
+
+// Default execution windows (overridable via Debugger.Timeout).
+const (
+	// startWindow is how long a `debug`/`dev` script is allowed to run before
+	// it is considered started and stopped (those scripts are dev servers /
+	// watchers that never exit on their own).
+	startWindow = 15 * time.Second
+	// buildTimeout caps one-shot build commands so a stuck build cannot hang
+	// the CLI forever.
+	buildTimeout = 5 * time.Minute
+	// outputTail is the number of recent output lines kept for a running step.
+	outputTail = 8
+	// outputLogCap bounds the output retained in the final log block.
+	outputLogCap = 200
+)
+
+// Step is a single reported execution step (the tui step vocabulary: success,
+// notice, warning, error, deprecated).
+type Step = tui.Step
 
 // DebugResult holds the outcome of a debug run for a single module.
 type DebugResult struct {
@@ -22,15 +46,66 @@ type DebugResult struct {
 	Status string
 	Errors int
 	Logs   []string
+	// Steps is the ordered trace of the stages executed for this module.
+	Steps []Step
 }
 
 // Debugger runs debug builds for modules.
 type Debugger struct {
 	Root string
+	// Reporter, when set, receives every execution step as it happens so the
+	// caller can surface a live, step-by-step trace.
+	Reporter func(Step)
+	// Timeout, when > 0, overrides the default execution windows: it is the
+	// window after which a `debug`/`dev` script is considered started, and the
+	// hard cap for a one-shot build command.
+	Timeout time.Duration
+}
+
+// startWindow returns the effective window for a start script.
+func (d *Debugger) startWindow() time.Duration {
+	if d.Timeout > 0 {
+		return d.Timeout
+	}
+	return startWindow
+}
+
+// buildTimeout returns the effective cap for a one-shot build command.
+func (d *Debugger) buildTimeout() time.Duration {
+	if d.Timeout > 0 {
+		return d.Timeout
+	}
+	return buildTimeout
+}
+
+// emit records a step on the result and forwards it to the live reporter.
+func (d *Debugger) emit(result *DebugResult, step Step) {
+	result.Steps = append(result.Steps, step)
+	d.report(step)
+}
+
+// report forwards a step to the live reporter without counting it in the
+// end-of-run summary (used for organizational lines such as module headers).
+func (d *Debugger) report(step Step) {
+	if d.Reporter != nil {
+		d.Reporter(step)
+	}
+}
+
+// record counts a step in the end-of-run summary without rendering it live
+// (used to break the validation aggregate down into its findings).
+func (d *Debugger) record(result *DebugResult, step Step) {
+	result.Steps = append(result.Steps, step)
 }
 
 // DebugModule runs a debug build of a single module.
 func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
+	return d.DebugModuleCtx(context.Background(), name)
+}
+
+// DebugModuleCtx runs a debug build of a single module, cancelling the
+// underlying build command when ctx is done.
+func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResult, error) {
 	moduleDir := filepath.Join(d.Root, config.ExternalModulesDir, name)
 	if !pkg.DirExists(moduleDir) {
 		return nil, errors.New(i18n.Tf("val.module_not_found", name, config.ExternalModulesDir))
@@ -38,78 +113,268 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 
 	result := &DebugResult{Module: name}
 
-	// Validate first
+	// Step 1 — validate the module against the Sentient rules.
 	v := &module.Validator{Root: d.Root}
 	res, err := v.ValidateModule(name)
 	if err != nil {
 		return nil, err
 	}
 
+	valStatus := tui.StatusSuccess
+	switch {
+	case res.HasErrors():
+		valStatus = tui.StatusError
+	case res.WarningCount() > 0:
+		valStatus = tui.StatusWarning
+	}
+	// Live trace: a single line summarizing the whole validation stage.
+	d.report(Step{
+		Label:  i18n.T("debug.step.validate"),
+		Status: valStatus,
+		Detail: i18n.Tf("debug.step.validate.detail", res.ErrorCount(), res.WarningCount()),
+	})
+
+	// Recap: each failing/warning rule contributes its own severity so the
+	// summary stays accurate, while the rules are also surfaced as log lines.
+	findings := 0
+	for _, f := range res.Findings {
+		switch f.Severity {
+		case module.LevelError:
+			d.record(result, Step{Label: f.Message, Status: tui.StatusError})
+		case module.LevelWarning:
+			d.record(result, Step{Label: f.Message, Status: tui.StatusWarning})
+		default:
+			continue
+		}
+		findings++
+		result.Logs = append(result.Logs, fmt.Sprintf("[%s] %s: %s", f.Severity, f.Rule, f.Message))
+	}
+	if findings == 0 {
+		d.record(result, Step{Label: i18n.T("debug.step.validate"), Status: tui.StatusSuccess})
+	}
+
 	if res.HasErrors() {
 		result.Status = "ERROR"
 		result.Errors = res.ErrorCount()
-		for _, f := range res.Findings {
-			if f.Severity == module.LevelError {
-				result.Logs = append(result.Logs, fmt.Sprintf("[%s] %s", f.Rule, f.Message))
-			}
-		}
 		return result, nil
 	}
 
-	// Try to run the build command if available
+	// Step 2 — detect the package manager (bun → pnpm → yarn → npm).
 	pm := d.detectPackageManager()
 	if pm == "" {
 		result.Status = "WARNING"
+		d.emit(result, Step{
+			Label:  i18n.T("debug.step.package_manager"),
+			Status: tui.StatusWarning,
+			Detail: i18n.T("debug.step.package_manager.none"),
+		})
 		result.Logs = append(result.Logs, i18n.T("debug.npm_none"))
 		return result, nil
 	}
+	d.emit(result, Step{
+		Label:  i18n.T("debug.step.package_manager"),
+		Status: tui.StatusSuccess,
+		Detail: i18n.Tf("debug.step.package_manager.detail", pm),
+	})
 
-	// Look for a debug or build script, preferring the module's own
-	// package.json over the project root one.
+	// Step 3 — resolve the build command. Look for a debug or build script,
+	// preferring the module's own package.json over the project root one.
 	build := d.findBuildCommand(pm, moduleDir)
+	resolveStatus := tui.StatusSuccess
 	if build == nil {
 		// Fallback to a real bundle when a bundler (esbuild/tsup) is
 		// resolvable — beyond the package.json scripts (spec §5.9 "Exécuter
 		// le build du module"): this compiles the module entry to real
 		// output under `dist/` instead of a type-check.
 		build = d.findBundlerBuildCommand(moduleDir)
+		if build != nil {
+			resolveStatus = tui.StatusNotice
+		}
 	}
 	if build == nil {
 		// Fallback to a real TypeScript type-check when the module contains
 		// TS/TSX sources and a tsconfig + tsc are resolvable.
 		build = d.findTypeCheckCommand(moduleDir)
-	}
-	if build != nil {
-		output, err := d.runCommand(build.dir, build.cmd)
-		if err != nil {
-			result.Status = "ERROR"
-			result.Errors++
-			result.Logs = append(result.Logs, i18n.Tf("debug.build_error", err.Error()))
-			if output != "" {
-				result.Logs = append(result.Logs, output)
-			}
-		} else {
-			result.Status = "OK"
-			if build.realBuild {
-				result.Logs = append(result.Logs, i18n.Tf("debug.bundler", build.label, build.outDir))
-			}
-			if output != "" {
-				result.Logs = append(result.Logs, output)
-			}
+		if build != nil {
+			resolveStatus = tui.StatusNotice
 		}
-	} else {
+	}
+	if build == nil {
 		// No build script, bundler or type-check: the validation above is the
 		// only thing executed — this must not be reported as a successful build
 		// (previously a false "OK" hid the absence of any real compilation).
 		result.Status = "WARNING"
+		d.emit(result, Step{
+			Label:  i18n.T("debug.step.resolve"),
+			Status: tui.StatusWarning,
+			Detail: i18n.T("debug.step.resolve.none"),
+		})
 		result.Logs = append(result.Logs, i18n.T("debug.no_build_script"))
+		return result, nil
+	}
+	d.emit(result, Step{
+		Label:  i18n.T("debug.step.resolve"),
+		Status: resolveStatus,
+		Detail: strings.Join(build.cmd, " "),
+	})
+
+	// Step 4 — run the resolved build command, streaming its output live so the
+	// sub-task in progress (and any failure) is visible in real time.
+	buildStepID := "build:" + name
+	baseDetail := strings.Join(build.cmd, " ")
+	if build.realBuild {
+		baseDetail = i18n.Tf("debug.bundler", build.label, build.outDir)
+	}
+	d.report(Step{
+		ID:     buildStepID,
+		Label:  i18n.T("debug.step.build"),
+		Status: tui.StatusRunning,
+		Detail: baseDetail,
+	})
+
+	var (
+		mu    sync.Mutex
+		lines []string
+	)
+	onLine := func(line string) {
+		mu.Lock()
+		lines = append(lines, line)
+		if len(lines) > outputLogCap {
+			lines = lines[len(lines)-outputLogCap:]
+		}
+		tail := lastN(lines, outputTail)
+		mu.Unlock()
+		d.report(Step{
+			ID:     buildStepID,
+			Label:  i18n.T("debug.step.build"),
+			Status: tui.StatusRunning,
+			Detail: baseDetail,
+			Output: tail,
+		})
+	}
+
+	window := time.Duration(0)
+	if build.startScript {
+		window = d.startWindow()
+	}
+	outcome := d.runStream(ctx, build.dir, build.cmd, window, d.buildTimeout(), onLine)
+
+	mu.Lock()
+	output := strings.Join(lines, "\n")
+	tail := lastN(lines, outputTail)
+	mu.Unlock()
+
+	if ctx.Err() != nil {
+		result.Status = "CANCELLED"
+		d.emit(result, Step{
+			ID:     buildStepID,
+			Label:  i18n.T("debug.step.cancelled"),
+			Status: tui.StatusWarning,
+			Output: tail,
+		})
+		return result, tui.ErrCancelled
+	}
+
+	switch {
+	case outcome.started:
+		// A dev/watch script is not expected to exit: reaching the window
+		// proves it started, so stop it and report a benign notice.
+		result.Status = "OK"
+		d.emit(result, Step{
+			ID:     buildStepID,
+			Label:  i18n.T("debug.step.build"),
+			Status: tui.StatusNotice,
+			Detail: i18n.Tf("debug.step.build.started", window),
+			Output: tail,
+		})
+		if output != "" {
+			result.Logs = append(result.Logs, output)
+		}
+	case outcome.timedOut:
+		reason := i18n.Tf("debug.step.build.timeout", d.buildTimeout())
+		result.Status = "ERROR"
+		result.Errors++
+		d.emit(result, Step{
+			ID:     buildStepID,
+			Label:  i18n.T("debug.step.build"),
+			Status: tui.StatusError,
+			Detail: reason,
+			Output: tail,
+		})
+		result.Logs = append(result.Logs, i18n.Tf("debug.build_error", reason))
+		if output != "" {
+			result.Logs = append(result.Logs, output)
+		}
+	case outcome.err != nil:
+		result.Status = "ERROR"
+		result.Errors++
+		detail := outcome.err.Error()
+		if output != "" {
+			detail = firstLine(output)
+		}
+		d.emit(result, Step{
+			ID:     buildStepID,
+			Label:  i18n.T("debug.step.build"),
+			Status: tui.StatusError,
+			Detail: detail,
+			Output: tail,
+		})
+		result.Logs = append(result.Logs, i18n.Tf("debug.build_error", outcome.err.Error()))
+		if output != "" {
+			result.Logs = append(result.Logs, output)
+		}
+	default:
+		result.Status = "OK"
+		d.emit(result, Step{
+			ID:     buildStepID,
+			Label:  i18n.T("debug.step.build"),
+			Status: tui.StatusSuccess,
+			Detail: baseDetail,
+			Output: tail,
+		})
+		if build.realBuild {
+			result.Logs = append(result.Logs, baseDetail)
+		}
+		if output != "" {
+			result.Logs = append(result.Logs, output)
+		}
 	}
 
 	return result, nil
 }
 
+// lastN returns a copy of the last n elements of s.
+func lastN(s []string, n int) []string {
+	if n <= 0 || len(s) == 0 {
+		return nil
+	}
+	if len(s) > n {
+		s = s[len(s)-n:]
+	}
+	out := make([]string, len(s))
+	copy(out, s)
+	return out
+}
+
+// firstLine returns the first non-empty line of s, used to keep a build error
+// step's detail short (the full output stays in the logs).
+func firstLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
 // DebugAll runs debug on all modules in external_modules/.
 func (d *Debugger) DebugAll() ([]*DebugResult, error) {
+	return d.DebugAllCtx(context.Background())
+}
+
+// DebugAllCtx runs debug on all modules in external_modules/, stopping as soon
+// as ctx is done.
+func (d *Debugger) DebugAllCtx(ctx context.Context) ([]*DebugResult, error) {
 	dir := filepath.Join(d.Root, config.ExternalModulesDir)
 	if !pkg.DirExists(dir) {
 		return nil, errors.New(i18n.Tf("modules.error.dir", config.ExternalModulesDir))
@@ -122,15 +387,23 @@ func (d *Debugger) DebugAll() ([]*DebugResult, error) {
 
 	var results []*DebugResult
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return results, tui.ErrCancelled
+		}
 		if !e.IsDir() {
 			continue
 		}
 		if !pkg.FileExists(filepath.Join(dir, e.Name(), config.ManifestFileName)) {
 			continue
 		}
-		r, err := d.DebugModule(e.Name())
+		// Mark the start of each module's step trace when several are debugged.
+		d.report(Step{
+			Label:  i18n.Tf("debug.step.module", e.Name()),
+			Status: tui.StatusNotice,
+		})
+		r, err := d.DebugModuleCtx(ctx, e.Name())
 		if err != nil {
-			return nil, err
+			return results, err
 		}
 		results = append(results, r)
 	}
@@ -148,6 +421,9 @@ type buildCommand struct {
 	// realBuild marks a bundler or compiler invocation (true output), as
 	// opposed to a package-manager `run` passthrough.
 	realBuild bool
+	// startScript marks a `debug`/`dev` script: a dev server or watcher that
+	// does not exit on its own and is stopped once its start window elapses.
+	startScript bool
 }
 
 func (d *Debugger) detectPackageManager() string {
@@ -173,7 +449,11 @@ func (d *Debugger) findBuildCommand(pm, moduleDir string) *buildCommand {
 		dir := filepath.Dir(candidate)
 		for _, script := range scripts {
 			if _, ok := packageScript(candidate, script); ok {
-				return &buildCommand{cmd: []string{pm, "run", script}, dir: dir}
+				return &buildCommand{
+					cmd:         []string{pm, "run", script},
+					dir:         dir,
+					startScript: script == "debug" || script == "dev",
+				}
 			}
 		}
 	}
@@ -321,17 +601,134 @@ func moduleHasTS(moduleDir string) bool {
 	return found
 }
 
-func (d *Debugger) runCommand(dir string, args []string) (string, error) {
+// runOutcome is the result of a streamed command execution.
+type runOutcome struct {
+	// err is the raw execution error (nil on success).
+	err error
+	// started marks a start script (debug/dev) stopped after its window while
+	// still running — a success for a dev server / watcher.
+	started bool
+	// timedOut marks a one-shot build killed after its hard cap.
+	timedOut bool
+}
+
+// runStream executes a command and streams every stdout/stderr line to onLine
+// as it is produced, so the caller can surface real-time feedback.
+//
+//   - window > 0: a `debug`/`dev` start script — when the process is still
+//     running after window it is stopped and reported as started.
+//   - timeout > 0: a hard cap for one-shot builds.
+//
+// The process (and, via SIGINT + WaitDelay, its children) is stopped when the
+// window, the cap, or ctx terminates the run.
+func (d *Debugger) runStream(ctx context.Context, dir string, args []string, window, timeout time.Duration, onLine func(string)) runOutcome {
 	if len(args) == 0 {
-		return "", fmt.Errorf("empty command")
+		return runOutcome{err: fmt.Errorf("empty command")}
 	}
-	cmd := exec.Command(args[0], args[1:]...)
+
+	runCtx := ctx
+	if window > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(ctx, window)
+		defer cancel()
+	} else if timeout > 0 {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	cmd := exec.CommandContext(runCtx, args[0], args[1:]...)
 	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return strings.TrimSpace(string(output)), err
+	// Own process group: signals reach the whole tree (npm/bun → the actual
+	// dev server or watcher), not just the direct child.
+	setProcessGroup(cmd)
+	// exec calls Cancel when runCtx ends; we ask politely first, then the
+	// forceStop helper below guarantees the pipes close.
+	cmd.Cancel = func() error {
+		interruptProcess(cmd)
+		return nil
 	}
-	return strings.TrimSpace(string(output)), nil
+	cmd.WaitDelay = 3 * time.Second
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return runOutcome{err: err}
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return runOutcome{err: err}
+	}
+	if err := cmd.Start(); err != nil {
+		return runOutcome{err: err}
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go scanLines(stdout, onLine, &wg)
+	go scanLines(stderr, onLine, &wg)
+
+	readDone := make(chan struct{})
+	go func() { wg.Wait(); close(readDone) }()
+
+	// stop terminates the process tree and closes the pipes so the scanners
+	// always unblock, even when a grandchild inherited them.
+	stop := func() {
+		interruptProcess(cmd)
+		select {
+		case <-readDone:
+		case <-time.After(2 * time.Second):
+			killProcess(cmd)
+			_ = stdout.Close()
+			_ = stderr.Close()
+			<-readDone
+		}
+	}
+
+	var windowC, timeoutC <-chan time.Time
+	if window > 0 {
+		t := time.NewTimer(window)
+		defer t.Stop()
+		windowC = t.C
+	}
+	if timeout > 0 {
+		t := time.NewTimer(timeout)
+		defer t.Stop()
+		timeoutC = t.C
+	}
+
+	select {
+	case <-readDone:
+		// The process exited on its own; fall through to reaping.
+	case <-windowC:
+		stop()
+	case <-timeoutC:
+		stop()
+	case <-ctx.Done():
+		stop()
+	}
+
+	err = cmd.Wait()
+
+	switch {
+	case ctx.Err() != nil:
+		return runOutcome{err: ctx.Err()}
+	case window > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded):
+		return runOutcome{started: true}
+	case timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded):
+		return runOutcome{timedOut: true}
+	default:
+		return runOutcome{err: err}
+	}
+}
+
+// scanLines forwards every line read from r to onLine until EOF.
+func scanLines(r io.Reader, onLine func(string), wg *sync.WaitGroup) {
+	defer wg.Done()
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		onLine(sc.Text())
+	}
 }
 
 // FormatDebugLogs returns formatted log lines with timestamps.
