@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.7.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.7.0).
+> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.8.1` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.8.1).
 
 ---
 
@@ -21,10 +21,10 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | Élément | État |
 |---------|------|
 | 14 commandes Cobra (12 de la spec + `sign` à 3 sous-commandes + helper) | ✅ implémentées |
-| 10 packages internes (`auth`, `config`, `module`, `signing`, `audit`, `debug`, `store`, `tui`, `pkg`) | ✅ présents |
-| Tests unitaires (`go test ./...`) | ✅ verts (9 packages ok) |
-| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 11 scénarios, TC-001 → TC-025 (mock `sentient-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.0.7) |
+| 11 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `store`, `tui`, `pkg`) | ✅ présents |
+| Tests unitaires (`go test ./...`) | ✅ verts (13 packages ok) |
+| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 12 scénarios, TC-001 → TC-027 (mock `sentient-connect` in-memory) |
+| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.8.1) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -104,7 +104,18 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   API de mise à jour).
 
 ### `sentients debug [module]` (FR-016)
-- Validation + tentative de build de diagnostic (single ou table tous modules), logs formatés.
+- Validation du module + détection du gestionnaire de paquets + résolution de la commande de build
+  (script `debug`/`dev`/`build` du `package.json`, repli bundler `esbuild`/`tsup`, repli `tsc --noEmit`).
+- Trace **pas-à-pas** des étapes (`internal/tui/step.go` : `RUNNING`/`SUCCESS`/`NOTICE`/`WARNING`/
+  `ERROR`/`DEPRECATED`), mise à jour en place de l'étape de build et **streaming** live du
+  `stdout`/`stderr` (queue de 8 lignes).
+- **Fenêtres d'exécution** : un script `debug`/`dev` (serveur dev/watch) est arrêté après une fenêtre
+  de démarrage (15 s) et signalé démarré ; un build one-shot est plafonné (5 min) — `--timeout`
+  ajuste les deux.
+- **Annulation** `Ctrl+C`/`Esc`/`SIGINT` : arrêt de l'arbre de process (groupe dédié, SIGINT puis
+  SIGKILL), carte de confirmation, code de sortie **130**.
+- Clôture par un **récapitulatif de sévérité** (`Summary`) ; mode all modules : tableau + logs +
+  récapitulatif global.
 
 ### `sentients audit [module]` (FR-017, FR-018)
 - Audit : Clean Architecture (imports croisés, JSX dans services, index async+render), manifest
@@ -122,14 +133,16 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 | Package | Rôle | Exports clés |
 |---------|------|--------------|
 | `auth` | Authentification | `Store`, `Session`, `Connector`, `Authenticator`, `MFAFactor` |
+| `appconfig` | Registre d'applications embarqué (`app.config.json`, TECH-009) | `Applications`, `BaseURL`, `OAuth` |
+| `i18n` | Internationalisation (NFR-007) | `T`, `Tf`, `SetLanguage`, catalogues `en-US`/`fr-FR` |
 | `config` | Config projet `sentients.config.json` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
 | `module` | Logique module | `Manifest`, `Creator`, `Packer`, `Linker`, `Validator` |
 | `signing` | Signature Ed25519 | `KeyStore`, `GenerateKeyPair`, `SignArchive`, `VerifySignature`, `Fingerprint`, `FindArchive` |
 | `audit` | Audit conformité | `Auditor`, `AuditResult` |
-| `debug` | Build de diagnostic | `Debugger`, `DebugResult`, `FormatDebugLogs` |
+| `debug` | Build de diagnostic pas-à-pas | `Debugger`, `DebugResult`, `Step`, `FormatDebugLogs` |
 | `store` | Client store API | `Client` (`ListModules`, `GetModule`, `UpdateModule`, `Publish` — 3 étapes developer-store) |
 | `pkg` | Utilitaires | erreurs+exit codes, crypto AES-256-GCM, fs, git, http, uuid, update |
-| `tui` | UI Charm | `AskText/AskSecret/Select/Confirm`, `RunWithSpinner`, `Table`, `NewStyles` |
+| `tui` | UI Charm | `AskText/AskSecret/Select/Confirm`, `RunWithSpinner`, `RunWithSteps`, `Step`, `Summarize`, `Table`, `NewStyles` |
 
 > **Priorité composants TUI (règle obligatoire, spec §9.1)** : avant de créer
 > tout composant custom, utiliser en priorité les composants natifs `bubbles/*`
@@ -228,6 +241,26 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > - **E/E-13** : `$schema` fixé au chemin SDK réel ; le rafraîchissement de session
 >   privilégie `grant_type=refresh_token` (`/oauth/token`, rotation) quand un
 >   refresh token OAuth est présent, avec repli sur `/api/auth/sessions/refresh`.
+>
+> Itération du 2026-09-16 (quater) : **`debug` pas-à-pas et sortie temps réel (v0.8.0)** —
+> `sentients debug` rapporte désormais chaque étape au fil de sa complétion (validation,
+> détection du gestionnaire de paquets, résolution de la commande de build, exécution) et
+> clôt l'exécution par un **récapitulatif de sévérité** (succès, notice, avertissement,
+> erreur, obsolète) :
+> - nouveau vocabulaire d'étapes partagé (`internal/tui/step.go`) : statuts, mise à jour en
+>   place d'une étape identifiée et rendu live du tail de sortie (`RunWithSteps`, `Summarize`,
+>   `SummaryBlock`) ;
+> - la commande de build diffuse son `stdout`/`stderr` ligne par ligne sous une étape
+>   `RUNNING`, puis bascule vers un statut terminal (fini le `CombinedOutput` qui tamponnait
+>   tout et bloquait indéfiniment sur un serveur dev) ;
+> - **fenêtres d'exécution** : un script `debug`/`dev` est arrêté après une fenêtre de
+>   démarrage (15 s) et signalé démarré ; un build one-shot est plafonné (5 min) — `--timeout`
+>   ajuste les deux (`internal/debug/debugger.go`) ;
+> - **annulation** `Ctrl+C`/`Esc` (ou `SIGINT` quand non-interactif) : arrêt de l'arbre de
+>   process (`proc_unix.go`/`proc_windows.go`, groupe dédié, SIGINT puis SIGKILL), carte de
+>   confirmation et code de sortie `130` (`pkg.ExitCancelled`) ;
+> - réconcilié avec le **build réel** déjà introduit (repli bundler `esbuild`/`tsup` puis
+>   `tsc --noEmit`, v0.5.0).
 
 ### 4.1 Sécurité — ✅ corrigé à l'itération du 2026-09-12
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
@@ -312,14 +345,14 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 
 ### Release 0.2.0 (Store) — ✅ largement faite
 `publish` ✅ (dont conflit SemVer + PUT) · `link` ✅/partiel · `unlink` ✅ · `audit` ✅/partiel ·
-`debug` ✅/partiel · `sign keygen/sign/verify` ✅
+`debug` ✅ (vrai build + trace pas-à-pas v0.8.0) · `sign keygen/sign/verify` ✅
 
-### Release 0.3.0 (Qualité) — ⏳ à faire
+### Release 0.3.0 (Qualité) — ✅ largement faite
 - S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `SENTIENT_CLI_DEBUG`).
 - S-014 config `sentients.config.json` ✅ déjà présente.
 - S-015 auto-update ✅ partiel (notification seule, pas de download ; désactivable en CI).
-- S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (10 packages), **E2E ✅** (10 scénarios
-  txtar, TC-001 → TC-025, mock `sentient-connect` in-memory), **CI ✅** (job `e2e`).
+- S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (13 packages), **E2E ✅** (12 scénarios
+  txtar, TC-001 → TC-027, mock `sentient-connect` in-memory), **CI ✅** (job `e2e`).
 
 ### Prochaines itérations proposées (par priorité)
 1. **Sécurité/robustesse** — ✅ fait au 2026-09-12 : fallback keychain↔fichier chiffré
@@ -332,12 +365,13 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
    semver strict + `BumpPatch`, heuristique JSX services affinée.
 4. **`publish` env.** — ✅ fait : conflit de version (bump SemVer) + pipeline developer-store
    (produit → version → artefact) + synchronisation du manifest local (version + token produit).
-5. **`debug` env.** — ✅/partiel : script du `package.json` du module (parsing JSON,
-   repli racine), plus de faux « OK » sans build réel.
+5. **`debug` env.** — ✅ fait : script du `package.json` du module (parsing JSON, repli racine),
+   repli bundler `esbuild`/`tsup` puis `tsc --noEmit`, plus de faux « OK » sans build réel ; puis
+   **trace pas-à-pas + streaming + timeout + annulation** (v0.8.0, `internal/tui/step.go`).
 6. **Candidats restants** :
-   - testscript E2E (S-017) + CI sur scénarios TC-001 → TC-025 — ✅ fait : `e2e/` (mock
-     `sentient-connect` in-memory, 10 scénarios `01_help_version` → `10_link_unlink` couvrant
-     TC-001 → TC-025, fixtures `bun/npm/tsc/node`, job CI `e2e`) ;
+   - testscript E2E (S-017) + CI sur scénarios TC-001 → TC-027 — ✅ fait : `e2e/` (mock
+     `sentient-connect` in-memory, 12 scénarios `01_help_version` → `11_auth` couvrant
+     TC-001 → TC-027, fixtures `bun/npm/tsc/node/esbuild`, job CI `e2e`) ;
    - `disconnect`/`unlink` : option de mise à jour distante via `PUT /api/developer-store/modules/:id` (✅
      `unlink --sync-remote` couvert par TC-014) ;
    - **token refresh auto (SEC-003)** — ✅ fait au 2026-09-16 : retry 401 avec rotation du bearer
@@ -350,7 +384,7 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
      (`esbuild`/`tsup`, node_modules module → racine → PATH) qui compile l'entrée dans `dist/`,
      avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
      `esbuild`).
-7. **Telese spec** : `sentients test <module>`, `sentients watch` (hot-reload), `sentients deploy`,
+7. **Future spec** : `sentients test <module>`, `sentients watch` (hot-reload), `sentients deploy`,
    `sentients marketplace` (§2.4 future scope) — `sentients auth` (OAuth2 PKCE) ✅ fait au
    2026-09-16.
 
@@ -361,13 +395,13 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 ```bash
 go build -o sentients .
 ./sentients --help
-go test ./...              # unitaires + E2E testscript (TC-001 → TC-025)
+go test ./...              # unitaires + E2E testscript (TC-001 → TC-027)
 go test ./e2e/ -run TestScripts -v   # suite E2E seule
 go vet ./...
 goreleaser release --clean   # release multi-plateforme
 ```
 
-Couverture de test : unitaires ✅ (10 packages ok) + **E2E ✅** (`e2e/` : `TestMain` construit la CLI
-depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 11 scripts txtar
-`e2e/testdata/scripts/01_help_version.txtar` → `11_auth.txtar` couvrant TC-001 → TC-025, fixtures
-exécutables `e2e/testdata/fixtures/bin/{bun,npm,tsc,node}`, job CI `e2e`).
+Couverture de test : unitaires ✅ (13 packages ok) + **E2E ✅** (`e2e/` : `TestMain` construit la CLI
+depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 12 scripts txtar
+`e2e/testdata/scripts/01_help_version.txtar` → `11_auth.txtar` couvrant TC-001 → TC-027, fixtures
+exécutables `e2e/testdata/fixtures/bin/{bun,npm,tsc,node,esbuild}`, job CI `e2e`).

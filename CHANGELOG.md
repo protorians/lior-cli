@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.8.1] - 2026-09-16
+
+### Docs
+- **Spec `debug` alignée sur le code (v0.8.0)** — `docs/specs/sentient.md` §5.9 réécrite : trace pas-à-pas des étapes (`RUNNING` → statut terminal), sortie de build diffusée en temps réel (tail 8 lignes), fenêtres d'exécution (`--timeout`, script dev 15 s / build one-shot 5 min), annulation `Ctrl+C`/`Esc`/`SIGINT` (exit `130`) et récapitulatif de sévérité ; flag `--timeout`, vocabulaire d'étapes partagé (`internal/tui/step.go`) et arborescence §4.1 (`proc_unix.go`/`proc_windows.go`/`step.go`) documentés. `docs/rapport-implementation.md` synchronisé (version courante, itération du 2026-09-16 « quater », compteurs packages/tests et scénarios E2E TC-001 → TC-027).
+
+
 ## [v0.8.0] - 2026-09-16
 
 ### Added

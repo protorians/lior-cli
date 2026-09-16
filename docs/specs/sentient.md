@@ -8,7 +8,7 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.7.0 ;
+> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.8.1 ;
 >   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
 >
 > **Documents de référence (workspace `sentient-workspace/docs`)** : la présente spec s'aligne sur
@@ -28,7 +28,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.7.0) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.8.1) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
@@ -92,8 +92,6 @@ init → create → develop → debug → audit → pack → sign → link → p
 ### Périmètre futur (Future Scope)
 
 - `sentients test <module>` — Exécution des tests d'un module
-- `sentients watch` — Mode développement hot-reload
-- `sentients deploy` — Déploiement direct vers un environnement
 - `sentients marketplace` — Recherche/installation de modules tiers
 
 ---
@@ -226,7 +224,9 @@ sentient-cli/
 │   ├── audit/                     # Audit de conformité
 │   │   └── auditor.go             # Orchestrateur d'audit (règles manifest/bootstrap/deps)
 │   ├── debug/                     # Debug de module
-│   │   └── debugger.go            # Build/test du module (scripts ou tsc --noEmit)
+│   │   ├── debugger.go            # Étapes de debug, résolution du build, streaming, timeout
+│   │   ├── proc_unix.go           # Groupe de process POSIX (arrêt de l'arbre du build)
+│   │   └── proc_windows.go        # Arrêt de process Windows
 │   ├── store/                     # Publication store
 │   │   ├── builder.go             # Construction archive
 │   │   └── publisher.go           # Publication via API developer-store (produit → version → artefact)
@@ -236,6 +236,7 @@ sentient-cli/
 │   │   ├── prompts.go             # AskText, Confirm, Select (degradation non-interactive)
 │   │   ├── spinner.go             # RunWithSpinner (indicateur de progression)
 │   │   ├── progress.go            # RunWithProgress (barre de progression, téléchargements)
+│   │   ├── step.go                # RunWithSteps + vocabulaire d'étapes (statuts, résumé)
 │   │   └── table.go               # Tableau arrondi custom (lipgloss)
 │   └── pkg/                       # Utilitaires
 │       ├── errors.go              # Erreurs catégorisées + codes de sortie §11.1
@@ -248,7 +249,7 @@ sentient-cli/
 │       ├── open.go                # Ouverture du navigateur (open / rundll32 / xdg-open)
 │       └── update.go              # Détection de mises à jour (NFR-006, cache 24 h)
 ├── e2e/                           # Tests E2E
-│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-025 vs mock API)
+│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-027 vs mock API)
 │   └── testdata/                  # scripts/*.txtar + fixtures/ (bun, node, npm, tsc, mock API)
 ├── app.config.json                # Registre embarqué des applications (surchargeable localement)
 ├── go.mod
@@ -896,53 +897,120 @@ Délier un module local de son correspondant dans `sentient-connect`.
 
 #### Purpose
 
-Lancer le debug d'un ou tous les modules dans `external_modules/` : validation puis build réel du module.
+Lancer le debug d'un ou tous les modules dans `external_modules/` : validation puis build réel du
+module, avec une **trace pas-à-pas** des étapes exécutées, la **sortie de build en temps réel** et
+un **récapitulatif de sévérité** en fin d'exécution.
 
 #### Comportement
 
 1. **Analyser l'argument** :
    - Si `<module>` est fourni → debug uniquement ce module
-   - Sinon → debug **tous** les modules dans `external_modules/`
-2. **Valider le module** (mêmes règles que `audit`) : si erreurs → statut `ERROR` avec la liste
-   des règles en échec
-3. **Détecter le gestionnaire de paquets** (bun → pnpm → yarn → npm) ; aucun → statut `WARNING`
-4. **Résoudre la commande de build** :
+   - Sinon → debug **tous** les modules dans `external_modules/` (chaque module est introduit par
+     une ligne `Module <nom>`)
+2. **Valider le module** (mêmes règles que `audit`) et rapporter l'étape « Validation du module »
+   avec le décompte `N erreur(s), M avertissement(s)` ; chaque règle en échec alimente le
+   récapitulatif par sa propre sévérité. Si erreurs → statut `ERROR` et arrêt du module.
+3. **Détecter le gestionnaire de paquets** (bun → pnpm → yarn → npm) et le rapporter ; aucun →
+   statut `WARNING` (étape en avertissement).
+4. **Résoudre la commande de build** (étape rapportée, `NOTICE` lorsque c'est un repli) :
    - Script du `package.json` du module puis du projet (candidats `debug`, `dev`, `build`,
      comparés par clé exacte, pas de collision de sous-chaîne)
+   - Repli : **bundle réel** via un bundler résolvable (`esbuild`, `tsup` — `node_modules` du
+     module → `node_modules` racine → PATH) qui compile l'entrée du module dans `dist/`
    - Repli : **type-check TypeScript réel** `tsc --noEmit` si le module contient des sources
      `.ts`/`.tsx` et qu'un `tsconfig.json` + un `tsc` résolvable existent
-5. **Exécuter la commande** :
-   - OK → statut `OK` (sortie affichée si présente)
-   - Échec → statut `ERROR`, sortie d'erreur affichée
-6. **Aucun build ni type-check possible** → statut `WARNING` (`no_build_script`), jamais un faux "OK"
-7. **Mode all modules** : itérer sur chaque module et afficher le tableau de statut (nom, statut, erreurs)
+5. **Exécuter la commande** sous une étape dédiée `RUNNING` qui se met à jour **en place** : elle
+   affiche le sous-texte actif et diffuse la queue de sortie (`stdout`/`stderr`, 8 dernières lignes)
+   en temps réel, puis bascule vers un statut terminal :
+   - succès → `SUCCESS` (sortie conservée dans les logs)
+   - script `debug`/`dev` (serveur dev / watcher) démarré → `NOTICE` (arrêté après sa fenêtre)
+   - échec → `ERROR` avec la première ligne d'erreur en détail et la sortie complète dans les logs
+6. **Fenêtres d'exécution** (`--timeout`, `0` = auto) :
+   - un script `debug`/`dev` qui ne se termine jamais est arrêté après une **fenêtre de démarrage**
+     (15 s par défaut) et signalé comme démarré (mode serveur/watch)
+   - un build one-shot est plafonné (5 min par défaut) ; le dépassement produit un `ERROR`
+7. **Aucun build ni type-check possible** → statut `WARNING` (`no_build_script`), jamais un faux « OK »
+8. **Annulation** : `Ctrl+C` (ou `Esc` en interactif, `SIGINT` en non-interactif) interrompt
+   l'exécution, arrête l'**arbre de process** du build (groupe de process dédié, SIGINT puis
+   SIGKILL) et affiche une carte de confirmation ; code de sortie **`130`**.
+9. **Mode all modules** : itérer sur chaque module et afficher le tableau de statut (nom, statut,
+   erreurs), les logs par module puis le récapitulatif global.
+10. **Récapitulatif de sévérité** : chaque exécution se clôt par un bloc `Summary` — succès,
+    notice(s), avertissement(s), erreur(s), obsolète(s) (les étapes `RUNNING` ne sont pas comptées).
+
+#### Flags
+
+| Flag | Défaut | Description |
+|------|--------|-------------|
+| `--timeout` | `0` (auto) | Fenêtre d'exécution d'un script `debug`/`dev`, ou plafond d'un build one-shot |
+
+#### Vocabulaire d'étapes
+
+Le même vocabulaire d'étapes (`internal/tui/step.go`) est partagé par toute la CLI : `RUNNING`,
+`SUCCESS`, `NOTICE`, `WARNING`, `ERROR`, `DEPRECATED`. Une étape portant un identifiant peut être
+rapportée plusieurs fois — la vue live la met à jour en place (passage `RUNNING` → statut terminal
+avec tail de sortie).
 
 #### Sortie TUI (single)
 
 ```
-  Debug : blog-manager
-  ⠋ Validation du module…
-  ✓ Compilation réussie
+  Debugging: com.example.blog-manager
+  ✓ Module validation — 0 error(s), 0 warning(s)
+  ✓ Package manager detection — bun detected
+  ◆ Build command resolution — bun run build
+  ⠋ Build execution — bun run build
+      [vite] building for production...
+      [vite] ✓ 42 modules transformed
+  ✓ Build execution — bun run build
 
-  ┌─────────────────────────────────────────────┐
-  │ [14:30:01] blog-manager: Module chargé       │
-  │ [14:30:01] blog-manager: Routes enregistrées │
-  │ [14:30:02] blog-manager: Aucune erreur       │
-  └─────────────────────────────────────────────┘
+  ┌──────────────────────────────────────────┐
+  │ Module : com.example.blog-manager        │
+  │ Status : ✓ OK                            │
+  └──────────────────────────────────────────┘
+
+  Summary
+  ✓ 4 success
+  ✓ 0 warning(s)
+  ✗ 0 error(s)
+```
+
+> Un script `debug`/`dev` (serveur dev) s'affiche en `NOTICE` :
+> `⊘ Build execution — dev script running — stopped after 15s (server/watch mode)`.
+
+#### Sortie TUI (annulation)
+
+```
+  Debugging: com.example.blog-manager
+  ✓ Module validation — 0 error(s), 0 warning(s)
+  ✓ Package manager detection — bun detected
+  ◆ Build command resolution — bun run build
+  ⚠ Cancellation
+  ⊘ Cancelled by the developer (Ctrl+C)
 ```
 
 #### Sortie TUI (all)
 
 ```
-  Debug de tous les modules
-  ┌──────────────────┬──────────┬─────────────┐
-  │ Module           │ Statut   │ Erreurs     │
-  ├──────────────────┼──────────┼─────────────┤
-  │ blog-manager     │ ✓ OK     │ 0           │
-  │ billing          │ ✓ OK     │ 0           │
-  │ calendar         │ ⚠ 2      │ 2 warnings  │
-  │ crm              │ ✓ OK     │ 0           │
-  └──────────────────┴──────────┴─────────────┘
+  Debugging all modules
+  Module com.example.blog-manager
+  ✓ Module validation — 0 error(s), 0 warning(s)
+  ...
+  Module com.example.billing
+  ...
+  ┌──────────────────────────────┬──────────┬─────────────┐
+  │ Module                       │ Statut   │ Erreurs     │
+  ├──────────────────────────────┼──────────┼─────────────┤
+  │ com.example.blog-manager     │ ✓ OK     │ 0           │
+  │ com.example.billing          │ ✓ OK     │ 0           │
+  │ com.example.calendar         │ ⚠ WARNING│ 2           │
+  │ com.example.crm              │ ✓ OK     │ 0           │
+  └──────────────────────────────┴──────────┴─────────────┘
+
+  Summary
+  ✓ 12 success
+  ⊘ 1 notice(s)
+  ⚠ 3 warning(s)
+  ✗ 0 error(s)
 ```
 
 ---
@@ -1577,6 +1645,7 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 |-----------|-------|--------------|
 | `RunWithSpinner` | Indicateur de progression (`tui/spinner.go`) | `bubbles/spinner` |
 | `RunWithProgress` | Barre de progression (téléchargements release, `tui/progress.go`) | `bubbles/progress` |
+| `RunWithSteps` | Trace pas-à-pas live + annulation + récapitulatif de sévérité (`tui/step.go`) | Custom (Bubbletea + `bubbles/spinner`) |
 | `Select` | Sélection dans une liste (`tui.Select`) | `bubbles/list` |
 | `AskText` | Saisie de texte (`tui.AskText`) | `bubbles/textinput` |
 | `Confirm` | Confirmation oui/non (`tui.Confirm`) | Custom (modèle Bubbletea minimal) |
@@ -1718,6 +1787,7 @@ brew install protorians/sentient/sentient-cli
 | `10` | Erreur de build |
 | `11` | Erreur de publication |
 | `12` | Erreur de signature numérique |
+| `130` | Opération annulée par le développeur (`Ctrl+C` / `SIGINT`, `128 + SIGINT`) |
 
 ### 11.2 Messages d'erreur
 
@@ -1760,7 +1830,7 @@ fixtures portables `bun/npm/tsc/node` et donne un `HOME` isolé writable par scr
 
 ### 12.2 Scénarios de test critiques
 
-Suite E2E réelle (11 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
+Suite E2E réelle (12 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
 `03_create`, `04_pack`, `05_sign`, `06_debug`, `07_audit`, `08_network`, `09_mfa`,
 `10_link_unlink`, `11_auth`.
 
