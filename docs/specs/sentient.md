@@ -28,7 +28,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.8.1) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.9.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
@@ -78,6 +78,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `sentients link` — Liaison module local ↔ module en ligne
 - `sentients unlink` — Dé liaison module local ↔ module en ligne
 - `sentients debug <module>` — Debug d'un ou tous les modules
+- `sentients test <module>` — Exécution des tests d'un ou tous les modules
 - `sentients audit <module>` — Audit de conformité d'un ou tous les modules
 - `sentients help` — Affichage de l'aide
 - `sentients -v | --version` — Affichage de la version
@@ -91,7 +92,6 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ### Périmètre futur (Future Scope)
 
-- `sentients test <module>` — Exécution des tests d'un module
 - `sentients marketplace` — Recherche/installation de modules tiers
 
 ---
@@ -249,7 +249,7 @@ sentient-cli/
 │       ├── open.go                # Ouverture du navigateur (open / rundll32 / xdg-open)
 │       └── update.go              # Détection de mises à jour (NFR-006, cache 24 h)
 ├── e2e/                           # Tests E2E
-│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-027 vs mock API)
+│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-029 vs mock API)
 │   └── testdata/                  # scripts/*.txtar + fixtures/ (bun, node, npm, tsc, mock API)
 ├── app.config.json                # Registre embarqué des applications (surchargeable localement)
 ├── go.mod
@@ -1378,6 +1378,91 @@ erreur catégorisée (exit 2).
 
 ---
 
+### 5.15 `sentients test <module>`
+
+#### Purpose
+
+Exécuter les tests d'un ou tous les modules dans `external_modules/` : validation puis exécution
+de la suite de tests, avec la même **trace pas-à-pas** que le debug, la **sortie de test en temps
+réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécution se termine avec un
+**code de sortie non nul** dès qu'un module voit ses tests en échec.
+
+#### Comportement
+
+1. **Analyser l'argument** :
+   - Si `<module>` est fourni → tests de ce module uniquement
+   - Sinon → tests de **tous** les modules dans `external_modules/` (chaque module est introduit
+     par une ligne `Module <nom>`) ; le run global échoue (exit **`13`**) si au moins un module
+     échoue
+2. **Valider le module** (mêmes règles que `audit`) et rapporter l'étape « Validation du module »
+   avec le décompte `N erreur(s), M avertissement(s)` ; chaque règle en échec alimente le
+   récapitulatif par sa propre sévérité. Si erreurs → statut `ERROR` et arrêt du module.
+3. **Détecter le gestionnaire de paquets** (bun → pnpm → yarn → npm) et le rapporter ; aucun →
+   statut `WARNING` (étape en avertissement).
+4. **Résoudre la commande de test** (étape rapportée) :
+   - Script `test` du `package.json` du module puis du projet (comparé par clé exacte)
+   - Repli : **runner réel** (`vitest run`, `jest --ci --runInBand` — `node_modules` du module →
+     `node_modules` racine → PATH ; `bun test` lorsque le gestionnaire est `bun`), **uniquement si
+     le module contient des fichiers de test** (`*.test.*`, `*.spec.*` ou `__tests__/`)
+   - Aucun script ni runner ni fichier de test → statut `WARNING` (`no_test_script`), jamais un
+     faux « OK »
+5. **Exécuter la commande** sous une étape dédiée `RUNNING` qui se met à jour **en place** : elle
+   affiche le sous-texte actif et diffuse la queue de sortie (`stdout`/`stderr`, 8 dernières
+   lignes) en temps réel, puis bascule vers un statut terminal :
+   - succès (code 0) → `SUCCESS` (sortie conservée dans les logs)
+   - échec (code ≠ 0) → `ERROR` avec la première ligne d'erreur en détail et la sortie complète
+     dans les logs
+6. **Plafond d'exécution** (`--timeout`, `0` = auto) : une suite bloquée est arrêtée après **2 min**
+   par défaut ; le dépassement produit un `ERROR`.
+7. **Annulation** : `Ctrl+C` (ou `Esc` en interactif, `SIGINT` en non-interactif) interrompt
+   l'exécution, arrête l'**arbre de process** de la suite (groupe de process dédié) et affiche une
+   carte de confirmation ; code de sortie **`130`**.
+8. **Mode all modules** : itérer sur chaque module et afficher le tableau de statut (nom, statut,
+   erreurs), les logs par module puis le récapitulatif global.
+9. **Récapitulatif de sévérité** : chaque exécution se clôt par un bloc `Summary` — succès,
+   notice(s), avertissement(s), erreur(s), obsolète(s) (les étapes `RUNNING` ne sont pas comptées).
+
+#### Flags
+
+| Flag | Défaut | Description |
+|------|--------|-------------|
+| `--timeout` | `0` (auto) | Plafond d'exécution d'une suite de tests (2 min par défaut) |
+
+#### Vocabulaire d'étapes
+
+Identique à la section 5.9 : `RUNNING`, `SUCCESS`, `NOTICE`, `WARNING`, `ERROR`, `DEPRECATED`,
+avec mise à jour en place des étapes portant un identifiant.
+
+#### Sortie TUI (single)
+
+```
+  Testing: com.example.blog-manager
+  ✓ Module validation — 0 error(s), 0 warning(s)
+  ✓ Package manager detection — bun detected
+  ✓ Test command resolution — bun run test
+  ⠋ Test execution — bun run test
+      ✓ tests 1 passed (12ms)
+      ✓ File: index.spec.tsx
+  ✓ Test execution — bun run test
+
+  ┌──────────────────────────────────────────┐
+  │ Module : com.example.blog-manager        │
+  │ Status : ✓ OK                            │
+  │ Command : bun run test                   │
+  └──────────────────────────────────────────┘
+
+  Summary
+  ✓ 4 success
+  ✓ 0 warning(s)
+  ✗ 0 error(s)
+```
+
+> Une suite en échec s'affiche en `ERROR` :
+> `✗ Test execution — exit status 1` (nouvelle ligne du détail), puis la carte de statut montre
+> `Status : ✗ ERROR` et la commande se termine avec le code de sortie **`13`**.
+
+---
+
 ## 6. Modèle de données local
 
 ### 6.1 Fichier `sentients.config.json` (optionnel)
@@ -1787,6 +1872,7 @@ brew install protorians/sentient/sentient-cli
 | `10` | Erreur de build |
 | `11` | Erreur de publication |
 | `12` | Erreur de signature numérique |
+| `13` | Échec de tests |
 | `130` | Opération annulée par le développeur (`Ctrl+C` / `SIGINT`, `128 + SIGINT`) |
 
 ### 11.2 Messages d'erreur
@@ -1830,9 +1916,9 @@ fixtures portables `bun/npm/tsc/node` et donne un `HOME` isolé writable par scr
 
 ### 12.2 Scénarios de test critiques
 
-Suite E2E réelle (12 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
+Suite E2E réelle (13 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
 `03_create`, `04_pack`, `05_sign`, `06_debug`, `07_audit`, `08_network`, `09_mfa`,
-`10_link_unlink`, `11_auth`.
+`10_link_unlink`, `11_auth`, `12_test`.
 
 | ID | Scénario |
 |----|----------|
@@ -1863,6 +1949,8 @@ Suite E2E réelle (12 scripts txtar) : `01_help_version`, `02_init`, `02b_init_b
 | TC-025 | `sentients sign verify <module>` échoue sur archive modifiée ou signature invalide |
 | TC-026 | `sentients auth` échange un code d'autorisation (OAuth2 + PKCE) et stocke la session |
 | TC-027 | `sentients auth` en mode non-interactif sans `SENTIENT_CLI_AUTH_CODE` → erreur catégorisée (exit 2) |
+| TC-028 | `sentients test` module unique (script `test` → OK) |
+| TC-029 | `sentients test` tous les modules ; suite en échec → exit 13 |
 
 ---
 

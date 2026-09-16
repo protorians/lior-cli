@@ -1,6 +1,6 @@
 //go:build !windows
 
-package debug
+package runner
 
 import (
 	"os/exec"

@@ -83,6 +83,7 @@ func init() {
 		unlinkCmd,
 		debugCmd,
 		auditCmd,
+		testCmd,
 	)
 }
 

@@ -3,6 +3,31 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.9.0] - 2026-09-16
+
+### Added
+- **`sentients test [module]` — exécution des tests (spec §2.4, premier item du future scope)** —
+  nouveau package `internal/moduletest` (`Tester`, `TestResult`) : validation du module + détection
+  du gestionnaire de paquets + résolution de la commande de test (script `test` du `package.json` du
+  module puis du projet, repli sur un runner réel `vitest run`/`jest --ci --runInBand`/`bun test`
+  uniquement si le module contient des fichiers de test, sinon `WARNING` — jamais un faux « OK »).
+  Exécution en streaming live (tail 8 lignes) avec plafond 2 min par défaut (`--timeout`), annulation
+  `Ctrl+C`/`Esc`/`SIGINT` (exit `130`) et récapitulatif de sévérité. **Exit code `13`** (échec de
+  tests, spec §11.1) : le run échoue dès qu'un module a un statut `ERROR`. Mode all modules :
+  tableau + logs + récapitulatif global. i18n `en-US`/`fr-FR`, tests unitaires
+  (`internal/moduletest`, 9 tests) et scénario E2E `12_test` (TC-028/TC-029).
+- **Runner partagé `internal/runner`** — extraction du streaming `stdout`/`stderr` avec groupe de
+  process dédié, fenêtre de démarrage, plafond d'exécution et arrêt SIGINT→SIGKILL depuis
+  `internal/debug` (`runStream`/`scanLines`/proc) vers `internal/runner` (`Run`, `Outcome`). `debug`
+  est refactoré sur ce runner ; couvert par des tests unitaires.
+
+### Changed
+- **Spec alignée** — `docs/specs/sentient.md` : `sentients test` déplacé du périmètre futur au
+  périmètre, nouvelle section §5.15 (Comportement, Flags, Vocabulaire d'étapes, Sorties TUI),
+  code de sortie `13` ajouté au §11.1, scénarios TC-028/TC-029 ajoutés au §12 ; §2 répertoire des
+  commandes et §4.1 mis à jour (packages `moduletest`, `runner`). `docs/rapport-implementation.md`,
+  `README.md` et `CHANGELOG.md` synchronisés.
+
 ## [v0.8.1] - 2026-09-16
 
 ### Docs

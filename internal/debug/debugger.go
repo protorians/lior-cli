@@ -1,12 +1,10 @@
 package debug
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +16,7 @@ import (
 	"github.com/protorians/sentient-cli/internal/i18n"
 	"github.com/protorians/sentient-cli/internal/module"
 	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/sentient-cli/internal/runner"
 	"github.com/protorians/sentient-cli/internal/tui"
 )
 
@@ -257,7 +256,7 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 	if build.startScript {
 		window = d.startWindow()
 	}
-	outcome := d.runStream(ctx, build.dir, build.cmd, window, d.buildTimeout(), onLine)
+	outcome := runner.Run(ctx, build.dir, build.cmd, window, d.buildTimeout(), onLine)
 
 	mu.Lock()
 	output := strings.Join(lines, "\n")
@@ -276,7 +275,7 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 	}
 
 	switch {
-	case outcome.started:
+	case outcome.Started:
 		// A dev/watch script is not expected to exit: reaching the window
 		// proves it started, so stop it and report a benign notice.
 		result.Status = "OK"
@@ -290,7 +289,7 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 		if output != "" {
 			result.Logs = append(result.Logs, output)
 		}
-	case outcome.timedOut:
+	case outcome.TimedOut:
 		reason := i18n.Tf("debug.step.build.timeout", d.buildTimeout())
 		result.Status = "ERROR"
 		result.Errors++
@@ -305,10 +304,10 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 		if output != "" {
 			result.Logs = append(result.Logs, output)
 		}
-	case outcome.err != nil:
+	case outcome.Err != nil:
 		result.Status = "ERROR"
 		result.Errors++
-		detail := outcome.err.Error()
+		detail := outcome.Err.Error()
 		if output != "" {
 			detail = firstLine(output)
 		}
@@ -319,7 +318,7 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 			Detail: detail,
 			Output: tail,
 		})
-		result.Logs = append(result.Logs, i18n.Tf("debug.build_error", outcome.err.Error()))
+		result.Logs = append(result.Logs, i18n.Tf("debug.build_error", outcome.Err.Error()))
 		if output != "" {
 			result.Logs = append(result.Logs, output)
 		}
@@ -599,136 +598,6 @@ func moduleHasTS(moduleDir string) bool {
 		return nil
 	})
 	return found
-}
-
-// runOutcome is the result of a streamed command execution.
-type runOutcome struct {
-	// err is the raw execution error (nil on success).
-	err error
-	// started marks a start script (debug/dev) stopped after its window while
-	// still running — a success for a dev server / watcher.
-	started bool
-	// timedOut marks a one-shot build killed after its hard cap.
-	timedOut bool
-}
-
-// runStream executes a command and streams every stdout/stderr line to onLine
-// as it is produced, so the caller can surface real-time feedback.
-//
-//   - window > 0: a `debug`/`dev` start script — when the process is still
-//     running after window it is stopped and reported as started.
-//   - timeout > 0: a hard cap for one-shot builds.
-//
-// The process (and, via SIGINT + WaitDelay, its children) is stopped when the
-// window, the cap, or ctx terminates the run.
-func (d *Debugger) runStream(ctx context.Context, dir string, args []string, window, timeout time.Duration, onLine func(string)) runOutcome {
-	if len(args) == 0 {
-		return runOutcome{err: fmt.Errorf("empty command")}
-	}
-
-	runCtx := ctx
-	if window > 0 {
-		var cancel context.CancelFunc
-		runCtx, cancel = context.WithTimeout(ctx, window)
-		defer cancel()
-	} else if timeout > 0 {
-		var cancel context.CancelFunc
-		runCtx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	cmd := exec.CommandContext(runCtx, args[0], args[1:]...)
-	cmd.Dir = dir
-	// Own process group: signals reach the whole tree (npm/bun → the actual
-	// dev server or watcher), not just the direct child.
-	setProcessGroup(cmd)
-	// exec calls Cancel when runCtx ends; we ask politely first, then the
-	// forceStop helper below guarantees the pipes close.
-	cmd.Cancel = func() error {
-		interruptProcess(cmd)
-		return nil
-	}
-	cmd.WaitDelay = 3 * time.Second
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return runOutcome{err: err}
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return runOutcome{err: err}
-	}
-	if err := cmd.Start(); err != nil {
-		return runOutcome{err: err}
-	}
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go scanLines(stdout, onLine, &wg)
-	go scanLines(stderr, onLine, &wg)
-
-	readDone := make(chan struct{})
-	go func() { wg.Wait(); close(readDone) }()
-
-	// stop terminates the process tree and closes the pipes so the scanners
-	// always unblock, even when a grandchild inherited them.
-	stop := func() {
-		interruptProcess(cmd)
-		select {
-		case <-readDone:
-		case <-time.After(2 * time.Second):
-			killProcess(cmd)
-			_ = stdout.Close()
-			_ = stderr.Close()
-			<-readDone
-		}
-	}
-
-	var windowC, timeoutC <-chan time.Time
-	if window > 0 {
-		t := time.NewTimer(window)
-		defer t.Stop()
-		windowC = t.C
-	}
-	if timeout > 0 {
-		t := time.NewTimer(timeout)
-		defer t.Stop()
-		timeoutC = t.C
-	}
-
-	select {
-	case <-readDone:
-		// The process exited on its own; fall through to reaping.
-	case <-windowC:
-		stop()
-	case <-timeoutC:
-		stop()
-	case <-ctx.Done():
-		stop()
-	}
-
-	err = cmd.Wait()
-
-	switch {
-	case ctx.Err() != nil:
-		return runOutcome{err: ctx.Err()}
-	case window > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded):
-		return runOutcome{started: true}
-	case timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded):
-		return runOutcome{timedOut: true}
-	default:
-		return runOutcome{err: err}
-	}
-}
-
-// scanLines forwards every line read from r to onLine until EOF.
-func scanLines(r io.Reader, onLine func(string), wg *sync.WaitGroup) {
-	defer wg.Done()
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		onLine(sc.Text())
-	}
 }
 
 // FormatDebugLogs returns formatted log lines with timestamps.

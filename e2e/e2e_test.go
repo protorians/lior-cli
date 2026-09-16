@@ -1,5 +1,5 @@
 // Package e2e runs the end-to-end (testscript) suite of the Sentient CLI
-// against a mock sentient-connect API (spec §12: TC-001 → TC-025).
+// against a mock sentient-connect API (spec §12: TC-001 → TC-029).
 package e2e
 
 import (

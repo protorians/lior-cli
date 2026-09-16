@@ -5,7 +5,7 @@ if [ "$1" = "run" ]; then
   name="$1"
   shift
   case "$name" in
-    debug|dev|build)
+    debug|dev|build|test)
       echo "[fixture] bun run $name (ok)"
       exit 0
       ;;

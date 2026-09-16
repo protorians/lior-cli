@@ -15,6 +15,7 @@ const (
 	ExitBuild          = 10
 	ExitPublish        = 11
 	ExitSigning        = 12
+	ExitTest           = 13  // test failure
 	ExitCancelled      = 130 // operation cancelled by the user (128 + SIGINT)
 )
 

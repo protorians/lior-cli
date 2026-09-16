@@ -38,6 +38,7 @@ go build -o sentients .
 | `sentients link` / `unlink` | Associer un module local à un module distant du store (token) |
 | `sentients audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
 | `sentients debug [module]` | Valider le module et lancer un build de diagnostic |
+| `sentients test [module]` | Exécuter les tests du module (script `test`, vitest/jest, `bun test`) ; exit `13` en cas d'échec |
 | `sentients -v` / `--version` | Afficher la version |
 | `sentients help` | Aide contextuelle |
 

@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.8.1` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.8.1).
+> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.9.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.9.0).
 
 ---
 
@@ -20,11 +20,11 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 
 | Élément | État |
 |---------|------|
-| 14 commandes Cobra (12 de la spec + `sign` à 3 sous-commandes + helper) | ✅ implémentées |
-| 11 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `store`, `tui`, `pkg`) | ✅ présents |
-| Tests unitaires (`go test ./...`) | ✅ verts (13 packages ok) |
-| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 12 scénarios, TC-001 → TC-027 (mock `sentient-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.8.1) |
+| 15 commandes Cobra (13 de la spec + `sign` à 3 sous-commandes + helper) | ✅ implémentées |
+| 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
+| Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
+| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `sentient-connect` in-memory) |
+| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.9.0) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -122,6 +122,21 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   (id/name/version semver/token UUID/entry/domain), index.tsx, requirements, assets.
 - Sortie tableau TUI ou JSON (`--output json`), résumé erreurs/warnings.
 
+### `sentients test [module]` (first chunk of §2.4 future scope, v0.9.0)
+- Nouveau package **`internal/moduletest`** (`Tester`, `TestResult`) : validation du module +
+  détection du gestionnaire de paquets + résolution de la commande de test.
+- Résolution : script `test` du `package.json` du module puis du projet (clé exacte) ; repli sur un
+  **runner réel** (`vitest run`, `jest --ci --runInBand`, `bun test`) **uniquement si le module
+  contient des fichiers de test** (`*.test.*`, `*.spec.*`, `__tests__/`) ; sinon statut `WARNING`
+  (`no_test_script`), jamais un faux « OK ».
+- **Streaming** live de la sortie de test (queue de 8 lignes), **plafond** 2 min par défaut
+  (dépassement → `ERROR`), **annulation** `Ctrl+C`/`Esc`/`SIGINT` (arbre de process, exit **130**).
+- **Exit code `13`** (échec de tests, spec §11.1) : le run échoue dès qu'un module a un statut
+  `ERROR`. Mode all modules : tableau + logs + récapitulatif global (`Summary`).
+- Factorisation : le streaming `stdout`/`stderr` avec groupe de process dédié, fenêtres de démarrage,
+  plafonds et arrêt SIGINT→SIGKILL est extrait dans **`internal/runner`** (partagé avec le `debug`,
+  désormais allégé de ses helpers `runStream`/`scanLines`/proc).
+
 ### `sentients help`, `sentients -v` / `--version` (FR-019, FR-020)
 - Aide contextuelle Cobra ; version injectée via ldflags (`main.version/commit/date`).
 - Auto-update non bloquant (NFR-006) via GitHub releases (cache 24 h, **notification seule**).
@@ -140,6 +155,8 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 | `signing` | Signature Ed25519 | `KeyStore`, `GenerateKeyPair`, `SignArchive`, `VerifySignature`, `Fingerprint`, `FindArchive` |
 | `audit` | Audit conformité | `Auditor`, `AuditResult` |
 | `debug` | Build de diagnostic pas-à-pas | `Debugger`, `DebugResult`, `Step`, `FormatDebugLogs` |
+| `moduletest` | Exécution des tests pas-à-pas | `Tester`, `TestResult`, `FormatTestLogs` |
+| `runner` | Streaming d'exécution partagé (groupe de process, fenêtre/plafond, arrêt) | `Run`, `Outcome`, `OutputLine` |
 | `store` | Client store API | `Client` (`ListModules`, `GetModule`, `UpdateModule`, `Publish` — 3 étapes developer-store) |
 | `pkg` | Utilitaires | erreurs+exit codes, crypto AES-256-GCM, fs, git, http, uuid, update |
 | `tui` | UI Charm | `AskText/AskSecret/Select/Confirm`, `RunWithSpinner`, `RunWithSteps`, `Step`, `Summarize`, `Table`, `NewStyles` |
@@ -351,8 +368,8 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 - S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `SENTIENT_CLI_DEBUG`).
 - S-014 config `sentients.config.json` ✅ déjà présente.
 - S-015 auto-update ✅ partiel (notification seule, pas de download ; désactivable en CI).
-- S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (13 packages), **E2E ✅** (12 scénarios
-  txtar, TC-001 → TC-027, mock `sentient-connect` in-memory), **CI ✅** (job `e2e`).
+- S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (15 packages), **E2E ✅** (13 scénarios
+  txtar, TC-001 → TC-029, mock `sentient-connect` in-memory), **CI ✅** (job `e2e`).
 
 ### Prochaines itérations proposées (par priorité)
 1. **Sécurité/robustesse** — ✅ fait au 2026-09-12 : fallback keychain↔fichier chiffré
@@ -369,9 +386,9 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
    repli bundler `esbuild`/`tsup` puis `tsc --noEmit`, plus de faux « OK » sans build réel ; puis
    **trace pas-à-pas + streaming + timeout + annulation** (v0.8.0, `internal/tui/step.go`).
 6. **Candidats restants** :
-   - testscript E2E (S-017) + CI sur scénarios TC-001 → TC-027 — ✅ fait : `e2e/` (mock
-     `sentient-connect` in-memory, 12 scénarios `01_help_version` → `11_auth` couvrant
-     TC-001 → TC-027, fixtures `bun/npm/tsc/node/esbuild`, job CI `e2e`) ;
+   - testscript E2E (S-017) + CI sur scénarios TC-001 → TC-029 — ✅ fait : `e2e/` (mock
+     `sentient-connect` in-memory, 13 scénarios `01_help_version` → `12_test` couvrant
+     TC-001 → TC-029, fixtures `bun/npm/tsc/node/esbuild`, job CI `e2e`) ;
    - `disconnect`/`unlink` : option de mise à jour distante via `PUT /api/developer-store/modules/:id` (✅
      `unlink --sync-remote` couvert par TC-014) ;
    - **token refresh auto (SEC-003)** — ✅ fait au 2026-09-16 : retry 401 avec rotation du bearer
@@ -382,9 +399,13 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
    - **bâtir un vrai build de module dans `debug`** — ✅ fait au 2026-09-16 : sans script
      `debug/dev/build`, `debug` tente un **bundle réel** via un bundler résolvable
      (`esbuild`/`tsup`, node_modules module → racine → PATH) qui compile l'entrée dans `dist/`,
-     avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
-     `esbuild`).
-7. **Future spec** : `sentients test <module>`, `sentients watch` (hot-reload), `sentients deploy`,
+avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
+   `esbuild`).
+   - **`sentients test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
+     package `internal/moduletest` (validation + résolution script/runner + streaming + plafond),
+     exit code **13** (échec de tests), extraction du runner partagé `internal/runner`, i18n
+     `en-US`/`fr-FR`, tests unitaires + scénario E2E `12_test.txtar` (TC-028/TC-029).
+7. **Future spec** : `sentients watch` (hot-reload), `sentients deploy`,
    `sentients marketplace` (§2.4 future scope) — `sentients auth` (OAuth2 PKCE) ✅ fait au
    2026-09-16.
 
@@ -395,13 +416,13 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 ```bash
 go build -o sentients .
 ./sentients --help
-go test ./...              # unitaires + E2E testscript (TC-001 → TC-027)
+go test ./...              # unitaires + E2E testscript (TC-001 → TC-029)
 go test ./e2e/ -run TestScripts -v   # suite E2E seule
 go vet ./...
 goreleaser release --clean   # release multi-plateforme
 ```
 
-Couverture de test : unitaires ✅ (13 packages ok) + **E2E ✅** (`e2e/` : `TestMain` construit la CLI
-depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 12 scripts txtar
-`e2e/testdata/scripts/01_help_version.txtar` → `11_auth.txtar` couvrant TC-001 → TC-027, fixtures
+Couverture de test : unitaires ✅ (15 packages ok) + **E2E ✅** (`e2e/` : `TestMain` construit la CLI
+depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 13 scripts txtar
+`e2e/testdata/scripts/01_help_version.txtar` → `12_test.txtar` couvrant TC-001 → TC-029, fixtures
 exécutables `e2e/testdata/fixtures/bin/{bun,npm,tsc,node,esbuild}`, job CI `e2e`).

@@ -1,0 +1,47 @@
+mkdir project
+cd project
+mkdir external_modules
+exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
+exec $SENTIENTS --no-color create module runner --domain com.test.runner
+exec $SENTIENTS --no-color create module matcher --domain com.test.matcher
+exec $SENTIENTS --no-color create module failing --domain com.test.failing
+
+# TC-028 — `test` of a single module: package.json test script detected → OK.
+exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > external_modules/com.test.runner/package.json'
+exec $SENTIENTS --no-color test com.test.runner
+stderr 'Testing: com.test.runner'
+stderr 'Module validation'
+stderr 'Test command resolution'
+stderr 'Test execution'
+stdout 'Status : ✓ OK'
+stdout 'bun run test'
+stdout 'Summary'
+stdout 'success'
+
+# Module without a test script / test files → validation only → WARNING.
+exec $SENTIENTS --no-color test com.test.matcher
+stderr 'Testing: com.test.matcher'
+stdout 'Status : ⚠ WARNING'
+stdout 'no test script'
+
+# Failing module → real vitest runner (in its node_modules) exits non-zero →
+# ERROR status and exit code 13.
+exec sh -c 'mkdir -p external_modules/com.test.failing/node_modules/.bin && printf "#!/bin/sh\necho \"[fixture] vitest run failed\"\nexit 42\n" > external_modules/com.test.failing/node_modules/.bin/vitest && chmod 755 external_modules/com.test.failing/node_modules/.bin/vitest'
+exec sh -c 'mkdir -p external_modules/com.test.failing/__tests__ && printf "it(\"works\", () => {});\n" > external_modules/com.test.failing/__tests__/basic.ts'
+exec sh -c '$SENTIENTS --no-color test com.test.failing; echo "exit=$?"'
+stderr 'Testing: com.test.failing'
+stderr 'Test execution'
+stdout 'Status : ✗ ERROR'
+stdout 'exit=13'
+stdout 'Summary'
+stdout 'error'
+
+# TC-029 — `test` without argument: report of all modules (table); a failing
+# suite makes the whole run exit non-zero.
+! exec $SENTIENTS --no-color test
+stderr 'Testing all modules'
+stderr 'Module com.test.runner'
+stdout 'com.test.matcher'
+stdout 'com.test.runner'
+stdout 'com.test.failing'
+stdout 'Summary'

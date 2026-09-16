@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -124,46 +123,6 @@ func TestDebugModuleDevScriptStopsAfterWindow(t *testing.T) {
 	}
 	if !buildNotice {
 		t.Errorf("attendu une étape build en notice pour le script dev arrêté : %v", result.Steps)
-	}
-}
-
-func TestRunStreamCapturesOutput(t *testing.T) {
-	d := &Debugger{}
-	var mu sync.Mutex
-	var lines []string
-	out := d.runStream(context.Background(), t.TempDir(),
-		[]string{"sh", "-c", "echo first; echo second"},
-		0, 5*time.Second, func(s string) {
-			mu.Lock()
-			lines = append(lines, s)
-			mu.Unlock()
-		})
-	if out.err != nil {
-		t.Fatalf("outcome = %+v, want success", out)
-	}
-	got := strings.Join(lines, "\n")
-	for _, want := range []string{"first", "second"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("sortie non capturée %q : %v", want, lines)
-		}
-	}
-}
-
-func TestRunStreamStartWindowStopsScript(t *testing.T) {
-	d := &Debugger{}
-	out := d.runStream(context.Background(), t.TempDir(),
-		[]string{"sh", "-c", "sleep 30"}, 500*time.Millisecond, 0, func(string) {})
-	if !out.started {
-		t.Fatalf("outcome = %+v, want started", out)
-	}
-}
-
-func TestRunStreamTimeoutMarksTimedOut(t *testing.T) {
-	d := &Debugger{}
-	out := d.runStream(context.Background(), t.TempDir(),
-		[]string{"sh", "-c", "sleep 30"}, 0, 300*time.Millisecond, func(string) {})
-	if !out.timedOut {
-		t.Fatalf("outcome = %+v, want timedOut", out)
 	}
 }
 
