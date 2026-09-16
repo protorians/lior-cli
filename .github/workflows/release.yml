@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to release (e.g. 0.4.0). Creates & pushes the vX.Y.Z tag if missing — the tag then triggers the full release."
+        description: "Version to release (e.g. 0.4.0). Creates & pushes the vX.Y.Z tag if missing, then builds and publishes the release in the same run."
         required: true
         type: string
 
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -20,52 +22,69 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  create-tag:
-    name: Create tag
+  prepare:
+    name: Resolve version & ensure tag
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      skip: ${{ steps.apply.outputs.skip }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
-      - name: Validate && create tag
+      - name: Resolve version
+        id: resolve
         run: |
           set -euo pipefail
-          VERSION="${{ github.event.inputs.version }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(jq -r '.version' app.config.json)"
+          fi
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
             echo "::error::Invalid version '$VERSION' (expected e.g. 0.4.0)"
             exit 1
           }
-          TAG="v${VERSION}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create & push tag (workflow_dispatch or push to main)
+        id: apply
+        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'branch'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.resolve.outputs.tag }}"
           if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
             echo "::notice::Tag $TAG already exists on origin — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "release: $TAG"
           git push origin "$TAG"
-          echo "::notice::Tag $TAG created & pushed — the Release workflow now builds the binaries and publishes the release."
+          echo "::notice::Tag $TAG created & pushed — the release below is built in this same run."
+          echo "skip=false" >> "$GITHUB_OUTPUT"
 
   release:
-    name: Release ${{ github.ref_name }}
+    name: Release ${{ needs.prepare.outputs.tag }}
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    needs: prepare
+    if: needs.prepare.outputs.skip != 'true'
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Export version
         id: version
-        run: |
-          set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
-          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-            echo "::error::Invalid tag '$GITHUB_REF_NAME' (expected vX.Y.Z)"
-            exit 1
-          }
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+        run: echo "version=${{ needs.prepare.outputs.version }}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6
         with:
@@ -82,7 +101,7 @@ jobs:
           tail -n 3 release-notes.md
 
       - name: Run GoReleaser (builds binaries+archives into ./dist, uploads to release)
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -91,7 +110,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish ./dist artifacts as workflow artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: sentients-cli-${{ steps.version.outputs.version }}-dist
           path: dist/
@@ -100,7 +119,7 @@ jobs:
       - name: Update run summary with binaries + changelog
         run: |
           set -euo pipefail
-          TAG="${{ steps.version.outputs.tag }}"
+          TAG="${{ needs.prepare.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
           {
             echo "## Release ${TAG}"
@@ -147,7 +166,7 @@ jobs:
         if: steps.npm-token.outputs.available == 'true'
         working-directory: npm/sentient-cli
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ needs.release.outputs.version }}"
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Publish to npm
