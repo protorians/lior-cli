@@ -106,18 +106,20 @@ jobs:
         id: notes
         run: |
           set -euo pipefail
-          bash scripts/release-notes.sh "${{ steps.version.outputs.version }}" > release-notes.md
+          NOTES="$RUNNER_TEMP/release-notes.md"
+          bash scripts/release-notes.sh "${{ steps.version.outputs.version }}" > "$NOTES"
+          echo "release-notes=$NOTES" >> "$GITHUB_OUTPUT"
           echo "Generated release notes (see first / last lines):"
-          head -n 12 release-notes.md
+          head -n 12 "$NOTES"
           echo "..."
-          tail -n 3 release-notes.md
+          tail -n 3 "$NOTES"
 
       - name: Run GoReleaser (builds binaries+archives into ./releases, uploads to release)
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean --release-notes=release-notes.md
+          args: release --clean --release-notes="${{ steps.notes.outputs.release-notes }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
