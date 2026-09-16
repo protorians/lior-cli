@@ -8,7 +8,7 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.2.0 ;
+> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.3.0 ;
 >   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
 
 ---
@@ -22,7 +22,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.2.0) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.3.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
