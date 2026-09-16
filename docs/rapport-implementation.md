@@ -2,7 +2,7 @@
 
 > Document de suivi pour implémenter les features au fil des itérations.
 > Dernière mise à jour : 2026-09-16 — version courante du code : `dev` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.3.0).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.3.1).
 
 ---
 
