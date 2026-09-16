@@ -1,6 +1,13 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.4.0). Creates & pushes the vX.Y.Z tag if missing — the tag then triggers the full release."
+        required: true
+        type: string
+
   push:
     tags:
       - "v*"
@@ -8,32 +15,114 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  release:
-    name: Release
+  create-tag:
+    name: Create tag
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate && create tag
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.event.inputs.version }}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Invalid version '$VERSION' (expected e.g. 0.4.0)"
+            exit 1
+          }
+          TAG="v${VERSION}"
+          if git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Tag $TAG already exists on origin — nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "release: $TAG"
+          git push origin "$TAG"
+          echo "::notice::Tag $TAG created & pushed — the Release workflow now builds the binaries and publishes the release."
+
+  release:
+    name: Release ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
+      - name: Extract version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::Invalid tag '$GITHUB_REF_NAME' (expected vX.Y.Z)"
+            exit 1
+          }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
-      - name: Run GoReleaser
+      - name: Generate release notes (download links + changelog)
+        id: notes
+        run: |
+          set -euo pipefail
+          bash scripts/release-notes.sh "${{ steps.version.outputs.version }}" > release-notes.md
+          echo "Generated release notes (see first / last lines):"
+          head -n 12 release-notes.md
+          echo "..."
+          tail -n 3 release-notes.md
+
+      - name: Run GoReleaser (builds binaries+archives into ./dist, uploads to release)
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
-          args: release --clean
+          args: release --clean --release-notes=release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Publish ./dist artifacts as workflow artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: sentients-cli-${{ steps.version.outputs.version }}-dist
+          path: dist/
+          retention-days: 30
+
+      - name: Update run summary with binaries + changelog
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          {
+            echo "## Release ${TAG}"
+            echo ""
+            echo "Release page: \`$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/${TAG}\`"
+            echo ""
+            echo "### Binaries built into \`./dist\`"
+            echo ""
+            echo '```text'
+            ls -lh dist/ | sed -E 's/ +/ /g'
+            echo '```'
+            echo ""
+            echo "### Changelog"
+            echo ""
+            bash scripts/release-notes.sh "$VERSION" | awk '/^## Changelog/{found=1} found'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   publish-npm:
-    name: Publish to npm
+    name: Publish @sentients/cli to npm
     runs-on: ubuntu-latest
     needs: release
+    if: needs.release.result == 'success'
     steps:
       - uses: actions/checkout@v5
 
@@ -42,36 +131,28 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      - name: Check NPM_TOKEN presence
+        id: npm-token
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [[ -n "${NPM_TOKEN:-}" ]]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::NPM_TOKEN not set — skipping npm publish."
+          fi
 
       - name: Update npm package version
+        if: steps.npm-token.outputs.available == 'true'
         working-directory: npm/sentient-cli
         run: |
-          jq --arg v "${{ steps.version.outputs.VERSION }}" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Publish to npm
+        if: steps.npm-token.outputs.available == 'true'
         working-directory: npm/sentient-cli
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  post-release:
-    name: Post-release
-    runs-on: ubuntu-latest
-    needs: [release, publish-npm]
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Summary
-        run: |
-          echo "## Release ${{ github.ref_name }} completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- GitHub release with binaries: created" >> $GITHUB_STEP_SUMMARY
-          echo "- npm package @sentients/cli: published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Install" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "npm install -g @sentients/cli" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY

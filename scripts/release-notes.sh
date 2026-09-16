@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# release-notes.sh <version>
+#
+# Builds the GitHub Release body for sentients-cli:
+#   - download table of every binary + archive produced by GoReleaser
+#   - install instructions
+#   - changelog extracted from CHANGELOG.md (falls back to git log)
+#
+# Usage: bash scripts/release-notes.sh 0.3.0
+
+set -euo pipefail
+
+VERSION="${1:?usage: release-notes.sh <version>}"
+TAG="v${VERSION}"
+REPO="${GITHUB_REPOSITORY:-protorians/sentient-cli}"
+BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+changelog() {
+  awk -v v="${VERSION}" '
+    $0 ~ "^## \\[v?" v "\\]" { capture = 1; next }
+    capture && /^## \[/ { exit }
+    capture { print }
+  ' CHANGELOG.md
+}
+
+if [[ -n "$(changelog | tr -d '[:space:]')" ]]; then
+  CHANGELOG="$(changelog)"
+else
+  PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+  if [[ -n "${PREV_TAG}" ]]; then
+    CHANGELOG="$(git log --oneline --no-merges "${PREV_TAG}..${TAG}" | sed 's/^/- /')"
+  else
+    CHANGELOG="_No changelog entry found for ${TAG} in CHANGELOG.md._"
+  fi
+fi
+
+cat <<EOF
+## Download binaries
+
+| Platform | Architecture | Archive | Binary |
+|---|---|---|---|
+| Linux | amd64 | [\`sentients-cli_${VERSION}_linux_amd64.tar.gz\`](${BASE}/sentients-cli_${VERSION}_linux_amd64.tar.gz) | [\`sentients_${VERSION}_linux_amd64\`](${BASE}/sentients_${VERSION}_linux_amd64) |
+| Linux | arm64 | [\`sentients-cli_${VERSION}_linux_arm64.tar.gz\`](${BASE}/sentients-cli_${VERSION}_linux_arm64.tar.gz) | [\`sentients_${VERSION}_linux_arm64\`](${BASE}/sentients_${VERSION}_linux_arm64) |
+| macOS | amd64 (Intel) | [\`sentients-cli_${VERSION}_darwin_amd64.tar.gz\`](${BASE}/sentients-cli_${VERSION}_darwin_amd64.tar.gz) | [\`sentients_${VERSION}_darwin_amd64\`](${BASE}/sentients_${VERSION}_darwin_amd64) |
+| macOS | arm64 (Apple Silicon) | [\`sentients-cli_${VERSION}_darwin_arm64.tar.gz\`](${BASE}/sentients-cli_${VERSION}_darwin_arm64.tar.gz) | [\`sentients_${VERSION}_darwin_arm64\`](${BASE}/sentients_${VERSION}_darwin_arm64) |
+| Windows | amd64 | [\`sentients-cli_${VERSION}_windows_amd64.zip\`](${BASE}/sentients-cli_${VERSION}_windows_amd64.zip) | [\`sentients_${VERSION}_windows_amd64.exe\`](${BASE}/sentients_${VERSION}_windows_amd64.exe) |
+
+All archives and binaries are published to the [\`./dist\`](${BASE}) release assets of this tag. Checksums for every artifact are in [\`checksums.txt\`](${BASE}/checksums.txt).
+
+## Install
+
+### Go
+
+\`\`\`bash
+go install github.com/protorians/sentient-cli@${TAG}
+\`\`\`
+
+### npm / pnpm / yarn / bun
+
+\`\`\`bash
+npm install -g @sentients/cli
+\`\`\`
+
+### Binary
+
+Download the archive matching your platform from the table above, extract it, and add the executable to your \`PATH\`.
+
+---
+
+## Changelog
+
+${CHANGELOG}
+EOF
