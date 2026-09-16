@@ -4,6 +4,7 @@ mkdir external_modules
 exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
 exec $SENTIENTS --no-color create module matcher --domain com.test.matcher
 exec $SENTIENTS --no-color create module runner --domain com.test.runner
+exec $SENTIENTS --no-color create module renderer --domain com.test.renderer
 
 # TC-015 — `debug` of a single module: build script detected → OK.
 exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > external_modules/com.test.runner/package.json'
@@ -20,8 +21,29 @@ stderr 'Debugging: com.test.matcher'
 stdout 'Status : ✓ OK'
 stdout 'tsc --noEmit'
 
+# Module without a build script but with a real bundler (esbuild) in its own
+# node_modules → real bundle into dist/ → OK (spec §5.9, vrai build du module).
+exec sh -c 'mkdir -p external_modules/com.test.renderer/node_modules/.bin && printf "#!/bin/sh\nmkdir -p \"\$4\" && printf \"export default ok;\" > \"\$4/index.js\"\n" > external_modules/com.test.renderer/node_modules/.bin/esbuild && chmod 755 external_modules/com.test.renderer/node_modules/.bin/esbuild'
+exec $SENTIENTS --no-color debug com.test.renderer
+stderr 'Debugging: com.test.renderer'
+stdout 'Status : ✓ OK'
+stdout 'esbuild'
+exists external_modules/com.test.renderer/dist/index.js
+
 # TC-016 — `debug` without argument: report of all modules (table).
 exec $SENTIENTS --no-color debug
 stderr 'Debugging all modules'
 stdout 'com.test.matcher'
 stdout 'com.test.runner'
+stdout 'com.test.renderer'
+
+-- esbuild (755) --
+#!/bin/sh
+# E2E stand-in for the esbuild bundler: `<entry> --bundle --outdir <dir>`.
+if [ "$3" != "--outdir" ]; then
+  echo "usage fixture: esbuild <entry> --bundle --outdir <dir>" 1>&2
+  exit 1
+fi
+mkdir -p "$4"
+printf 'export default {};\n' > "$4/index.js"
+echo "[fixture] esbuild bundle (ok)"

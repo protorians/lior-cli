@@ -247,7 +247,8 @@
   "debug.logs": "  Journaux :",
   "debug.npm_none": "aucun gestionnaire de paquets détecté, validation uniquement",
   "debug.build_error": "erreur de construction : %s",
-  "debug.no_build_script": "aucun script de build (debug/dev/build) ni vérification de type TypeScript trouvé — validation uniquement",
+  "debug.bundler": "build réel via %s (sortie : %s)",
+  "debug.no_build_script": "aucun script de build (debug/dev/build), bundler (esbuild/tsup) ni vérification de type TypeScript trouvé — validation uniquement",
 
   "cmd.audit.short": "Auditer la conformité d'un module",
   "cmd.audit.long": "Audite la conformité d'un (ou de tous les) module(s) par rapport aux\nrègles Sentient : Clean Architecture, manifest.json et index.tsx.\n\nSans argument, tous les modules de external_modules/ sont audités.",

@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-16 — version courante du code : `dev` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.3.1).
+> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.5.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.5.0).
 
 ---
 
@@ -295,7 +295,11 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
      `unlink --sync-remote` ;
    - **audit `domain` conforme spec §5.10** — ✅ fait au 2026-09-16 : format `mod.sentients.<name>`
      vérifié (WARNING), plus de simple reverse-DNS ;
-   - bâtir un vrai build de module dans `debug` (au-delà du `package.json`).
+   - **bâtir un vrai build de module dans `debug`** — ✅ fait au 2026-09-16 : sans script
+     `debug/dev/build`, `debug` tente un **bundle réel** via un bundler résolvable
+     (`esbuild`/`tsup`, node_modules module → racine → PATH) qui compile l'entrée dans `dist/`,
+     avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
+     `esbuild`).
 7. **Telese spec** : `sentients test <module>`, `sentients watch` (hot-reload), `sentients deploy`,
    `sentients auth` (OAuth2 PKCE), `sentients marketplace` (§2.4 future scope).
 

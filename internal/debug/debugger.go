@@ -68,9 +68,15 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 	// package.json over the project root one.
 	build := d.findBuildCommand(pm, moduleDir)
 	if build == nil {
+		// Fallback to a real bundle when a bundler (esbuild/tsup) is
+		// resolvable — beyond the package.json scripts (spec §5.9 "Exécuter
+		// le build du module"): this compiles the module entry to real
+		// output under `dist/` instead of a type-check.
+		build = d.findBundlerBuildCommand(moduleDir)
+	}
+	if build == nil {
 		// Fallback to a real TypeScript type-check when the module contains
-		// TS/TSX sources and a tsconfig + tsc are resolvable — beyond the
-		// package.json scripts (spec §5.9 "Exécuter le build du module").
+		// TS/TSX sources and a tsconfig + tsc are resolvable.
 		build = d.findTypeCheckCommand(moduleDir)
 	}
 	if build != nil {
@@ -84,14 +90,17 @@ func (d *Debugger) DebugModule(name string) (*DebugResult, error) {
 			}
 		} else {
 			result.Status = "OK"
+			if build.realBuild {
+				result.Logs = append(result.Logs, i18n.Tf("debug.bundler", build.label, build.outDir))
+			}
 			if output != "" {
 				result.Logs = append(result.Logs, output)
 			}
 		}
 	} else {
-		// No build script: the validation above is the only thing executed —
-		// this must not be reported as a successful build (previously a false
-		// "OK" hid the absence of any real compilation).
+		// No build script, bundler or type-check: the validation above is the
+		// only thing executed — this must not be reported as a successful build
+		// (previously a false "OK" hid the absence of any real compilation).
 		result.Status = "WARNING"
 		result.Logs = append(result.Logs, i18n.T("debug.no_build_script"))
 	}
@@ -128,10 +137,17 @@ func (d *Debugger) DebugAll() ([]*DebugResult, error) {
 	return results, nil
 }
 
-// buildCommand is a build script to run and the directory it belongs to.
+// buildCommand is a build script or bundler command to run and the directory
+// it belongs to. label and outDir (optional) are purely informational: label
+// is shown in the OK log and outDir is the emitted bundle directory.
 type buildCommand struct {
-	cmd []string
-	dir string
+	cmd    []string
+	dir    string
+	label  string
+	outDir string
+	// realBuild marks a bundler or compiler invocation (true output), as
+	// opposed to a package-manager `run` passthrough.
+	realBuild bool
 }
 
 func (d *Debugger) detectPackageManager() string {
@@ -181,6 +197,65 @@ func packageScript(path, name string) (string, bool) {
 	}
 	v, ok := nodePackage.Scripts[name]
 	return v, ok
+}
+
+// bundlerName is a known real bundler executable prefixed by its CLI entry.
+var bundlerCLI = map[string]string{
+	"esbuild": "esbuild",
+	"tsup":    "tsup",
+}
+
+// findBundlerBuildCommand resolves a real bundler (esbuild/tsup) — module
+// node_modules, project root node_modules, then PATH — and drives a true
+// bundle of the module entry into `dist/`, producing actual output instead of
+// a plain type-check. Returns nil when no bundler is resolvable (spec §5.9,
+// event-driven build beyond the package.json scripts).
+func (d *Debugger) findBundlerBuildCommand(moduleDir string) *buildCommand {
+	entry := filepath.Join(moduleDir, "index.tsx")
+	if !pkg.FileExists(entry) {
+		return nil
+	}
+
+	outDir := filepath.Join(moduleDir, "dist")
+	if !pkg.DirExists(outDir) {
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			return nil
+		}
+	}
+
+	for _, bin := range []string{
+		filepath.Join(moduleDir, "node_modules", ".bin", "esbuild"),
+		filepath.Join(moduleDir, "node_modules", ".bin", "tsup"),
+		filepath.Join(d.Root, "node_modules", ".bin", "esbuild"),
+		filepath.Join(d.Root, "node_modules", ".bin", "tsup"),
+	} {
+		if pkg.FileExists(bin) {
+			cli, ok := bundlerCLI[filepath.Base(bin)]
+			if !ok {
+				continue
+			}
+			return bundlerCommand(cli, bin, entry, outDir)
+		}
+	}
+	for _, cli := range []string{"esbuild", "tsup"} {
+		if pkg.HasCommand(cli) {
+			return bundlerCommand(cli, cli, entry, outDir)
+		}
+	}
+	return nil
+}
+
+// bundlerCommand builds the CLI invocation for a resolved bundler. esbuild and
+// tsup share the same entry → bundle → outdir shape, only the output flag
+// differs.
+func bundlerCommand(cli, execPath, entry, outDir string) *buildCommand {
+	cmd := []string{execPath, entry, "--bundle"}
+	flag := "--out-dir"
+	if cli == "esbuild" {
+		flag = "--outdir"
+	}
+	cmd = append(cmd, flag, outDir)
+	return &buildCommand{cmd: cmd, dir: filepath.Dir(entry), label: cli, outDir: outDir, realBuild: true}
 }
 
 // findTypeCheckCommand locates a real TypeScript type-check for the module:

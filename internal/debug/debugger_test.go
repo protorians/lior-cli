@@ -3,6 +3,7 @@ package debug
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/protorians/sentient-cli/internal/config"
@@ -187,6 +188,107 @@ func TestFindBuildCommandNoSubstringFalsePositive(t *testing.T) {
 	d := &Debugger{Root: root}
 	if build := d.findBuildCommand("npm", moduleDir); build != nil {
 		t.Errorf("aucun script exact debug/dev/build ne doit matcher, obtenu %v", build.cmd)
+	}
+}
+
+// writeFakeBin writes an executable shim that reports the command line and
+// exits successfully.
+func writeFakeBin(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := "#!/bin/sh\necho \"[fake] $0 $*\"\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeFixtureModule scaffolds a module plus an index.tsx entry and a fake
+// bundler/toolchain, so findBundlerBuildCommand can resolve it.
+func writeFixtureModule(t *testing.T, root, id string) string {
+	t.Helper()
+	createTestModule(t, root, id)
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.test."+id)
+	entry := filepath.Join(moduleDir, "index.tsx")
+	if err := os.WriteFile(entry, []byte("export default {};\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return moduleDir
+}
+
+func TestFindBundlerBuildCommandModuleNodeModules(t *testing.T) {
+	root := setupDebugProject(t)
+	moduleDir := writeFixtureModule(t, root, "my-module")
+
+	writeFakeBin(t, filepath.Join(moduleDir, "node_modules", ".bin", "esbuild"))
+
+	d := &Debugger{Root: root}
+	build := d.findBundlerBuildCommand(moduleDir)
+	if build == nil {
+		t.Fatal("esbuild doit être résolu dans le node_modules du module")
+	}
+	if !build.realBuild {
+		t.Error("la commande bundler doit être marquée realBuild")
+	}
+	wantOut := filepath.Join(moduleDir, "dist")
+	if build.outDir != wantOut {
+		t.Errorf("outDir = %q, want %q", build.outDir, wantOut)
+	}
+	if len(build.cmd) < 4 || build.cmd[0] != filepath.Join(moduleDir, "node_modules", ".bin", "esbuild") {
+		t.Errorf("commande inattendue : %v", build.cmd)
+	}
+}
+
+func TestFindBundlerBuildCommandRootNodeModules(t *testing.T) {
+	root := setupDebugProject(t)
+	moduleDir := writeFixtureModule(t, root, "my-module")
+
+	writeFakeBin(t, filepath.Join(root, "node_modules", ".bin", "tsup"))
+
+	d := &Debugger{Root: root}
+	build := d.findBundlerBuildCommand(moduleDir)
+	if build == nil {
+		t.Fatal("tsup doit être résolu dans le node_modules racine")
+	}
+	wantOut := filepath.Join(moduleDir, "dist")
+	if build.outDir != wantOut {
+		t.Errorf("outDir = %q, want %q", build.outDir, wantOut)
+	}
+	if len(build.cmd) < 4 || build.cmd[0] != filepath.Join(root, "node_modules", ".bin", "tsup") || build.cmd[3] != "--out-dir" {
+		t.Errorf("commande inattendue : %v", build.cmd)
+	}
+}
+
+func TestFindBundlerBuildCommandNone(t *testing.T) {
+	root := setupDebugProject(t)
+	moduleDir := writeFixtureModule(t, root, "my-module")
+
+	d := &Debugger{Root: root}
+	if build := d.findBundlerBuildCommand(moduleDir); build != nil {
+		t.Errorf("aucun bundler ne doit matcher, obtenu %v", build.cmd)
+	}
+}
+
+func TestDebugModuleBundlerBuild(t *testing.T) {
+	root := setupDebugProject(t)
+	writeFixtureModule(t, root, "my-module")
+
+	pathShim := t.TempDir()
+	writeFakeBin(t, filepath.Join(pathShim, "esbuild"))
+
+	t.Setenv("PATH", pathShim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	debugger := &Debugger{Root: root}
+	result, err := debugger.DebugModule("com.test.my-module")
+	if err != nil {
+		t.Fatalf("DebugModule: %v", err)
+	}
+	if result.Status != "OK" {
+		t.Fatalf("Status = %q, want OK (logs: %v)", result.Status, result.Logs)
+	}
+	if !contains(strings.Join(result.Logs, "\n"), "esbuild") {
+		t.Errorf("les logs doivent mentionner le bundler esbuild : %v", result.Logs)
 	}
 }
 

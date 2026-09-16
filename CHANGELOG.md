@@ -3,7 +3,10 @@
 All notable changes to this project will be documented in this file.
 
 
-## [Unreleased]
+## [v0.5.0] - 2026-09-16
+
+### Added
+- **`debug` : vrai build de module (spec §5.9)** — sans script `debug`/`dev`/`build` dans le `package.json`, `sentients debug` tente désormais un **bundle réel** via un bundler résolvable (`esbuild`, `tsup`) — node_modules du module → node_modules racine → PATH — compilant l'entrée du module dans `dist/` (sortie réelle, plus seulement un type-check). Ce n'est qu'à défaut de bundler qu'il retombe sur `tsc --noEmit`, puis sur un statut `WARNING`. Couvert par des tests unitaires (`internal/debug`) et un scénario E2E (fixture `esbuild`).
 
 
 ## [v0.4.1] - 2026-09-16
