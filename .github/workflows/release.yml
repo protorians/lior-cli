@@ -112,7 +112,7 @@ jobs:
           echo "..."
           tail -n 3 release-notes.md
 
-      - name: Run GoReleaser (builds binaries+archives into ./dist, uploads to release)
+      - name: Run GoReleaser (builds binaries+archives into ./releases, uploads to release)
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
@@ -121,7 +121,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish ./dist artifacts as workflow artifacts
+      - name: Publish ./releases artifacts as workflow artifacts
         uses: actions/upload-artifact@v6
         with:
           name: sentients-cli-${{ steps.version.outputs.version }}-dist
@@ -138,7 +138,7 @@ jobs:
             echo ""
             echo "Release page: \`$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/${TAG}\`"
             echo ""
-            echo "### Binaries built into \`./dist\`"
+            echo "### Binaries built into \`./releases\`"
             echo ""
             echo '```text'
             ls -lh dist/ | sed -E 's/ +/ /g'

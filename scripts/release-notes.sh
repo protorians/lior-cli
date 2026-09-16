@@ -46,7 +46,7 @@ cat <<EOF
 | macOS | arm64 (Apple Silicon) | [\`sentients-cli_${VERSION}_darwin_arm64.tar.gz\`](${BASE}/sentients-cli_${VERSION}_darwin_arm64.tar.gz) | [\`sentients_${VERSION}_darwin_arm64\`](${BASE}/sentients_${VERSION}_darwin_arm64) |
 | Windows | amd64 | [\`sentients-cli_${VERSION}_windows_amd64.zip\`](${BASE}/sentients-cli_${VERSION}_windows_amd64.zip) | [\`sentients_${VERSION}_windows_amd64.exe\`](${BASE}/sentients_${VERSION}_windows_amd64.exe) |
 
-All archives and binaries are published to the [\`./dist\`](${BASE}) release assets of this tag. Checksums for every artifact are in [\`checksums.txt\`](${BASE}/checksums.txt).
+All archives and binaries are published to the [\`./releases\`](${BASE}) release assets of this tag. Checksums for every artifact are in [\`checksums.txt\`](${BASE}/checksums.txt).
 
 ## Install
 
