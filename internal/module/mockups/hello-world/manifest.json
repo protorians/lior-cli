@@ -64,6 +64,12 @@
     "react-dom": "^19.0.0",
     "sonner": "^2.0.7"
   },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  },
   "widgets": ["analytics"],
   "routines": ["helloWorldAnalyticsRoutine"],
   "providers": ["layout"],

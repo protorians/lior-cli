@@ -16,6 +16,8 @@ stdout 'Token generated'
 stdout 'manifest.json initialized'
 stdout 'index.tsx initialized'
 stdout 'Page created from mockup'
+stdout 'Required modules verified'
+stdout 'Dependencies resolved'
 
 cd external_modules/blog-manager
 exists manifest.json
@@ -30,6 +32,7 @@ exec grep -q '"version": "1.0.0"' manifest.json
 exec grep -q '"name": "Blog Manager"' manifest.json
 exec grep -q '"id": "blog-manager"' manifest.json
 exec grep -q '"token": "[0-9a-f-]*"' manifest.json
+exec grep -q '"devDependencies"' manifest.json
 
 # The declaration declares a uri → the page is scaffolded in src/app.
 cd ../../src/app/blog-manager

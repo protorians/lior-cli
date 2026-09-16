@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.3.0] - 2026-09-16
+
+### Added
+- **`create module` — vérification des `requirements`** : chaque module requis par le `manifest.json` doit exister localement — dans `external_modules/` **ou** `src/modules/` ; les modules cœur de la plate-forme (`organization`, `identity`) sont toujours satisfaits. En cas de module manquant, la création échoue et le module scaffoldé ainsi que la page éventuelle sont supprimés (rollback), avec une erreur catégorisée listant les modules absents (`create.error.requirements_missing`).
+- **`create module` — installation des dépendances** : les `dependencies` et `devDependencies` du manifest sont résolues via le premier gestionnaire de paquets détecté (`bun → pnpm → yarn → npm`) à la racine du projet. Désactivable via `SENTIENT_CLI_SKIP_INSTALL=1` ; un échec d'installation ou l'absence de gestionnaire reste non-bloquant (simple avertissement).
+- **Manifest** — prise en charge du champ `devDependencies`, ajouté au mockup embarqué hello-world.
+
+### Changed
+- **Audit** — la vérification des requirements réutilise le moteur de résolution commun à `create` (`external_modules/` **ou** `src/modules/`).
+
+### Docs
+- `docs/specs/sentient.md` §5.2 mis à jour (vérification des requirements et installation des dépendances dans le pipeline `create module`) ; `docs/rapport-implementation.md` complété.
+
+
 ## [v0.2.0] - 2026-09-15
 
 ### Added

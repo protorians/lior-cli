@@ -3,6 +3,7 @@ package module
 import (
 	"errors"
 	"path/filepath"
+	"sort"
 
 	"github.com/protorians/sentient-cli/internal/config"
 	"github.com/protorians/sentient-cli/internal/i18n"
@@ -47,6 +48,61 @@ func (e *moduleExistsError) Error() string {
 func IsExistsError(err error) bool {
 	var ee *moduleExistsError
 	return errors.As(err, &ee)
+}
+
+// platformCoreModules are requirements provided by the workspace core (not
+// necessarily as local modules): their presence is governed by the platform,
+// so the local-existence check skips them.
+var platformCoreModules = map[string]bool{
+	"organization": true,
+	"identity":     true,
+}
+
+// ModuleExists reports whether a module `name` is available locally, either as
+// an external module in `external_modules/` or as an internal module in
+// `src/modules/`.
+func ModuleExists(root, name string) bool {
+	if pkg.DirExists(config.ModuleDir(root, name)) {
+		return true
+	}
+	return pkg.DirExists(filepath.Join(root, config.InternalModulesDir, name))
+}
+
+// RequirementSatisfied reports whether a requirement is provided: platform
+// core modules always count, otherwise the module must exist locally
+// (external_modules/ or src/modules/).
+func RequirementSatisfied(root, req string) bool {
+	if platformCoreModules[req] {
+		return true
+	}
+	return ModuleExists(root, req)
+}
+
+// MissingRequirements returns the requirements declared in `manifest` that are
+// not satisfied locally by an external (external_modules/) or an internal
+// (src/modules/) module. Platform core modules are always considered
+// satisfied.
+func (c *Creator) MissingRequirements(manifest *Manifest) []string {
+	missing := []string{}
+	for req := range manifest.Requirements {
+		if !RequirementSatisfied(c.Root, req) {
+			missing = append(missing, req)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+// ResolveDependencies installs the module dependencies (dependencies +
+// devDependencies) declared in the manifest by running the first available
+// package manager (bun → pnpm → yarn → npm) in the project root. It returns
+// the package manager name used, or "" (with no error) when none is available.
+func (c *Creator) ResolveDependencies() (string, error) {
+	pm := pkg.DetectPackageManager()
+	if pm == "" {
+		return "", nil
+	}
+	return pm, pkg.StreamCommandIn(c.Root, pm, "install")
 }
 
 // Create generates a module named `name` inside `external_modules/` by copying

@@ -44,6 +44,10 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Génère la structure `external_modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
   `components/`, `hooks/`, `services/` (avec `.gitkeep`).
 - Token UUID v4 dans le manifest (FR-005), key en `UPPER_SNAKE_CASE`.
+- Vérification des `requirements` (modules requis présents dans `external_modules/` ou `src/modules/` ;
+  les modules cœur `organization`/`identity` toujours satisfaits) avec **rollback** en cas de module
+  manquant, puis résolution des `dependencies`/`devDependencies` via le gestionnaire de paquets détecté
+  (`bun → pnpm → yarn → npm`) à la racine du projet (`--skip-install` pour désactiver).
 
 ### `sentients connect` (FR-006, FR-007, FR-008)
 - Sign-in email/mot de passe via `POST /api/auth/sign-in` → `{user, token, device}` (**jeton unique**).

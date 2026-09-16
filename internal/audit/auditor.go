@@ -203,14 +203,6 @@ func (a *Auditor) auditServicesHaveNoJSX(moduleDir, dir string, res *module.Resu
 	})
 }
 
-// platformCoreModules are requirements provided by the workspace core (not
-// local external_modules/): their presence is governed by the workspace, so
-// the local-existence check is skipped for them.
-var platformCoreModules = map[string]bool{
-	"organization": true,
-	"identity":     true,
-}
-
 // auditDependencies checks that listed requirements and npm deps exist.
 func (a *Auditor) auditDependencies(name string, res *module.Result) {
 	manifest, err := module.LoadManifest(config.ManifestPath(a.Root, name))
@@ -218,13 +210,10 @@ func (a *Auditor) auditDependencies(name string, res *module.Result) {
 		return
 	}
 
-	// Check requirements
+	// Check requirements (external_modules/ or internal src/modules/;
+	// platform core modules are always satisfied).
 	for req := range manifest.Requirements {
-		if platformCoreModules[req] {
-			continue
-		}
-		reqDir := filepath.Join(a.Root, config.ExternalModulesDir, req)
-		addLevel(res, "requirements", req, pkg.DirExists(reqDir),
+		addLevel(res, "requirements", req, module.RequirementSatisfied(a.Root, req),
 			fmt.Sprintf("requirement %q exists", req), module.LevelError)
 	}
 

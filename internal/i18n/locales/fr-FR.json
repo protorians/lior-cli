@@ -86,7 +86,7 @@
   "init.next": "Étapes suivantes :",
 
   "cmd.create.short": "Créer un nouveau module",
-  "cmd.create.long": "Crée un nouveau module dans external_modules/ à partir du mockup de référence\nhello-world (renommé avec le nom du module fourni), ou avec la structure\nstandardisée si aucun mockup n'est disponible : manifest.json, index.tsx,\ncomponents/, hooks/, services/.\n\nSi la déclaration du module définit un uri/url, une page est aussi générée\ndans src/app/ à partir du mockup de page de référence.\n\nLe jeton UUID unique du module est généré automatiquement.\n\nUsage : sentients create module [nom]",
+  "cmd.create.long": "Crée un nouveau module dans external_modules/ à partir du mockup de référence\nhello-world (renommé avec le nom du module fourni), ou avec la structure\nstandardisée si aucun mockup n'est disponible : manifest.json, index.tsx,\ncomponents/, hooks/, services/.\n\nSi la déclaration du module définit un uri/url, une page est aussi générée\ndans src/app/ à partir du mockup de page de référence.\n\nLe jeton UUID unique du module est généré automatiquement.\n\nÀ la création, le manifest.json est vérifié : les modules requis\n(requirements) doivent exister (external_modules/ ou src/modules/), et les\ndépendances (dependencies et devDependencies) sont résolues via le\ngestionnaire de paquets détecté (bun, pnpm, yarn, npm).\n\nUsage : sentients create module [nom]",
   "create.error.too_many": "trop d'arguments — utilisez 'sentients create module [nom]'",
   "create.error.no_name": "fournissez le nom du module en argument",
   "create.prompt.name": "Nom du module",
@@ -100,6 +100,13 @@
   "create.success.manifest": "✓ manifest.json initialisé",
   "create.success.entry": "✓ index.tsx initialisé",
   "create.success.page": "✓ Page créée depuis le mockup : %s",
+  "create.success.requirements": "✓ Modules requis vérifiés",
+  "create.success.deps": "✓ Dépendances résolues : %s",
+  "create.spinner.deps": "Résolution des dépendances",
+  "create.warn.pm_none": "aucun gestionnaire de paquets détecté (bun, pnpm, yarn, npm) ; les dépendances (dependencies et devDependencies) du manifest ne sont pas installées",
+  "create.warn.install": "Échec de l'installation des dépendances : %s",
+  "create.error.requirements_missing": "les modules requis ne sont pas disponibles (external_modules/ ou src/modules/) : %s",
+  "create.error.requirements_missing.fix": "Créez d'abord le(s) module(s) requis avec 'sentients create module', ou corrigez le champ requirements du manifest.json.",
 
   "cmd.connect.short": "Se connecter à Sentient Connect",
   "cmd.connect.long": "Authentifie le développeur avec son compte sentient-connect\n(e-mail + mot de passe, MFA pris en charge) et stocke les informations\nd'identification de manière sécurisée (trousseau système).",

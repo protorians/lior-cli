@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/protorians/sentient-cli/internal/i18n"
@@ -35,6 +36,10 @@ var (
 	createMockup     string
 	createPageMockup string
 )
+
+// createSkipInstallEnv disables the dependency installation step of
+// `create module` (used by the unit test suite and CI-constrained runs).
+const createSkipInstallEnv = "SENTIENT_CLI_SKIP_INSTALL"
 
 func init() {
 	createCmd.Flags().StringVar(&createMockup, "mockup", "", i18n.T("create.flag.mockup"))
@@ -100,13 +105,47 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Block the creation when a module required by the manifest (requirements)
+	// is not available locally — external_modules/ or internal src/modules/.
+	if missing := creator.MissingRequirements(result.Manifest); len(missing) > 0 {
+		if err := os.RemoveAll(result.Dir); err != nil {
+			debugf("rollback of %s: %v", result.Dir, err)
+		}
+		if result.Page != "" {
+			if err := os.Remove(result.Page); err != nil {
+				debugf("rollback of %s: %v", result.Page, err)
+			}
+		}
+		return pkg.NewErrorWithFix(i18n.T("cat.module"),
+			i18n.Tf("create.error.requirements_missing", strings.Join(missing, ", ")),
+			i18n.T("create.error.requirements_missing.fix"), pkg.ExitError)
+	}
+
+	// Resolve the dependencies/devDependencies declared in the manifest with
+	// the first available package manager (bun → pnpm → yarn → npm).
+	depsPM := ""
+	if os.Getenv(createSkipInstallEnv) == "" {
+		var err error
+		depsPM, err = tui.RunWithSpinner(i18n.T("create.spinner.deps"), creator.ResolveDependencies)
+		if err != nil {
+			warn(i18n.Tf("create.warn.install", err.Error()))
+			depsPM = ""
+		} else if depsPM == "" {
+			warn(i18n.T("create.warn.pm_none"))
+		}
+	}
+
 	s := tui.NewStyles()
 	panel := s.Success.Render(i18n.Tf("create.success.dir", result.Dir)) + "\n" +
 		s.Success.Render(i18n.Tf("create.success.token", result.Token)) + "\n" +
 		s.Success.Render(i18n.T("create.success.manifest")) + "\n" +
-		s.Success.Render(i18n.T("create.success.entry"))
+		s.Success.Render(i18n.T("create.success.entry")) + "\n" +
+		s.Success.Render(i18n.T("create.success.requirements"))
 	if result.Page != "" {
 		panel += "\n" + s.Success.Render(i18n.Tf("create.success.page", result.Page))
+	}
+	if depsPM != "" {
+		panel += "\n" + s.Success.Render(i18n.Tf("create.success.deps", depsPM))
 	}
 	fmt.Println()
 	fmt.Println(s.SuccessPanel(panel))

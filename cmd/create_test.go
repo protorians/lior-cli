@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/protorians/sentient-cli/internal/pkg"
@@ -12,6 +13,7 @@ import (
 func TestRunCreateUsesMockupAndPageFlags(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
+	t.Setenv(createSkipInstallEnv, "1")
 
 	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
 		t.Fatal(err)
@@ -84,6 +86,7 @@ export default function HelloWorldPage() {
 func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
+	t.Setenv(createSkipInstallEnv, "1")
 
 	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
 		t.Fatal(err)
@@ -109,5 +112,91 @@ func TestCreateCommandFlagsRegistered(t *testing.T) {
 		if f := createCmd.Flag(name); f == nil {
 			t.Errorf("createCmd must expose the --%s flag", name)
 		}
+	}
+}
+
+// writeRequirementMockup writes a scaffoldable mockup whose manifest declares
+// the given requirements.
+func writeRequirementMockup(t *testing.T, mockupDir string, requirements string) {
+	t.Helper()
+	if err := os.MkdirAll(mockupDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mockupDir, "manifest.json"), []byte(`{
+  "schemaVersion": 1,
+  "id": "hello-world",
+  "key": "HELLO_WORLD",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "entry": "index.tsx",
+  "uri": "/hello-world",
+  "requirements": `+requirements+`
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mockupDir, "index.tsx"), []byte(`const m = { name: 'Hello World' };
+export default m;
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunCreateBlocksMissingRequirement(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv(createSkipInstallEnv, "1")
+
+	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sentient.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mockupDir := filepath.Join(root, "my-mockup")
+	writeRequirementMockup(t, mockupDir, `{"analytics": true}`)
+
+	createMockup = mockupDir
+	defer func() { createMockup = "" }()
+
+	err := runCreate(&cobra.Command{}, []string{"blog-manager"})
+	if err == nil {
+		t.Fatal("create must fail when a required module is missing")
+	}
+	if !strings.Contains(err.Error(), "analytics") || !strings.Contains(err.Error(), "external_modules/") {
+		t.Errorf("error must mention the missing requirement and the lookup dirs, got: %v", err)
+	}
+	if pkg.DirExists(filepath.Join(root, "external_modules", "blog-manager")) {
+		t.Error("the module dir must be rolled back when creation is blocked")
+	}
+}
+
+func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv(createSkipInstallEnv, "1")
+
+	if err := os.MkdirAll(filepath.Join(root, "external_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "src", "modules", "analytics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "sentient.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mockupDir := filepath.Join(root, "my-mockup")
+	writeRequirementMockup(t, mockupDir, `{"analytics": true}`)
+
+	createMockup = mockupDir
+	defer func() { createMockup = "" }()
+
+	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
+		t.Fatalf("runCreate with an internal required module must succeed: %v", err)
+	}
+	if !pkg.FileExists(filepath.Join(root, "external_modules", "blog-manager", "index.tsx")) {
+		t.Error("the module must have been created")
 	}
 }

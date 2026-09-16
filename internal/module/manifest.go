@@ -14,33 +14,34 @@ import (
 
 // Manifest is the metadata file of a Sentient module (`manifest.json`).
 type Manifest struct {
-	SchemaVersion int               `json:"schemaVersion"`
-	ID            string            `json:"id"`
-	Domain        string            `json:"domain"`
-	Key           string            `json:"key"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description"`
-	Version       string            `json:"version"`
-	Icon          string            `json:"icon"`
-	Type          string            `json:"type"`
-	Entry         string            `json:"entry"`
-	URI           string            `json:"uri"`
-	Token         string            `json:"token"`
-	Publisher     Publisher         `json:"publisher"`
-	Platforms     Platforms         `json:"platforms"`
-	ManagerCompat Compatibility     `json:"managerCompatibility"`
-	APICompat     Compatibility     `json:"apiCompatibility"`
-	Permissions   []string          `json:"permissions"`
-	APIScopes     []string          `json:"apiScopes"`
-	Capabilities  Capabilities      `json:"capabilities"`
-	IsEnabled     bool              `json:"isEnabled"`
-	IsDefault     bool              `json:"isDefault"`
-	Requirements  map[string]any    `json:"requirements"`
-	Dependencies  map[string]string `json:"dependencies"`
-	Widgets       []string          `json:"widgets"`
-	Routines      []string          `json:"routines"`
-	Providers     []string          `json:"providers,omitempty"`
-	Menu          Menu              `json:"menu"`
+	SchemaVersion   int               `json:"schemaVersion"`
+	ID              string            `json:"id"`
+	Domain          string            `json:"domain"`
+	Key             string            `json:"key"`
+	Name            string            `json:"name"`
+	Description     string            `json:"description"`
+	Version         string            `json:"version"`
+	Icon            string            `json:"icon"`
+	Type            string            `json:"type"`
+	Entry           string            `json:"entry"`
+	URI             string            `json:"uri"`
+	Token           string            `json:"token"`
+	Publisher       Publisher         `json:"publisher"`
+	Platforms       Platforms         `json:"platforms"`
+	ManagerCompat   Compatibility     `json:"managerCompatibility"`
+	APICompat       Compatibility     `json:"apiCompatibility"`
+	Permissions     []string          `json:"permissions"`
+	APIScopes       []string          `json:"apiScopes"`
+	Capabilities    Capabilities      `json:"capabilities"`
+	IsEnabled       bool              `json:"isEnabled"`
+	IsDefault       bool              `json:"isDefault"`
+	Requirements    map[string]any    `json:"requirements"`
+	Dependencies    map[string]string `json:"dependencies"`
+	DevDependencies map[string]string `json:"devDependencies,omitempty"`
+	Widgets         []string          `json:"widgets"`
+	Routines        []string          `json:"routines"`
+	Providers       []string          `json:"providers,omitempty"`
+	Menu            Menu              `json:"menu"`
 }
 
 // Publisher describes the developer publishing the module.
@@ -124,14 +125,15 @@ func NewManifest(name, description string) Manifest {
 			RequiresOrganization:      false,
 			RequiresAuthenticatedUser: true,
 		},
-		IsEnabled:    true,
-		IsDefault:    false,
-		Requirements: map[string]any{},
-		Dependencies: map[string]string{"@sentients/sdk": "workspace:*"},
-		Widgets:      []string{},
-		Routines:     []string{},
-		Providers:    []string{},
-		Menu:         Menu{Items: []MenuItem{}},
+		IsEnabled:       true,
+		IsDefault:       false,
+		Requirements:    map[string]any{},
+		Dependencies:    map[string]string{"@sentients/sdk": "workspace:*"},
+		DevDependencies: map[string]string{},
+		Widgets:         []string{},
+		Routines:        []string{},
+		Providers:       []string{},
+		Menu:            Menu{Items: []MenuItem{}},
 	}
 }
 

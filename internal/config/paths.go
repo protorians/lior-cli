@@ -14,6 +14,7 @@ const (
 	ConfigFileName      = "sentients.config.json"
 	SentientConfigName  = "sentient.config.toml"
 	ExternalModulesDir  = "external_modules"
+	InternalModulesDir  = "src/modules"
 	PublicAssetsDir     = "public/assets"
 	AppSrcDir           = "src/app"
 	SentientDir         = ".sentients"

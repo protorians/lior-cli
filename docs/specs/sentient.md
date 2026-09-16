@@ -374,16 +374,30 @@ dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun 
      (`Hello World` → affichable, `HelloWorld` → PascalCase, `helloWorld` → camelCase,
      `hello-world` → kebab-case, `HELLO_WORLD` → UPPER_SNAKE, `helloworld` → minuscules)
    - Le contenu des fichiers textes est réécrit en conséquence (renommage des fichiers inclus)
-5. **Patcher l'identité** :
+5. **Vérifier les requirements** : chaque module du champ `requirements` du `manifest.json` doit
+   exister localement — dans `external_modules/` **ou** dans `src/modules/` (modules internes
+   de la plate-forme). Les modules cœur de la plate-forme `organization` et `identity` sont
+   toujours considérés satisfaits. En cas de module requis manquant, la création **échoue**,
+   le répertoire scaffoldé ainsi que la page éventuelle sont **supprimés** (rollback) et une
+   erreur catégorisée listant les modules manquants est renvoyée
+   (`create.error.requirements_missing` + `create.error.requirements_missing.fix`)
+6. **Installer les dépendances** : les `dependencies` et `devDependencies` du manifest sont
+   résolues via le gestionnaire de paquets détecté (`bun` → `pnpm` → `yarn` → `npm`, voir
+   `config.DetectPackageManager`) exécuté à la racine du projet. Si aucun gestionnaire n'est
+   détecté, un avertissement est affiché (les dépendances ne sont pas installées). Un échec
+   d'installation est non-bloquant (simple avertissement `create.warn.install`). L'installation
+   peut être désactivée avec le drapeau `--skip-install` (ou l'environnement
+   `SENTIENT_CLI_SKIP_INSTALL=1`).
+7. **Patcher l'identité** :
    - `manifest.json` : injection d'un **token UUID v4 unique** si absent + description fournie
    - `index.tsx` : réécriture de la ligne `description` de la déclaration
    - `package.json` : description mise à jour
    - `README.md` : généré (nom, description, structure)
-6. **Scaffolder la page** : si la déclaration du module porte un `uri`/`url`, générer
+8. **Scaffolder la page** : si la déclaration du module porte un `uri`/`url`, générer
    `src/app/<uri>/page.tsx` à partir du page mockup (ordre de priorité)
    `--page-mockup` (champ `Creator.PageMockup`) → `SENTIENT_PAGE_MOCKUP` → page **embarquée**
    `internal/module/mockups/page.tsx`
-7. **Afficher le résumé** : module créé, token généré, page créée (si uri), prochaines étapes
+9. **Afficher le résumé** : module créé, token généré, page créée (si uri), prochaines étapes
 
 #### Structure générée (mockup embarqué hello-world)
 

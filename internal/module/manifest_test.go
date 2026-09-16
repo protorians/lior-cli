@@ -83,6 +83,8 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	m.Widgets = []string{"analytics"}
 	m.Routines = []string{"billingAnalyticsRoutine"}
 	m.Providers = []string{"layout"}
+	m.Dependencies = map[string]string{"@sentients/sdk": "workspace:*"}
+	m.DevDependencies = map[string]string{"typescript": "^6.0.3"}
 	m.Menu.Items = []MenuItem{
 		{Label: "Factures", Icon: "FileIcon", URL: "/billing/invoices"},
 	}
@@ -105,6 +107,12 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Menu.Items) != 1 || loaded.Menu.Items[0].URL != "/billing/invoices" {
 		t.Errorf("Menu non conforme: %+v", loaded.Menu)
+	}
+	if loaded.Dependencies["@sentients/sdk"] != "workspace:*" {
+		t.Errorf("Dependencies non conformes: %+v", loaded.Dependencies)
+	}
+	if loaded.DevDependencies["typescript"] != "^6.0.3" {
+		t.Errorf("DevDependencies non conformes: %+v", loaded.DevDependencies)
 	}
 }
 

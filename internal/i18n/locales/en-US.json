@@ -86,7 +86,7 @@
   "init.next": "Next steps :",
 
   "cmd.create.short": "Create a new module",
-  "cmd.create.long": "Creates a new module in external_modules/ from the reference hello-world\nmockup (renamed with the given module name), or with the standardized\nstructure when no mockup is available: manifest.json, index.tsx,\ncomponents/, hooks/, services/.\n\nWhen the module declaration declares a uri/url, a page is also scaffolded\nin src/app/ from the reference page mockup.\n\nThe module's unique UUID token is generated automatically.\n\nUsage : sentients create module [name]",
+  "cmd.create.long": "Creates a new module in external_modules/ from the reference hello-world\nmockup (renamed with the given module name), or with the standardized\nstructure when no mockup is available: manifest.json, index.tsx,\ncomponents/, hooks/, services/.\n\nWhen the module declaration declares a uri/url, a page is also scaffolded\nin src/app/ from the reference page mockup.\n\nThe module's unique UUID token is generated automatically.\n\nOn creation, the manifest.json is verified: required modules (requirements)\nmust exist (external_modules/ or src/modules/), and the dependencies\n(dependencies and devDependencies) are resolved with the detected package\nmanager (bun, pnpm, yarn, npm).\n\nUsage : sentients create module [name]",
   "create.error.too_many": "too many arguments — use 'sentients create module [name]'",
   "create.error.no_name": "provide the module name as an argument",
   "create.prompt.name": "Module name",
@@ -100,6 +100,13 @@
   "create.success.manifest": "✓ manifest.json initialized",
   "create.success.entry": "✓ index.tsx initialized",
   "create.success.page": "✓ Page created from mockup: %s",
+  "create.success.requirements": "✓ Required modules verified",
+  "create.success.deps": "✓ Dependencies resolved: %s",
+  "create.spinner.deps": "Resolving dependencies",
+  "create.warn.pm_none": "no package manager detected (bun, pnpm, yarn, npm); the manifest dependencies (dependencies and devDependencies) are not installed",
+  "create.warn.install": "failed to install dependencies: %s",
+  "create.error.requirements_missing": "required modules not available (external_modules/ or src/modules/): %s",
+  "create.error.requirements_missing.fix": "Create the required module(s) first with 'sentients create module', or fix the requirements field of the manifest.json.",
 
   "cmd.connect.short": "Connect to Sentient Connect",
   "cmd.connect.long": "Authenticates the developer with their sentient-connect account\n(email + password, MFA supported) and stores the credentials securely\n(system keychain).",
