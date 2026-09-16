@@ -189,11 +189,6 @@ func (s *Styles) Rule(width int, color string) string {
 		Render(strings.Repeat("─", width))
 }
 
-// ruleLine is a convenience wrapper around Rule with the theme border color.
-func (s *Styles) ruleLine(width int) string {
-	return s.Rule(width, s.palette.border)
-}
-
 // frame wraps content in a soft, rounded frame tinted with the given color.
 // Lines wider than the terminal are wrapped so they stay inside the frame.
 func (s *Styles) frame(color, content string) string {

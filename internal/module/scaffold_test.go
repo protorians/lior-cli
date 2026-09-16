@@ -17,7 +17,13 @@ func writeScaffoldFixture(t *testing.T) (mockupDir, pageMockup string) {
 	mockupDir = filepath.Join(base, "mockups", "hello-world")
 	pageMockup = filepath.Join(base, "page-mockup.tsx")
 
-	pkg.WriteString(filepath.Join(mockupDir, "manifest.json"), `{
+	mustWrite := func(path, data string) {
+		if err := pkg.WriteString(path, data); err != nil {
+			t.Fatalf("WriteString(%s): %v", path, err)
+		}
+	}
+
+	mustWrite(filepath.Join(mockupDir, "manifest.json"), `{
   "schemaVersion": 1,
   "id": "hello-world",
   "domain": "mod.sentients.helloworld",
@@ -37,7 +43,7 @@ func writeScaffoldFixture(t *testing.T) (mockupDir, pageMockup string) {
 }
 `)
 
-	pkg.WriteString(filepath.Join(mockupDir, "index.tsx"), `import {ModuleDeclarationInterface} from "@sentients/sdk/domain/entities/module.interface";
+	mustWrite(filepath.Join(mockupDir, "index.tsx"), `import {ModuleDeclarationInterface} from "@sentients/sdk/domain/entities/module.interface";
 import {HelloWorldWidget} from "./presentation/widgets/hello-world.widget";
 
 const helloWorldModule: ModuleDeclarationInterface = {
@@ -54,7 +60,7 @@ const helloWorldModule: ModuleDeclarationInterface = {
 export default helloWorldModule
 `)
 
-	pkg.WriteString(filepath.Join(mockupDir, "application", "service", "hello-world-api-service.ts"), `import {HelloWorldInterface} from "../../domain/hello-world.interface";
+	mustWrite(filepath.Join(mockupDir, "application", "service", "hello-world-api-service.ts"), `import {HelloWorldInterface} from "../../domain/hello-world.interface";
 
 export class HelloWorldApiService {
     static async getAll() {
@@ -63,7 +69,7 @@ export class HelloWorldApiService {
 }
 `)
 
-	pkg.WriteString(filepath.Join(mockupDir, "presentation", "views", "hello-world.view.tsx"), `"use client"
+	mustWrite(filepath.Join(mockupDir, "presentation", "views", "hello-world.view.tsx"), `"use client"
 import {HelloWorldWidget} from "../widgets/hello-world.widget";
 
 export function HelloWorldView() {
@@ -71,14 +77,14 @@ export function HelloWorldView() {
 }
 `)
 
-	pkg.WriteString(filepath.Join(mockupDir, "presentation", "widgets", "hello-world.widget.tsx"), `"use client"
+	mustWrite(filepath.Join(mockupDir, "presentation", "widgets", "hello-world.widget.tsx"), `"use client"
 export function HelloWorldWidget() {
     const key = ['hello-world', 'widget'];
     return null;
 }
 `)
 
-	pkg.WriteString(pageMockup, `import {HelloWorldView} from "@/external_modules/hello-world/presentation/views/hello-world.view";
+	mustWrite(pageMockup, `import {HelloWorldView} from "@/external_modules/hello-world/presentation/views/hello-world.view";
 
 export default function HelloWorldPage() {
     return <HelloWorldView/>;

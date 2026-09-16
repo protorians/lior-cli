@@ -139,7 +139,7 @@ func TestDownloadAndExtractZip(t *testing.T) {
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(zipData)
+		_, _ = w.Write(zipData)
 	}))
 	defer srv.Close()
 
@@ -170,7 +170,7 @@ func TestDownloadAndExtractZipReportsProgress(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("Content-Length", strconv.Itoa(len(zipData)))
-		w.Write(zipData)
+		_, _ = w.Write(zipData)
 	}))
 	defer srv.Close()
 

@@ -62,6 +62,11 @@ func runAudit(cmd *cobra.Command, args []string) error {
 		name = args[0]
 	}
 
+	mode, err := resolveAuditOutput()
+	if err != nil {
+		return err
+	}
+
 	auditor := &audit.Auditor{Root: root}
 
 	result, err := tui.RunWithSpinner(i18n.T("audit.spinner"), func() (*audit.AuditResult, error) {
@@ -71,7 +76,7 @@ func runAudit(cmd *cobra.Command, args []string) error {
 		return pkg.NewError(i18n.T("cat.audit"), err.Error(), pkg.ExitError)
 	}
 
-	if auditOutput == "json" {
+	if mode == "json" {
 		return printAuditJSON(result)
 	}
 

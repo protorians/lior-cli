@@ -227,7 +227,7 @@ func (d *Debugger) findTypeCheckCommand(moduleDir string) *buildCommand {
 // source file (.ts or .tsx), excluding node_modules.
 func moduleHasTS(moduleDir string) bool {
 	found := false
-	filepath.WalkDir(moduleDir, func(path string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(moduleDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || found {
 			return nil
 		}

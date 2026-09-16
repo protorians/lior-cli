@@ -61,7 +61,7 @@ func TestCreateModuleStructure(t *testing.T) {
 
 	// No mockup spelling must survive the rename.
 	dir := filepath.Join(root, "external_modules", "blog-manager")
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -69,7 +69,9 @@ func TestCreateModuleStructure(t *testing.T) {
 			t.Errorf("résidu du mockup dans le chemin : %s", path)
 		}
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("walk de %s: %v", dir, err)
+	}
 }
 
 func TestCreateModuleDescriptionInIndex(t *testing.T) {
