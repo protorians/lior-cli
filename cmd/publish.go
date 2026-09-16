@@ -183,6 +183,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	client := store.NewClient()
 	client.SetToken(sess.AccessToken)
+	client.WithAutoRefresh(sess)
 
 	// Publish, resolving SemVer conflicts by offering a patch bump on retry
 	// (spec §5.6 step 6).

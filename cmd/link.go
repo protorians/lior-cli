@@ -90,6 +90,7 @@ func runLink(cmd *cobra.Command, args []string) error {
 	// Fetch remote modules
 	client := store.NewClient()
 	client.SetToken(sess.AccessToken)
+	client.WithAutoRefresh(sess)
 
 	remoteModules, err := tui.RunWithSpinner(i18n.T("link.spinner.fetch"), func() ([]store.RemoteModule, error) {
 		return client.ListModules(context.Background())
@@ -279,5 +280,6 @@ func syncRemoteBeforeUnlink(root, localName, remoteToken string) error {
 	}
 	client := store.NewClient()
 	client.SetToken(sess.AccessToken)
+	client.WithAutoRefresh(sess)
 	return client.UpdateModule(context.Background(), remoteToken, m)
 }

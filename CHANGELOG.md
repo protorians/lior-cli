@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 
+## [v0.4.1] - 2026-09-16
+
+### Fixed
+- **Rotation automatique du token (SEC-003)** — les appels API authentifiés (`publish`, `link`, `unlink --sync-remote`) détectent désormais les réponses HTTP 401 et rafraîchissent automatiquement le bearer token via `POST /api/auth/sessions/refresh` avant de retenter la requête une seule fois. Les sessions longue durée ne replongent plus en erreur 401 sans reconnexion (`pkg.Client.TokenRefreshFunc` + `store.Client.WithAutoRefresh`).
+- **Audit `domain` conforme spec §5.10** — la règle `domain` du manifest vérifie désormais le format attendu `mod.sentients.<name>` (WARNING) au lieu d'accepter toute forme reverse-DNS valide. Les modules scaffolés (domaine `mod.sentients.<id>`) restent conformes.
+
+
 ## [v0.4.0] - 2026-09-16
 
 ### Added

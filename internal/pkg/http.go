@@ -132,6 +132,10 @@ type Client struct {
 	BaseURL string
 	HTTP    *http.Client
 	Token   string
+	// TokenRefreshFunc is an optional callback invoked when a request fails
+	// with HTTP 401 (unauthorized). It must return a fresh bearer token.
+	// When set, the client retries the failed request once with the new token.
+	TokenRefreshFunc func() (string, error)
 }
 
 // NewClient builds a client for the given base URL with the default timeout.
@@ -149,7 +153,14 @@ func NewClientWithTimeout(baseURL string, timeout time.Duration) *Client {
 
 // Do performs a request with the given method, path, body and decodes the
 // `data` field of the Raiton envelope into out (when out is not nil).
+//
+// When the server responds with HTTP 401 and a TokenRefreshFunc is configured,
+// the client refreshes the bearer token and retries the request once.
 func (c *Client) Do(ctx context.Context, method, path string, body any, out any) error {
+	return c.do(ctx, method, path, body, out, false)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body any, out any, retried bool) error {
 	var bodyReader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -179,6 +190,17 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any)
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read the response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized && !retried && c.TokenRefreshFunc != nil {
+		newToken, refreshErr := c.TokenRefreshFunc()
+		if refreshErr == nil && newToken != "" {
+			c.Token = newToken
+			return c.do(ctx, method, path, body, out, true)
+		}
+		if refreshErr != nil {
+			return refreshErr
+		}
 	}
 
 	if resp.StatusCode >= 400 {

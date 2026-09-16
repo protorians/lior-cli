@@ -27,7 +27,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.0.7) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
-**Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/004/005/006/007/008/009
+**Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
 ont une implémentation (parfois partielle). Le reste des FR (001→024) est couvert côté CLI.
 
 ---
@@ -167,6 +167,17 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > sur les variables d'env, repli sur les mockups embarqués avec warning) ;
 > spec §5.2 réalignée (arborescence `domain/hello-world.interface.ts`, flags,
 > metadata rel. 0.2.0).
+>
+> Itération du 2026-09-16 : **sécurisation token refresh (SEC-003) + audit domain
+> (spec §5.10)** — `pkg.Client.Do` détecte désormais les réponses HTTP 401 et
+> appelle un `TokenRefreshFunc` optionnel pour rafraîchir le bearer token avant
+> de retenter la requête une fois (rotation automatique, spec §5.3/SEC-003) ;
+> `store.Client.WithAutoRefresh(sess)` connecte le rafraîchissement aux commandes
+> `publish`, `link` et `unlink --sync-remote` (les seules qui effectuent des
+> appels API authentifiés) ; le check d'audit `domain` (spec §5.10, WARNING)
+> vérifie désormais le format attendu `mod.sentients.<name>` au lieu d'accepter
+> toute forme reverse-DNS valide ; tests E2E et unitaires mis à jour (domaine
+> `mod.sentients.*` dans les fixtures audit).
 
 ### 4.1 Sécurité — ✅ corrigé à l'itération du 2026-09-12
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
@@ -186,6 +197,12 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   vérification.
 - `NewStoreVolatile` = fallback isolé dans `/tmp` (secret aléatoire, ne pollue
   plus `~/.sentient-cli` en test) ; `NewKeyStoreVolatile` (mort) supprimé.
+- **Rotation automatique du token (SEC-003, 🔧 renforcé au 2026-09-16)** :
+  `pkg.Client.Do` retente les requêtes en échec HTTP 401 avec un token
+  rafraîchi via `POST /api/auth/sessions/refresh` (`TokenRefreshFunc`, un seul
+  retry pour éviter les boucles) ; `store.Client.WithAutoRefresh(sess)` câble
+  le rafraîchissement sur `publish`, `link` et `unlink --sync-remote`. Les
+  sessions longue durée ne replongent plus en erreur 401 sans reconnexion.
 
 ### 4.2 Régressions de couverture spec (FR)
 - **FR-012 `publish`** ✅ : conflit de version géré — `POST` en échec (409 ou
@@ -273,6 +290,11 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
      TC-001 → TC-025, fixtures `bun/npm/tsc/node`, job CI `e2e`) ;
    - `disconnect`/`unlink` : option de mise à jour distante via `PUT /api/developer-store/modules/:id` (✅
      `unlink --sync-remote` couvert par TC-014) ;
+   - **token refresh auto (SEC-003)** — ✅ fait au 2026-09-16 : retry 401 avec rotation du bearer
+     token (`pkg.Client.TokenRefreshFunc` + `store.Client.WithAutoRefresh`) sur `publish`/`link`/
+     `unlink --sync-remote` ;
+   - **audit `domain` conforme spec §5.10** — ✅ fait au 2026-09-16 : format `mod.sentients.<name>`
+     vérifié (WARNING), plus de simple reverse-DNS ;
    - bâtir un vrai build de module dans `debug` (au-delà du `package.json`).
 7. **Telese spec** : `sentients test <module>`, `sentients watch` (hot-reload), `sentients deploy`,
    `sentients auth` (OAuth2 PKCE), `sentients marketplace` (§2.4 future scope).

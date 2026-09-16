@@ -112,6 +112,18 @@ func (c *Client) SetToken(token string) {
 	c.Connector.Client.Token = token
 }
 
+// WithAutoRefresh wires automatic 401-retry token refresh to the underlying
+// HTTP client. When an API call returns HTTP 401, the session is refreshed
+// via POST /api/auth/sessions/refresh and the request is retried once.
+func (c *Client) WithAutoRefresh(sess *auth.Session) {
+	c.Connector.Client.TokenRefreshFunc = func() (string, error) {
+		if err := sess.Refresh(context.Background(), c.Connector); err != nil {
+			return "", err
+		}
+		return sess.AccessToken, nil
+	}
+}
+
 // ListModules returns the modules owned by the authenticated developer.
 // The response may be a bare array or the paginated envelope `{items, total, …}`.
 func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
