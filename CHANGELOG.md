@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 
 
+## [Unreleased]
+
+### Technical Details
+- **CI / Release** — le pipeline de release crée désormais une **pre-release GitHub** à chaque push sur les branches `alpha`, `beta` ou `rc` : la version `v<base>-<canal>.<n>` est calculée depuis le `app.config.json` (le suffixe `.<n>` est incrémenté selon les tags `v<base>-<canal>.*` déjà publiés), le tag est poussé automatiquement, la release est marquée pre-release (`prerelease: auto`) et la publication npm reste réservée aux versions stables.
+
+
 ## [v0.3.1] - 2026-09-16
 
 ### Fixed

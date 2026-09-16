@@ -43,6 +43,7 @@ archives:
       sentients_{{ .Version }}_{{ .Os }}_{{ .Arch }}
 
 release:
+  prerelease: auto
   name_template: "{{ .ProjectName }} v{{ .Version }}"
   header: |
     ## Download binaries
