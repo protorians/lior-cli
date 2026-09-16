@@ -45,6 +45,8 @@ var (
 	createIcon        string
 	createURL         string
 	createDescription string
+	createType        string
+	createCategory    string
 )
 
 // createSkipInstallEnv disables the dependency installation step of
@@ -61,8 +63,10 @@ func init() {
 	createCmd.Flags().StringVar(&createIcon, "icon", "", i18n.T("create.flag.icon"))
 	createCmd.Flags().StringVar(&createURL, "url", "", i18n.T("create.flag.url"))
 	createCmd.Flags().StringVar(&createDescription, "description", "", i18n.T("create.flag.description"))
+	createCmd.Flags().StringVar(&createType, "type", "", i18n.T("create.flag.type"))
+	createCmd.Flags().StringVar(&createCategory, "category", "", i18n.T("create.flag.category"))
 	i18nHelp(createCmd, "cmd.create.short", "cmd.create.long")
-	for _, name := range []string{"mockup", "page-mockup", "domain", "id", "name", "version", "icon", "url", "description"} {
+	for _, name := range []string{"mockup", "page-mockup", "domain", "id", "name", "version", "icon", "url", "description", "type", "category"} {
 		i18nFlag(createCmd, name, "create.flag."+name)
 	}
 }
@@ -89,6 +93,8 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		Version:     strings.TrimSpace(createVersion),
 		Icon:        strings.TrimSpace(createIcon),
 		URL:         strings.TrimSpace(createURL),
+		Type:        strings.TrimSpace(createType),
+		Category:    strings.TrimSpace(createCategory),
 	}
 
 	// The positional argument is a convenience shorthand for the identifier.
@@ -240,6 +246,12 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
 	}
 	if err := module.ValidateIcon(spec.Icon); err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
+	if err := module.ValidateType(spec.Type); err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
+	if err := module.ValidateCategory(spec.Category); err != nil {
 		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
 	}
 	return nil

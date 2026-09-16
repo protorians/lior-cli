@@ -343,6 +343,78 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 	)
 }
 
+func TestCreateFromEmbeddedMockupManifestIsCanonical(t *testing.T) {
+	root := t.TempDir()
+	creator := &Creator{Root: root}
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	manifestPath := filepath.Join(moduleDir, "manifest.json")
+	assertFileContains(t, manifestPath,
+		`"$schema"`,
+		`"optionalRequirements": {}`,
+		`"type": "EXTERNAL"`,
+		`"category": "SYSTEM"`,
+	)
+	rawManifest, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(rawManifest), "\n  \"url\"") {
+		t.Errorf("le manifeste ne doit pas porter de champ `url` racine non canonique:\n%s", rawManifest)
+	}
+
+	// The manifest stays the single source of truth: the declaration must not
+	// carry requirements/dependencies/devDependencies.
+	indexPath := filepath.Join(moduleDir, "index.tsx")
+	data, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"requirements:", "optionalRequirements:", "dependencies:", "devDependencies:"} {
+		if strings.Contains(string(data), forbidden) {
+			t.Errorf("index.tsx ne doit pas déclarer %q:\n%s", forbidden, data)
+		}
+	}
+	assertFileContains(t, indexPath, "type: 'EXTERNAL'", "category: 'SYSTEM'")
+}
+
+func TestCreateRespectsTypeAndCategoryFlags(t *testing.T) {
+	root := t.TempDir()
+	creator := &Creator{Root: root}
+	if _, err := creator.Create(ModuleSpec{
+		Domain:   "com.example.blog-manager",
+		ID:       "blog-manager",
+		Type:     "INTERNAL",
+		Category: "DATA",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	assertFileContains(t, filepath.Join(moduleDir, "manifest.json"),
+		`"type": "INTERNAL"`,
+		`"category": "DATA"`,
+	)
+	assertFileContains(t, filepath.Join(moduleDir, "index.tsx"),
+		"type: 'INTERNAL'",
+		"category: 'DATA'",
+	)
+
+	if _, err := (&Creator{Root: t.TempDir()}).Create(ModuleSpec{
+		Domain: "com.example.other", ID: "other", Category: "NOPE",
+	}); err == nil {
+		t.Error("une catégorie invalide doit être refusée")
+	}
+	if _, err := (&Creator{Root: t.TempDir()}).Create(ModuleSpec{
+		Domain: "com.example.other", ID: "other", Type: "NOPE",
+	}); err == nil {
+		t.Error("un type invalide doit être refusé")
+	}
+}
+
 func TestCreateFromMockupEmptyDescriptionStaysEmpty(t *testing.T) {
 	mockupDir, _ := writeScaffoldFixture(t)
 	root := t.TempDir()

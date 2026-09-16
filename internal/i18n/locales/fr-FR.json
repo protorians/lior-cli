@@ -106,6 +106,8 @@
   "create.flag.icon": "nom du composant lucide-react pour l'icône (optionnel)",
   "create.flag.url": "chemin de la page dans src/app/<url> (défaut : l'identifiant)",
   "create.flag.description": "description du module (optionnel)",
+  "create.flag.type": "type de distribution : INTERNAL ou EXTERNAL (défaut : EXTERNAL)",
+  "create.flag.category": "catégorie du store (ADMINISTRATION, COMMERCIAL, FINANCE, OPERATIONS, COMMUNICATION, DATA, AUTOMATION, SYSTEM ; défaut : SYSTEM)",
   "create.warn.mockup_ignored": "ignoré --mockup %s : pas un module scaffoldable (manifest.json ou index.tsx manquant) ; utilisation du mockup embarqué",
   "create.warn.page_mockup_ignored": "ignoré --page-mockup %s : fichier introuvable ; utilisation du mockup de page embarqué",
   "create.success.dir": "✓ Module créé : %s/",
@@ -149,6 +151,9 @@
   "disconnect.error.remove": "échec de la suppression des informations d'identification : %s",
   "disconnect.success": "✓ Déconnexion réussie",
   "disconnect.cleared": "  Toutes les informations d'identification ont été supprimées.",
+
+  "cmd.auth.short": "S'authentifier via OAuth2 (navigateur)",
+  "cmd.auth.long": "Authentifie le développeur avec le flux OAuth2 code d'autorisation\navec PKCE (RFC 7636) : ouvre le navigateur sur le point d'autorisation de\nsentient-auth, reçoit la redirection sur un serveur local en boucle, échange le\ncode contre des jetons, puis stocke la session de façon sécurisée (trousseau\nsystème).\n\nLes points d'entrée OAuth proviennent de l'entrée 'oauth' de 'sentient-auth'\ndans app.config.json (authorizationEndpoint, tokenEndpoint, revokeEndpoint,\nclientId, scopes).\n\nEn mode non interactif (CI), fournissez le code d'autorisation via la variable\nd'environnement SENTIENT_CLI_AUTH_CODE pour ignorer l'étape du navigateur.",
 
   "cmd.pack.short": "Construire une archive de module (.SenMod)",
   "cmd.pack.long": "Construit un module et crée une archive .SenMod compressée\n(déplacée dans .sentients/build/).\n\nLa version peut être précisée avec un séparateur '@' (ex. blog-manager@1.2.0)\npour construire une version précise ; sinon la version du manifeste est utilisée.\n\nSans argument, un sélecteur permet de choisir le module.",
@@ -308,6 +313,8 @@
   "module.error.domain": "le domaine du module doit être une forme pointée inverse (ex. com.organization.domain)",
   "module.error.version": "la version doit respecter le format SemVer (ex. 0.0.0)",
   "module.error.icon": "l'icône doit être un nom de composant PascalCase (ex. PuzzleIcon)",
+  "module.error.type": "le type doit être INTERNAL ou EXTERNAL",
+  "module.error.category": "catégorie invalide (autorisées : ADMINISTRATION, COMMERCIAL, FINANCE, OPERATIONS, COMMUNICATION, DATA, AUTOMATION, SYSTEM)",
   "pack.error.validation": "le module %q comporte %d erreur(s) de validation, emballage annulé",
   "pack.error.max_size": "l'archive dépasse la taille maximale de %d Mo",
 
@@ -324,6 +331,18 @@
   "auth.error.mfa_code_required": "code MFA requis",
   "auth.error.mfa_failed": "échec de la vérification MFA",
   "auth.error.mfa_challenge_failed": "le défi MFA a également échoué",
+
+  "auth.oauth.open_browser": "Ouverture de la page d'autorisation dans votre navigateur…",
+  "auth.oauth.spinner.exchange": "Échange du code d'autorisation…",
+  "auth.oauth.success": "✓ Authentifié via OAuth2",
+  "auth.oauth.label.token_type": "Type de jeton",
+  "auth.oauth.label.scope": "Portée",
+  "auth.oauth.label.refresh": "Jeton de rafraîchissement",
+  "auth.oauth.error.code": "aucun code d'autorisation reçu",
+  "auth.oauth.error.state": "incohérence du state — la réponse d'autorisation n'a pas pu être vérifiée",
+  "auth.oauth.error.denied": "autorisation refusée : %s",
+  "auth.oauth.error.exchange.fix": "Réessayez 'sentients auth' et terminez l'autorisation dans le navigateur.",
+  "auth.oauth.non_interactive.fix": "Fournissez le code via SENTIENT_CLI_AUTH_CODE en mode non interactif.",
 
   "config.error.no_project": "aucun projet Sentient trouvé (recherche de %q ou %q) — exécutez 'sentients init'",
   "config.error.cwd": "impossible de déterminer le répertoire courant"

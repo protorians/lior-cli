@@ -95,6 +95,50 @@ func TestTimeoutDefaults(t *testing.T) {
 	}
 }
 
+func TestOAuthDefaults(t *testing.T) {
+	var cfg Config
+	o := cfg.OAuth(AuthAppID)
+	if o.AuthorizationEndpoint != DefaultOAuthAuthorizationEndpoint {
+		t.Errorf("AuthorizationEndpoint = %q, want %q", o.AuthorizationEndpoint, DefaultOAuthAuthorizationEndpoint)
+	}
+	if o.TokenEndpoint != DefaultOAuthTokenEndpoint {
+		t.Errorf("TokenEndpoint = %q, want %q", o.TokenEndpoint, DefaultOAuthTokenEndpoint)
+	}
+	if o.RevokeEndpoint != DefaultOAuthRevokeEndpoint {
+		t.Errorf("RevokeEndpoint = %q, want %q", o.RevokeEndpoint, DefaultOAuthRevokeEndpoint)
+	}
+	if o.ClientID != DefaultOAuthClientID {
+		t.Errorf("ClientID = %q, want %q", o.ClientID, DefaultOAuthClientID)
+	}
+	if len(o.Scopes) == 0 {
+		t.Error("Scopes doit avoir une valeur par défaut")
+	}
+}
+
+func TestOAuthConfiguredOverrides(t *testing.T) {
+	cfg := Config{Applications: map[string]Application{
+		AuthAppID: {OAuth: OAuthConfig{
+			AuthorizationEndpoint: "/custom/authorize",
+			TokenEndpoint:         "/custom/token",
+			ClientID:              "custom-client",
+			Scopes:                []string{"custom"},
+		}},
+	}}
+	o := cfg.OAuth(AuthAppID)
+	if o.AuthorizationEndpoint != "/custom/authorize" || o.TokenEndpoint != "/custom/token" {
+		t.Errorf("endpoints = %q / %q", o.AuthorizationEndpoint, o.TokenEndpoint)
+	}
+	if o.RevokeEndpoint != DefaultOAuthRevokeEndpoint {
+		t.Errorf("RevokeEndpoint = %q, want default", o.RevokeEndpoint)
+	}
+	if o.ClientID != "custom-client" {
+		t.Errorf("ClientID = %q, want custom-client", o.ClientID)
+	}
+	if len(o.Scopes) != 1 || o.Scopes[0] != "custom" {
+		t.Errorf("Scopes = %v", o.Scopes)
+	}
+}
+
 func TestFindWalksUp(t *testing.T) {
 	root := t.TempDir()
 	sub := filepath.Join(root, "x", "y", "z")

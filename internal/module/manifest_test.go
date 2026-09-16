@@ -3,6 +3,8 @@ package module
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -133,6 +135,82 @@ func TestManifestRoundTrip(t *testing.T) {
 	}
 	if loaded.ID != m.ID || loaded.Key != m.Key || loaded.Token != m.Token {
 		t.Errorf("round-trip mismatch: loaded=%+v want=%+v", loaded, m)
+	}
+}
+
+// TestMockupManifestRoundTripNoLoss guarantees a LoadManifest → Save → Load
+// cycle loses no canonical field (platform os/iosSupported, capabilities,
+// configSettings, menu hierarchy, publisher, ...).
+func TestMockupManifestRoundTripNoLoss(t *testing.T) {
+	original, err := LoadManifest(filepath.Join("mockups", "hello-world", "manifest.json"))
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "manifest.json")
+	if err := original.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	reloaded, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if !reflect.DeepEqual(original, reloaded) {
+		t.Errorf("round-trip a perdu des champs:\noriginal = %+v\nreloaded = %+v", original, reloaded)
+	}
+
+	if original.Schema == "" {
+		t.Error("$schema doit être conservé")
+	}
+	if original.OptionalRequirements == nil {
+		t.Error("optionalRequirements doit être conservé (objet vide non-nil)")
+	}
+	if len(reloaded.Platforms.Desktop.OS) == 0 {
+		t.Error("platforms.desktop.os perdu au round-trip")
+	}
+	if reloaded.Platforms.Mobile.IOSSupported == nil {
+		t.Error("platforms.mobile.iosSupported perdu au round-trip")
+	}
+	if reloaded.Capabilities != original.Capabilities {
+		t.Errorf("capabilities altérées: %+v", reloaded.Capabilities)
+	}
+	if !reflect.DeepEqual(reloaded.Menu, original.Menu) {
+		t.Errorf("menu altéré: %+v", reloaded.Menu)
+	}
+}
+
+// TestManifestPreservesUnknownFields checks that schema additionalProperties
+// (unknown top-level fields) survive a Save cycle.
+func TestManifestPreservesUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "manifest.json")
+	raw := `{"schemaVersion":1,"id":"x","customField":{"a":1},"another":"y"}`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if m.Extra["customField"] == nil || m.Extra["another"] == nil {
+		t.Fatalf("champs inconnus non conservés: %+v", m.Extra)
+	}
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(out, &decoded); err != nil {
+		t.Fatalf("sortie invalide: %v\n%s", err, out)
+	}
+	for _, key := range []string{"customField", "another"} {
+		if _, ok := decoded[key]; !ok {
+			t.Errorf("la sortie doit conserver %q:\n%s", key, out)
+		}
 	}
 }
 

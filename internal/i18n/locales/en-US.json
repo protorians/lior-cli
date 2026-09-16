@@ -106,6 +106,8 @@
   "create.flag.icon": "lucide-react component name for the icon (optional)",
   "create.flag.url": "page path inside src/app/<url> (default: the identifier)",
   "create.flag.description": "module description (optional)",
+  "create.flag.type": "distribution type: INTERNAL or EXTERNAL (default: EXTERNAL)",
+  "create.flag.category": "store category (ADMINISTRATION, COMMERCIAL, FINANCE, OPERATIONS, COMMUNICATION, DATA, AUTOMATION, SYSTEM; default: SYSTEM)",
   "create.warn.mockup_ignored": "ignoring --mockup %s: not a scaffoldable module (missing manifest.json or index.tsx); using the embedded mockup",
   "create.warn.page_mockup_ignored": "ignoring --page-mockup %s: file not found; using the embedded page mockup",
   "create.success.dir": "✓ Module created: %s/",
@@ -149,6 +151,9 @@
   "disconnect.error.remove": "failed to remove credentials: %s",
   "disconnect.success": "✓ Disconnected successfully",
   "disconnect.cleared": "  All credentials have been removed.",
+
+  "cmd.auth.short": "Authenticate via OAuth2 (browser)",
+  "cmd.auth.long": "Authenticates the developer using the OAuth2 authorization-code flow\nwith PKCE (RFC 7636): opens the browser on the sentient-auth authorization\nendpoint, receives the redirect on a local loopback server, exchanges the code\nfor tokens, then stores the session securely (system keychain).\n\nThe OAuth endpoints come from the 'oauth' entry of 'sentient-auth' in\napp.config.json (authorizationEndpoint, tokenEndpoint, revokeEndpoint,\nclientId, scopes).\n\nIn non-interactive (CI) mode, provide the authorization code via the\nSENTIENT_CLI_AUTH_CODE environment variable to skip the browser step.",
 
   "cmd.pack.short": "Build a module archive (.SenMod)",
   "cmd.pack.long": "Builds a module and creates a compressed .SenMod archive\n(moved to .sentients/build/).\n\nThe version can be given with an '@' separator (e.g. blog-manager@1.2.0)\nto build a specific version; otherwise the manifest version is used.\n\nWithout an argument, a selector lets you choose the module.",
@@ -308,6 +313,8 @@
   "module.error.domain": "module domain must be a reverse-DNS dotted form (e.g. com.organization.domain)",
   "module.error.version": "version must follow the SemVer format (e.g. 0.0.0)",
   "module.error.icon": "icon must be a PascalCase component name (e.g. PuzzleIcon)",
+  "module.error.type": "type must be INTERNAL or EXTERNAL",
+  "module.error.category": "invalid category (allowed: ADMINISTRATION, COMMERCIAL, FINANCE, OPERATIONS, COMMUNICATION, DATA, AUTOMATION, SYSTEM)",
   "pack.error.validation": "module %q has %d validation error(s), packaging aborted",
   "pack.error.max_size": "archive exceeds the maximum size of %d MB",
 
@@ -324,6 +331,18 @@
   "auth.error.mfa_code_required": "MFA code required",
   "auth.error.mfa_failed": "MFA verification failed",
   "auth.error.mfa_challenge_failed": "the MFA challenge also failed",
+
+  "auth.oauth.open_browser": "Opening the authorization page in your browser…",
+  "auth.oauth.spinner.exchange": "Exchanging the authorization code…",
+  "auth.oauth.success": "✓ Authenticated via OAuth2",
+  "auth.oauth.label.token_type": "Token type",
+  "auth.oauth.label.scope": "Scope",
+  "auth.oauth.label.refresh": "Refresh token",
+  "auth.oauth.error.code": "no authorization code received",
+  "auth.oauth.error.state": "state mismatch — the authorization response could not be verified",
+  "auth.oauth.error.denied": "authorization denied: %s",
+  "auth.oauth.error.exchange.fix": "Retry 'sentients auth' and complete the authorization in the browser.",
+  "auth.oauth.non_interactive.fix": "Provide the code via SENTIENT_CLI_AUTH_CODE in non-interactive mode.",
 
   "config.error.no_project": "no Sentient project found (looked for %q or %q) — run 'sentients init'",
   "config.error.cwd": "unable to determine the current directory"

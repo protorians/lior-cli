@@ -1,4 +1,5 @@
 {
+  "$schema": "../../node_modules/@sentients/sdk/schemas/module.schema.json",
   "schemaVersion": 1,
   "id": "hello-world",
   "domain": "mod.sentients.helloworld",
@@ -53,6 +54,7 @@
     "organization": ">=1.0.0",
     "identity": ">=1.0.0"
   },
+  "optionalRequirements": {},
   "dependencies": {
     "@sentients/sdk": "workspace:*",
     "@tanstack/react-query": "^5.101.2",

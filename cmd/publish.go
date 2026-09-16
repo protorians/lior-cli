@@ -151,10 +151,10 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	s := tui.NewStyles()
 	fmt.Println()
 	fmt.Println(s.NeutralPanel(strings.TrimSpace(
-		s.Success.Render(i18n.Tf("publish.success.authenticated", email))+"\n\n"+
-			strings.TrimSpace(s.SubHeader.Render(i18n.T("publish.metadata")))+"\n\n"+
-			s.KeyValue(i18n.T("label.name"), s.Value.Render(manifest.Name))+"\n"+
-			s.KeyValue(i18n.T("label.description"), s.Value.Render(manifest.Description))+"\n"+
+		s.Success.Render(i18n.Tf("publish.success.authenticated", email)) + "\n\n" +
+			strings.TrimSpace(s.SubHeader.Render(i18n.T("publish.metadata"))) + "\n\n" +
+			s.KeyValue(i18n.T("label.name"), s.Value.Render(manifest.Name)) + "\n" +
+			s.KeyValue(i18n.T("label.description"), s.Value.Render(manifest.Description)) + "\n" +
 			s.KeyValue(i18n.T("label.version"), s.Value.Render(manifest.Version)),
 	)))
 

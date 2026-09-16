@@ -32,6 +32,12 @@ type ModuleSpec struct {
 	// URL is the page path segment in src/app/<url>; empty defaults to the
 	// module identifier (manifest `uri` is /<url>).
 	URL string
+	// Type is the distribution type (INTERNAL or EXTERNAL); empty defaults to
+	// EXTERNAL (a third-party module distributed independently).
+	Type string
+	// Category is the store category (one of the ModuleCategory values); empty
+	// defaults to SYSTEM.
+	Category string
 }
 
 // EffectiveVersion returns the module version, defaulting to 0.0.0.
@@ -40,6 +46,22 @@ func (s ModuleSpec) EffectiveVersion() string {
 		return v
 	}
 	return "0.0.0"
+}
+
+// EffectiveType returns the distribution type, defaulting to EXTERNAL.
+func (s ModuleSpec) EffectiveType() string {
+	if t := strings.ToUpper(strings.TrimSpace(s.Type)); t != "" {
+		return t
+	}
+	return "EXTERNAL"
+}
+
+// EffectiveCategory returns the store category, defaulting to SYSTEM.
+func (s ModuleSpec) EffectiveCategory() string {
+	if c := strings.ToUpper(strings.TrimSpace(s.Category)); c != "" {
+		return c
+	}
+	return "SYSTEM"
 }
 
 // EffectiveURL returns the module page URL segment. An empty URL falls back to
@@ -195,9 +217,17 @@ func (c *Creator) Create(spec ModuleSpec) (*CreateResult, error) {
 	if err := ValidateIcon(spec.Icon); err != nil {
 		return nil, err
 	}
+	if err := ValidateType(spec.Type); err != nil {
+		return nil, err
+	}
+	if err := ValidateCategory(spec.Category); err != nil {
+		return nil, err
+	}
 	spec.Version = spec.EffectiveVersion()
 	spec.URL = spec.EffectiveURL()
 	spec.AppName = spec.EffectiveAppName()
+	spec.Type = spec.EffectiveType()
+	spec.Category = spec.EffectiveCategory()
 
 	moduleDir := filepath.Join(c.Root, config.ExternalModulesDir, spec.Domain)
 	if pkg.DirExists(moduleDir) {

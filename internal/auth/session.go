@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/protorians/sentient-cli/internal/appconfig"
 	"github.com/protorians/sentient-cli/internal/i18n"
 )
 
@@ -93,11 +95,18 @@ func (s *Session) Save() error {
 	return nil
 }
 
-// Refresh rotates the current session token via POST /api/auth/sessions/refresh,
-// using the current token as the bearer credential.
+// Refresh rotates the current session token. When the session was established
+// through the OAuth2 authorization-code flow, it refreshes at the token
+// endpoint (`grant_type=refresh_token`, with rotation); otherwise it falls back
+// to the legacy session endpoint POST /api/auth/sessions/refresh.
 func (s *Session) Refresh(ctx context.Context, connector *Connector) error {
 	if !s.IsAuthenticated() {
 		return fmt.Errorf("%s", i18n.T("auth.error.no_token"))
+	}
+	if s.Store != nil {
+		if refreshToken, err := s.Store.Get(KeyOAuthRefreshToken); err == nil && strings.TrimSpace(refreshToken) != "" {
+			return s.refreshOAuth(ctx, connector, refreshToken)
+		}
 	}
 	connector.Client.Token = s.AccessToken
 	resp, err := connector.RefreshSession(ctx, s.Device)
@@ -107,6 +116,27 @@ func (s *Session) Refresh(ctx context.Context, connector *Connector) error {
 	s.AccessToken = resp.Token
 	t := time.Now().Add(TokenTTL)
 	s.ExpiresAt = &t
+	return s.Save()
+}
+
+// refreshOAuth exchanges the stored refresh token at the OAuth2 token endpoint
+// and rotates both the access and refresh tokens.
+func (s *Session) refreshOAuth(ctx context.Context, connector *Connector, refreshToken string) error {
+	oauth := appconfig.Resolved("").OAuth(appconfig.AuthAppID)
+	tok, err := ExchangeRefreshToken(ctx, connector.Client, oauth.TokenEndpoint, oauth.ClientID, refreshToken)
+	if err != nil {
+		return fmt.Errorf("%s: %w", i18n.T("auth.error.refresh"), err)
+	}
+	expiry := TokenTTL
+	if tok.ExpiresIn > 0 {
+		expiry = time.Duration(tok.ExpiresIn) * time.Second
+	}
+	s.AccessToken = tok.AccessToken
+	t := time.Now().Add(expiry)
+	s.ExpiresAt = &t
+	if tok.RefreshToken != "" {
+		_ = s.Store.Set(KeyOAuthRefreshToken, tok.RefreshToken)
+	}
 	return s.Save()
 }
 

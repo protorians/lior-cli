@@ -74,6 +74,7 @@ func init() {
 		initCmd,
 		createCmd,
 		connectCmd,
+		authCmd,
 		disconnectCmd,
 		packCmd,
 		signCmd,

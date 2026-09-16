@@ -23,6 +23,9 @@ const (
 	KeyUserID      = prefix + "user_id"
 	KeyUserEmail   = prefix + "user_email"
 	KeyMFASecret   = prefix + "mfa_secret"
+	// KeyOAuthRefreshToken stores the OAuth2 refresh token obtained by
+	// `sentients auth` (authorization-code + PKCE).
+	KeyOAuthRefreshToken = prefix + "oauth_refresh_token"
 	// KeyRefreshTokenLegacy was dropped from the session model (single-token
 	// sessions). Kept in AllKeys so stale keychain entries are purged on
 	// disconnect.
@@ -38,6 +41,7 @@ var AllKeys = []string{
 	KeyUserID,
 	KeyUserEmail,
 	KeyMFASecret,
+	KeyOAuthRefreshToken,
 	KeyRefreshTokenLegacy,
 }
 

@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.5.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.5.0).
+> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.7.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.7.0).
 
 ---
 
@@ -20,10 +20,10 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 
 | Élément | État |
 |---------|------|
-| 13 commandes Cobra (11 de la spec + `sign` à 3 sous-commandes + helper) | ✅ implémentées |
+| 14 commandes Cobra (12 de la spec + `sign` à 3 sous-commandes + helper) | ✅ implémentées |
 | 10 packages internes (`auth`, `config`, `module`, `signing`, `audit`, `debug`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (9 packages ok) |
-| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 10 scénarios, TC-001 → TC-025 (mock `sentient-connect` in-memory) |
+| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 11 scénarios, TC-001 → TC-025 (mock `sentient-connect` in-memory) |
 | CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.0.7) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
@@ -59,6 +59,19 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 
 ### `sentients disconnect` (FR-008, FR-009)
 - Invalidation serveur best-effort (`POST /api/auth/logout`) + suppression locale, avec confirmation.
+
+### `sentients auth` (spec §5.14 — ex périmètre futur)
+- Flux OAuth2 **code d'autorisation + PKCE** (RFC 7636) : `code_verifier`/`code_challenge` S256 +
+  `state` anti-CSRF, navigation navigateur, redirection reçue sur un serveur local en boucle
+  (`http://127.0.0.1:<port>/callback`, port éphémère), échange du code au `tokenEndpoint`
+  (POST form-encoded), stockage de la session (access token + refresh token + expiration) dans
+  le keychain (`KeyOAuthRefreshToken` ajouté au store, purgé au `disconnect`).
+- Config `oauth` de `sentient-auth` dans `app.config.json` (`authorizationEndpoint`,
+  `tokenEndpoint`, `revokeEndpoint`, `clientId`, `scopes`) avec défauts côté `appconfig.OAuth`.
+- Mode CI / headless : `SENTIENT_CLI_AUTH_CODE` fournit le code directement (pas de navigateur
+  ni de serveur local) ; sans code en non-interactif → erreur catégorisée (exit 2).
+- `pkg.OpenBrowser` (cross-platform `open` / `rundll32` / `xdg-open`) ; l'échange de token est
+  tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
 ### `sentients pack [module]` (FR-010, FR-011)
 - Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.sentients/build/<module>-<version>.SenMod`.
@@ -178,6 +191,43 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > vérifie désormais le format attendu `mod.sentients.<name>` au lieu d'accepter
 > toute forme reverse-DNS valide ; tests E2E et unitaires mis à jour (domaine
 > `mod.sentients.*` dans les fixtures audit).
+>
+> Itération du 2026-09-16 (bis) : **alignement de la spec sur les docs de référence
+> du workspace** (`sentient-workspace/docs`) — manifeste de module conforme au
+> schéma canonique `module-manifest.schema.json` (24 champs requis : identité,
+> plateformes, compatibilité, permissions/apiScopes, capacités, activation,
+> `optionalRequirements`, dépendances), `create module` décrit par domaine
+> reverse-DNS + identifiant kebab-case, séparation manifeste/déclaration
+> (requirements/dependencies hors `index.tsx`), distribution Connect (developer-store)
+> / Store (`/catalog`) / Core (activation) en §8, module OAuth (code + PKCE) en §5.14,
+> règle d'audit `domain directory` (WARNING) et scénarios E2E `11_auth` (TC-026/027).
+> **Écarts code connus** : le mockup embarqué `hello-world/manifest.json` n'inclut pas
+> encore `$schema` ni `optionalRequirements` (contrat canonique), et `index.tsx`
+> conserve `requirements`/`dependencies` (à déplacer dans le seul manifeste).
+>
+> Itération du 2026-09-16 (ter) : **exécution du plan de mise à niveau
+> (`docs/plan-mise-a-niveau.md`)** — les écarts E-01 → E-12 sont clos :
+> - **A/E-01..E-05** : `module.Manifest` modélise `$schema`, `optionalRequirements`,
+>   `logo`, `banner`, `category`, `configSettings`, les capacités étendues
+>   (`requiresAdmin`, `supportsRealtime`, `processesLocalData`), les métadonnées
+>   éditeur (`url`/`email`/`description`/`avatar`), les items de menu (description,
+>   target, keywords, items, separator) et les `platforms` (`os`, `iosSupported`,
+>   `minOsVersion`) ; un sac d'extensions `Extra` (`json.RawMessage`) préserve tout
+>   champ canonique inconnu au round-trip.
+> - **A/E-06..E-08** : mockup embarqué aligné sur le socle (`$schema` SDK réel,
+>   `optionalRequirements: {}`, `index.tsx` sans prerequisites/dependencies),
+>   défauts `NewManifest` conformes (compat `min` seule, catégorie `SYSTEM`).
+> - **B/E-12** : `create module` accepte `--type` (défaut `EXTERNAL`) et
+>   `--category` (défaut `SYSTEM`), validés contre le schéma.
+> - **C/E-09..E-10** : `publish` envoie `token`/`description`/`icon`/`secondaryCategory`,
+>   utilise `manifest.Category` (repli `SYSTEM`) comme catégorie primaire et
+>   incrémente `buildNumber` (dernière build + 1) ; mock E2E idempotent par token.
+> - **D/E-11** : l'audit/`Validator` contrôle `optionalRequirements`, `platforms`
+>   (+`modes` si `supported`), les plages de compatibilité, `capabilities`,
+>   `category` et `publisher` (WARNING par défaut).
+> - **E/E-13** : `$schema` fixé au chemin SDK réel ; le rafraîchissement de session
+>   privilégie `grant_type=refresh_token` (`/oauth/token`, rotation) quand un
+>   refresh token OAuth est présent, avec repli sur `/api/auth/sessions/refresh`.
 
 ### 4.1 Sécurité — ✅ corrigé à l'itération du 2026-09-12
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
@@ -301,7 +351,8 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
      avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
      `esbuild`).
 7. **Telese spec** : `sentients test <module>`, `sentients watch` (hot-reload), `sentients deploy`,
-   `sentients auth` (OAuth2 PKCE), `sentients marketplace` (§2.4 future scope).
+   `sentients marketplace` (§2.4 future scope) — `sentients auth` (OAuth2 PKCE) ✅ fait au
+   2026-09-16.
 
 ---
 
@@ -317,6 +368,6 @@ goreleaser release --clean   # release multi-plateforme
 ```
 
 Couverture de test : unitaires ✅ (10 packages ok) + **E2E ✅** (`e2e/` : `TestMain` construit la CLI
-depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 10 scripts txtar
-`e2e/testdata/scripts/01_help_version.txtar` → `10_link_unlink.txtar` couvrant TC-001 → TC-025, fixtures
+depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 11 scripts txtar
+`e2e/testdata/scripts/01_help_version.txtar` → `11_auth.txtar` couvrant TC-001 → TC-025, fixtures
 exécutables `e2e/testdata/fixtures/bin/{bun,npm,tsc,node}`, job CI `e2e`).

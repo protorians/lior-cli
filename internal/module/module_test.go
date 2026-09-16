@@ -225,6 +225,54 @@ func TestValidateModuleMissingToken(t *testing.T) {
 	}
 }
 
+func TestValidateModuleWarnsOnMissingCanonicalFields(t *testing.T) {
+	root := t.TempDir()
+	moduleDir := filepath.Join(root, "external_modules", "com.example.legacy")
+	raw := `{
+  "schemaVersion": 1,
+  "id": "legacy",
+  "domain": "com.example.legacy",
+  "key": "LEGACY",
+  "name": "Legacy",
+  "description": "legacy module",
+  "version": "1.0.0",
+  "icon": "PuzzleIcon",
+  "type": "EXTERNAL",
+  "entry": "index.tsx",
+  "uri": "/legacy",
+  "token": "3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
+  "permissions": ["legacy.read"],
+  "managerCompatibility": {"min": "0.17.1", "max": "0.17.0"}
+}
+`
+	if err := pkg.WriteString(filepath.Join(moduleDir, "manifest.json"), raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := pkg.WriteString(filepath.Join(moduleDir, "index.tsx"), "export default { identifier: 'x', widgets: {} };\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	v := &Validator{Root: root}
+	res, err := v.ValidateModule("com.example.legacy")
+	if err != nil {
+		t.Fatalf("ValidateModule: %v", err)
+	}
+	warned := map[string]bool{}
+	for _, f := range res.Findings {
+		if f.Severity == LevelWarning {
+			warned[f.Rule] = true
+		}
+	}
+	for _, rule := range []string{
+		"optionalRequirements", "platforms", "capabilities", "publisher",
+		"apiCompatibility", "managerCompatibility",
+	} {
+		if !warned[rule] {
+			t.Errorf("règle %q doit produire un WARNING, findings: %+v", rule, res.Findings)
+		}
+	}
+}
+
 func TestLinkedModulesFiltersUnlinked(t *testing.T) {
 	root, creator := setupProject(t)
 	if _, err := creator.Create(specFor("mod-a", "")); err != nil {

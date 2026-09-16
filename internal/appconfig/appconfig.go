@@ -36,13 +36,24 @@ type Config struct {
 
 // Application is one entry of `applications`.
 type Application struct {
-	API APIConfig `json:"api"`
+	API   APIConfig   `json:"api"`
+	OAuth OAuthConfig `json:"oauth"`
 }
 
 // APIConfig is the API-side configuration (`api.baseUrl`, `api.timeout`).
 type APIConfig struct {
 	BaseURL string `json:"baseUrl"`
 	Timeout int    `json:"timeout"` // milliseconds
+}
+
+// OAuthConfig is the OAuth2 (authorization-code + PKCE) configuration of an
+// application. Endpoints are relative paths appended to the API base URL.
+type OAuthConfig struct {
+	AuthorizationEndpoint string   `json:"authorizationEndpoint"`
+	TokenEndpoint         string   `json:"tokenEndpoint"`
+	RevokeEndpoint        string   `json:"revokeEndpoint"`
+	ClientID              string   `json:"clientId"`
+	Scopes                []string `json:"scopes"`
 }
 
 // embedded is the registry compiled into the binary (injected by main).
@@ -136,4 +147,39 @@ func (c Config) Timeout(appID string) time.Duration {
 		return time.Duration(app.API.Timeout) * time.Millisecond
 	}
 	return pkg.DefaultHTTPTimeout
+}
+
+// Default OAuth2 (authorization-code + PKCE) configuration used when the
+// workspace registry does not declare an `oauth` block.
+const (
+	DefaultOAuthAuthorizationEndpoint = "/oauth/authorize"
+	DefaultOAuthTokenEndpoint         = "/oauth/token"
+	DefaultOAuthRevokeEndpoint        = "/oauth/revoke"
+	DefaultOAuthClientID              = "sentient-cli"
+)
+
+// OAuth returns the OAuth2 configuration for an application id, filling any
+// missing field with its default. The endpoints are relative paths (joined to
+// the API base URL by the caller).
+func (c Config) OAuth(appID string) OAuthConfig {
+	o := OAuthConfig{}
+	if app, ok := c.Applications[appID]; ok {
+		o = app.OAuth
+	}
+	if strings.TrimSpace(o.AuthorizationEndpoint) == "" {
+		o.AuthorizationEndpoint = DefaultOAuthAuthorizationEndpoint
+	}
+	if strings.TrimSpace(o.TokenEndpoint) == "" {
+		o.TokenEndpoint = DefaultOAuthTokenEndpoint
+	}
+	if strings.TrimSpace(o.RevokeEndpoint) == "" {
+		o.RevokeEndpoint = DefaultOAuthRevokeEndpoint
+	}
+	if strings.TrimSpace(o.ClientID) == "" {
+		o.ClientID = DefaultOAuthClientID
+	}
+	if len(o.Scopes) == 0 {
+		o.Scopes = []string{"openid", "profile", "email"}
+	}
+	return o
 }

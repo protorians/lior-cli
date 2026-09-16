@@ -1,11 +1,14 @@
 package module
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/protorians/sentient-cli/internal/i18n"
@@ -13,41 +16,58 @@ import (
 )
 
 // Manifest is the metadata file of a Sentient module (`manifest.json`).
+//
+// The canonical schema (`@sentients/sdk/schemas/module.schema.json`) admits
+// additional properties: unknown top-level fields are preserved in Extra and
+// re-emitted on Marshal so a round-trip never loses forward-compatible data.
 type Manifest struct {
-	SchemaVersion   int               `json:"schemaVersion"`
-	ID              string            `json:"id"`
-	Domain          string            `json:"domain"`
-	Key             string            `json:"key"`
-	Name            string            `json:"name"`
-	Description     string            `json:"description"`
-	Version         string            `json:"version"`
-	Icon            string            `json:"icon"`
-	Type            string            `json:"type"`
-	Entry           string            `json:"entry"`
-	URI             string            `json:"uri"`
-	Token           string            `json:"token"`
-	Publisher       Publisher         `json:"publisher"`
-	Platforms       Platforms         `json:"platforms"`
-	ManagerCompat   Compatibility     `json:"managerCompatibility"`
-	APICompat       Compatibility     `json:"apiCompatibility"`
-	Permissions     []string          `json:"permissions"`
-	APIScopes       []string          `json:"apiScopes"`
-	Capabilities    Capabilities      `json:"capabilities"`
-	IsEnabled       bool              `json:"isEnabled"`
-	IsDefault       bool              `json:"isDefault"`
-	Requirements    map[string]any    `json:"requirements"`
-	Dependencies    map[string]string `json:"dependencies"`
-	DevDependencies map[string]string `json:"devDependencies,omitempty"`
-	Widgets         []string          `json:"widgets"`
-	Routines        []string          `json:"routines"`
-	Providers       []string          `json:"providers,omitempty"`
-	Menu            Menu              `json:"menu"`
+	Schema               string            `json:"$schema,omitempty"`
+	SchemaVersion        int               `json:"schemaVersion"`
+	ID                   string            `json:"id"`
+	Domain               string            `json:"domain"`
+	Key                  string            `json:"key"`
+	Name                 string            `json:"name"`
+	Description          string            `json:"description"`
+	Version              string            `json:"version"`
+	Icon                 string            `json:"icon"`
+	Logo                 *string           `json:"logo,omitempty"`
+	Banner               *string           `json:"banner,omitempty"`
+	Type                 string            `json:"type"`
+	Entry                string            `json:"entry"`
+	URI                  string            `json:"uri"`
+	Category             string            `json:"category,omitempty"`
+	Token                string            `json:"token"`
+	Publisher            Publisher         `json:"publisher"`
+	Platforms            Platforms         `json:"platforms"`
+	ManagerCompat        Compatibility     `json:"managerCompatibility"`
+	APICompat            Compatibility     `json:"apiCompatibility"`
+	Permissions          []string          `json:"permissions"`
+	APIScopes            []string          `json:"apiScopes"`
+	Capabilities         Capabilities      `json:"capabilities"`
+	IsEnabled            bool              `json:"isEnabled"`
+	IsDefault            bool              `json:"isDefault"`
+	Requirements         map[string]any    `json:"requirements"`
+	OptionalRequirements map[string]string `json:"optionalRequirements"`
+	Dependencies         map[string]string `json:"dependencies"`
+	DevDependencies      map[string]string `json:"devDependencies,omitempty"`
+	Widgets              []string          `json:"widgets"`
+	Routines             []string          `json:"routines"`
+	Providers            []string          `json:"providers,omitempty"`
+	ConfigSettings       []ConfigSetting   `json:"configSettings,omitempty"`
+	Menu                 Menu              `json:"menu"`
+
+	// Extra preserves unknown top-level fields (schema additionalProperties).
+	Extra map[string]json.RawMessage `json:"-"`
 }
 
 // Publisher describes the developer publishing the module.
 type Publisher struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	URL         string `json:"url,omitempty"`
+	Email       string `json:"email,omitempty"`
+	Description string `json:"description,omitempty"`
+	Avatar      string `json:"avatar,omitempty"`
 }
 
 // Platforms declares which platforms the module supports.
@@ -59,14 +79,20 @@ type Platforms struct {
 
 // Platform describes support for a single platform.
 type Platform struct {
-	Supported bool     `json:"supported"`
-	Modes     []string `json:"modes,omitempty"`
+	Supported    bool     `json:"supported"`
+	Modes        []string `json:"modes,omitempty"`
+	OS           []string `json:"os,omitempty"`
+	IOSSupported *bool    `json:"iosSupported,omitempty"`
+	MinOSVersion string   `json:"minOsVersion,omitempty"`
 }
 
-// Compatibility expresses a semver window.
+// Compatibility expresses a semver window. A complete `max` range is required
+// by the schema (e.g. `0.17.x` rather than `0.17.0`); `strict` turns an out-of-
+// range version into a hard failure rather than a warning.
 type Compatibility struct {
-	Min string `json:"min"`
-	Max string `json:"max"`
+	Min    string `json:"min"`
+	Max    string `json:"max,omitempty"`
+	Strict bool   `json:"strict,omitempty"`
 }
 
 // Capabilities declares module capabilities.
@@ -75,22 +101,120 @@ type Capabilities struct {
 	SupportsOffline           bool `json:"supportsOffline"`
 	RequiresOrganization      bool `json:"requiresOrganization"`
 	RequiresAuthenticatedUser bool `json:"requiresAuthenticatedUser"`
+	RequiresAdmin             bool `json:"requiresAdmin,omitempty"`
+	SupportsRealtime          bool `json:"supportsRealtime,omitempty"`
+	ProcessesLocalData        bool `json:"processesLocalData,omitempty"`
 }
 
 // Menu holds menu entries declared by the module.
 type Menu struct {
-	Items []MenuItem `json:"items"`
+	Items    []MenuItem `json:"items"`
+	Dropdown string     `json:"dropdown,omitempty"`
 }
 
 // MenuItem is a single entry of the module menu. The module declaration and
 // the reference mockups use the `url` field; the legacy CLI-generated manifests
 // used `uri`, still read for compatibility.
 type MenuItem struct {
-	ID    string `json:"id,omitempty"`
+	ID          string     `json:"id,omitempty"`
+	Label       string     `json:"label"`
+	Description string     `json:"description,omitempty"`
+	Icon        string     `json:"icon,omitempty"`
+	URL         string     `json:"url,omitempty"`
+	URI         string     `json:"uri,omitempty"`
+	Target      string     `json:"target,omitempty"`
+	Keywords    []string   `json:"keywords,omitempty"`
+	Items       []MenuItem `json:"items,omitempty"`
+	Separator   bool       `json:"separator,omitempty"`
+}
+
+// ConfigSetting is a configurable module parameter surfaced by the store.
+type ConfigSetting struct {
+	Key          string         `json:"key"`
+	Label        string         `json:"label"`
+	Description  string         `json:"description,omitempty"`
+	Type         string         `json:"type,omitempty"`
+	Required     bool           `json:"required,omitempty"`
+	Placeholder  string         `json:"placeholder,omitempty"`
+	DefaultValue string         `json:"defaultValue,omitempty"`
+	Options      []ConfigOption `json:"options,omitempty"`
+}
+
+// ConfigOption is one choice of a SELECT config setting.
+type ConfigOption struct {
 	Label string `json:"label"`
-	Icon  string `json:"icon,omitempty"`
-	URL   string `json:"url,omitempty"`
-	URI   string `json:"uri,omitempty"`
+	Value string `json:"value"`
+}
+
+// manifestKnownKeys lists the JSON tags owned by Manifest, used to split parsed
+// top-level fields between the typed struct and the Extra extension bag.
+var manifestKnownKeys = func() map[string]bool {
+	keys := map[string]bool{}
+	t := reflect.TypeOf(Manifest{})
+	for i := 0; i < t.NumField(); i++ {
+		name := strings.Split(t.Field(i).Tag.Get("json"), ",")[0]
+		if name != "" && name != "-" {
+			keys[name] = true
+		}
+	}
+	return keys
+}()
+
+// UnmarshalJSON decodes a manifest and preserves unknown top-level fields.
+func (m *Manifest) UnmarshalJSON(data []byte) error {
+	type alias Manifest
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	extra := map[string]json.RawMessage{}
+	for k, v := range raw {
+		if !manifestKnownKeys[k] {
+			extra[k] = v
+		}
+	}
+	*m = Manifest(a)
+	if len(extra) > 0 {
+		m.Extra = extra
+	}
+	return nil
+}
+
+// MarshalJSON serializes the manifest, re-emitting the preserved extension
+// fields after the canonical ones.
+func (m Manifest) MarshalJSON() ([]byte, error) {
+	type alias Manifest
+	base, err := json.Marshal(alias(m))
+	if err != nil {
+		return nil, err
+	}
+	if len(m.Extra) == 0 {
+		return base, nil
+	}
+	keys := make([]string, 0, len(m.Extra))
+	for k := range m.Extra {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b bytes.Buffer
+	trimmed := bytes.TrimSuffix(base, []byte("}"))
+	b.Write(trimmed)
+	for i, k := range keys {
+		if len(trimmed) > 1 || i > 0 {
+			b.WriteByte(',')
+		}
+		keyJSON, _ := json.Marshal(k)
+		b.Write(keyJSON)
+		b.WriteByte(':')
+		b.Write(m.Extra[k])
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
 }
 
 // NewManifest builds a fresh manifest for a module.
@@ -108,6 +232,7 @@ func NewManifest(name, description string) Manifest {
 		Type:          "EXTERNAL",
 		Entry:         "index.tsx",
 		URI:           "/" + name,
+		Category:      "SYSTEM",
 		Token:         pkg.NewUUID(),
 		Publisher:     Publisher{ID: "", Name: ""},
 		Platforms: Platforms{
@@ -115,8 +240,8 @@ func NewManifest(name, description string) Manifest {
 			Desktop: Platform{Supported: false},
 			Mobile:  Platform{Supported: false},
 		},
-		ManagerCompat: Compatibility{Min: "0.0.0", Max: "*.x"},
-		APICompat:     Compatibility{Min: "0.0.0", Max: "*.x"},
+		ManagerCompat: Compatibility{Min: "0.0.0"},
+		APICompat:     Compatibility{Min: "0.0.0"},
 		Permissions:   []string{},
 		APIScopes:     []string{},
 		Capabilities: Capabilities{
@@ -125,15 +250,17 @@ func NewManifest(name, description string) Manifest {
 			RequiresOrganization:      false,
 			RequiresAuthenticatedUser: true,
 		},
-		IsEnabled:       true,
-		IsDefault:       false,
-		Requirements:    map[string]any{},
-		Dependencies:    map[string]string{"@sentients/sdk": "workspace:*"},
-		DevDependencies: map[string]string{},
-		Widgets:         []string{},
-		Routines:        []string{},
-		Providers:       []string{},
-		Menu:            Menu{Items: []MenuItem{}},
+		IsEnabled:            true,
+		IsDefault:            false,
+		Requirements:         map[string]any{},
+		OptionalRequirements: map[string]string{},
+		Dependencies:         map[string]string{"@sentients/sdk": "workspace:*"},
+		DevDependencies:      map[string]string{},
+		Widgets:              []string{},
+		Routines:             []string{},
+		Providers:            []string{},
+		ConfigSettings:       []ConfigSetting{},
+		Menu:                 Menu{Items: []MenuItem{}},
 	}
 }
 
@@ -207,6 +334,39 @@ func ValidateIcon(icon string) error {
 		return nil
 	}
 	return errors.New(i18n.T("module.error.icon"))
+}
+
+// ModuleTypes is the set of distribution types accepted by the schema.
+var ModuleTypes = map[string]bool{"INTERNAL": true, "EXTERNAL": true}
+
+// ModuleCategories is the set of store categories accepted by the schema.
+var ModuleCategories = map[string]bool{
+	"ADMINISTRATION": true,
+	"COMMERCIAL":     true,
+	"FINANCE":        true,
+	"OPERATIONS":     true,
+	"COMMUNICATION":  true,
+	"DATA":           true,
+	"AUTOMATION":     true,
+	"SYSTEM":         true,
+}
+
+// ValidateType checks an optional module distribution type. An empty type is
+// accepted (the creation default EXTERNAL applies).
+func ValidateType(moduleType string) error {
+	if moduleType == "" || ModuleTypes[strings.ToUpper(strings.TrimSpace(moduleType))] {
+		return nil
+	}
+	return errors.New(i18n.T("module.error.type"))
+}
+
+// ValidateCategory checks an optional module category. An empty category is
+// accepted (the creation default SYSTEM applies).
+func ValidateCategory(category string) error {
+	if category == "" || ModuleCategories[strings.ToUpper(strings.TrimSpace(category))] {
+		return nil
+	}
+	return errors.New(i18n.T("module.error.category"))
 }
 
 // DisplayName returns the Title Case display name of a kebab-case identifier.

@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.7.0] - 2026-09-16
+
+### Added
+- **Manifeste conforme au schéma canonique (plan de mise à niveau, lot A/D)** — `module.Manifest` modélise désormais l'intégralité du contrat `module-manifest.schema.json` : `$schema`, `optionalRequirements`, `logo`/`banner`, `category`, `configSettings`, capacités étendues (`requiresAdmin`, `supportsRealtime`, `processesLocalData`), métadonnées éditeur (`url`, `email`, `description`, `avatar`), items de menu enrichis (description, target, keywords, items, separator) et plateformes détaillées (`os`, `iosSupported`, `minOsVersion`). Un sac d'extensions `Extra` (`json.RawMessage`) garantit qu'aucun champ canonique inconnu n'est perdu au round-trip (`additionalProperties: true`).
+- **`create module` : `--type` et `--category` (lot B)** — le type de distribution (`INTERNAL`/`EXTERNAL`, défaut `EXTERNAL` pour un module tiers) et la catégorie de store (enum `ModuleCategory`, défaut `SYSTEM`) sont validés puis écrits dans `manifest.json` et `index.tsx`.
+- **Publication enrichie (lot C)** — `publish` envoie désormais `token`, `description`, `icon` et `secondaryCategory` à la création du produit et utilise `manifest.category` comme catégorie primaire (repli `SYSTEM`) ; `buildNumber` est incrémenté (dernière build + 1) au lieu d'être figé à `1`.
+- **Audit étendu (lot D)** — le `Validator` contrôle en WARNING `optionalRequirements`, `platforms` (+ `modes` si `supported`), les plages `managerCompatibility`/`apiCompatibility` (max complète, ex. `0.17.x`), `capabilities`, `category` et `publisher`.
+- **Rafraîchissement OAuth (lot E)** — une session issue de `sentients auth` se rafraîchit via `POST /oauth/token` (`grant_type=refresh_token`, rotation) quand un refresh token OAuth est présent, avec repli sur `POST /api/auth/sessions/refresh`.
+
+### Changed
+- **Mockup embarqué aligné sur le socle** — `hello-world/manifest.json` miroir 1:1 (ajout `$schema` pointant vers le SDK réel et `optionalRequirements: {}`) ; `index.tsx` ne déclare plus `requirements`/`dependencies`/`devDependencies` (le manifeste reste la source de vérité).
+- **`NewManifest`** — défauts conformes (`optionalRequirements: {}`, `category: SYSTEM`, plages de compatibilité avec `min` seule, suppression du `max` invalide `*.x`).
+
+## [v0.6.0] - 2026-09-16
+
+### Added
+- **`sentients auth` — OAuth2 authorization-code + PKCE (spec §2.4, future scope)** — authentifie le développeur via le navigateur : génère un code verifier + challenge S256 (RFC 7636) et un `state`, ouvre la page d'autorisation de `sentient-auth`, reçoit la redirection sur un serveur local en boucle (`127.0.0.1:<port>/callback`), échange le code au point d'entrée `tokenEndpoint`, puis stocke la session (access token + refresh token + expiration) dans le trousseau système. Les endpoints, le `clientId` et les `scopes` proviennent de l'entrée `oauth` de `sentient-auth` dans `app.config.json` (avec défauts). En mode non interactif (CI), le code est fourni via `SENTIENT_CLI_AUTH_CODE` (pas de navigateur ni de serveur local). Couvert par des tests unitaires (`internal/auth` : PKCE, URL d'autorisation, échange de code, stockage) et un scénario E2E (`11_auth`, mock `/oauth/token`).
+
+
 ## [v0.5.0] - 2026-09-16
 
 ### Added

@@ -110,6 +110,28 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	// permissions must be an array (spec rule, WARNING severity)
 	addLevel(res, "manifest.json", "permissions", rawPermissionsIsArray(manifestPath),
 		"permissions is an array", LevelWarning)
+	// optionalRequirements present (schema-required, WARNING for legacy projects)
+	addLevel(res, "manifest.json", "optionalRequirements", manifest.OptionalRequirements != nil,
+		"optionalRequirements present", LevelWarning)
+	// platforms present, with modes for every supported platform
+	addLevel(res, "manifest.json", "platforms",
+		rawHasKey(manifestPath, "platforms") && platformsHaveModes(manifest.Platforms),
+		"platforms present with modes for supported platforms", LevelWarning)
+	// compatibility windows present and complete (`0.17.x`, not `0.17.0`)
+	addLevel(res, "manifest.json", "managerCompatibility", compatibilityComplete(manifest.ManagerCompat),
+		"managerCompatibility range present and complete", LevelWarning)
+	addLevel(res, "manifest.json", "apiCompatibility", compatibilityComplete(manifest.APICompat),
+		"apiCompatibility range present and complete", LevelWarning)
+	// capabilities present (schema-required)
+	addLevel(res, "manifest.json", "capabilities", rawHasKey(manifestPath, "capabilities"),
+		"capabilities present", LevelWarning)
+	// category within the ModuleCategory enum (optional field)
+	addLevel(res, "manifest.json", "category",
+		manifest.Category == "" || ModuleCategories[strings.ToUpper(manifest.Category)],
+		"category in the allowed enum", LevelWarning)
+	// publisher present (schema-required)
+	addLevel(res, "manifest.json", "publisher", manifest.Publisher.ID != "" && manifest.Publisher.Name != "",
+		"publisher present", LevelWarning)
 	// entry default export present in index.tsx
 	indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
 	addLevel(res, "index.tsx", "export", pkg.FileExists(indexPath) && containsDefaultExport(indexPath),
@@ -154,6 +176,48 @@ func isSentientDomain(domain string) bool {
 
 func isSemver(v string) bool {
 	return semverRE.MatchString(v)
+}
+
+// platformsHaveModes reports whether every supported platform declares at
+// least one execution mode (schema rule `modes` required when `supported`).
+func platformsHaveModes(p Platforms) bool {
+	for _, platform := range []Platform{p.Web, p.Desktop, p.Mobile} {
+		if platform.Supported && len(platform.Modes) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// exactVersionRE matches a fully-qualified SemVer (no `x` wildcard).
+var exactVersionRE = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// compatibilityComplete reports whether a compatibility window declares a min
+// and, when a max is present, uses a complete range (`0.17.x` rather than an
+// incomplete `0.17.0`).
+func compatibilityComplete(c Compatibility) bool {
+	if strings.TrimSpace(c.Min) == "" {
+		return false
+	}
+	if c.Max != "" && exactVersionRE.MatchString(c.Max) {
+		return false
+	}
+	return true
+}
+
+// rawHasKey reports whether a JSON file declares a top-level key. The typed
+// struct cannot distinguish an absent field from a zero value.
+func rawHasKey(path, key string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	_, ok := raw[key]
+	return ok
 }
 
 var defaultExportRE = regexp.MustCompile(`(?m)^\s*export\s+default\s+(?:async\s+)?(?:function[\s\w]*|\{(?:[^}]*\})?|\([^)]*\)\s*=>|class\s+\w+|[A-Za-z_$][\w$]*)`)

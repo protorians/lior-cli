@@ -8,8 +8,14 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.3.1 ;
+> - **État du code** : implémenté dans `protorians/sentient-cli` (branche `alpha`) ; dernière release documentée 0.7.0 ;
 >   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
+>
+> **Documents de référence (workspace `sentient-workspace/docs`)** : la présente spec s'aligne sur
+> les contrats du workspace, en particulier le manifest de module
+> (`docs/modules/module-manifest.md`, schéma JSON `@sentients/sdk/domain/schemas/module-manifest.schema.json`)
+> et la distribution des responsabilités Connect / Store / Core
+> (`docs/specs/applications/module-distribution.md`, `docs/modules/store.md`, `docs/specs/applications/sentient-connect.md`).
 
 ---
 
@@ -22,7 +28,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.3.1) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.7.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
@@ -64,6 +70,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `sentients init` — Initialisation d'un projet Sentient (téléchargement de la release template + deps)
 - `sentients create module` — Création de module dans `external_modules/`
 - `sentients connect` — Authentification développeur (credentials + MFA)
+- `sentients auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
 - `sentients disconnect` — Suppression des credentials
 - `sentients pack` — Build + compression d'un module (`.SenMod`)
 - `sentients sign` — Signature numérique Ed25519 des archives `.SenMod` (keygen / sign / verify)
@@ -87,7 +94,6 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `sentients test <module>` — Exécution des tests d'un module
 - `sentients watch` — Mode développement hot-reload
 - `sentients deploy` — Déploiement direct vers un environnement
-- `sentients auth` — Authentification OAuth2 PKCE (navigation navigateur)
 - `sentients marketplace` — Recherche/installation de modules tiers
 
 ---
@@ -101,13 +107,13 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-001 | La CLI détecte automatiquement les gestionnaires de paquets disponibles (bun, pnpm, yarn, npm) et propose le choix à l'utilisateur |
 | FR-002 | `sentients init` télécharge la release (ZIP) du template `protorians/sentients-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
 | FR-003 | `sentients init` installe les dépendances avec le gestionnaire choisi |
-| FR-004 | `sentients create module` crée un module dans `external_modules/<nom>/` à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
-| FR-005 | `sentients create module` génère un token UUID unique dans `manifest.json` |
+| FR-004 | `sentients create module` crée un module dans `external_modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
+| FR-005 | `sentients create module` génère un token UUID unique dans `manifest.json` et un manifeste conforme au schéma du workspace (`module-manifest.schema.json`, `schemaVersion: 1`) |
 | FR-006 | `sentients connect` authentifie le développeur via `sentient-connect` (email + mot de passe) |
 | FR-007 | `sentients connect` supporte le MFA (TOTP, backup codes) |
 | FR-008 | `sentients connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
 | FR-009 | `sentients disconnect` supprime toutes les credentials stockées |
-| FR-010 | `sentients pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.url>/` en `.SenMod` |
+| FR-010 | `sentients pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.SenMod` |
 | FR-011 | `sentients pack` déplace l'archive vers `.sentients/build/` |
 | FR-012 | `sentients publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
 | FR-013 | `sentients publish` demande les métadonnées du module si non définies |
@@ -123,6 +129,8 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-023 | `sentients sign verify <module>` vérifie la validité de la signature `.sig` d'un module |
 | FR-024 | `sentients sign` affiche le fingerprint SHA-256 de la clé publique du développeur |
 | FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `SENTIENT_CLI_LANG` → `cli.lang` de `sentients.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
+| FR-026 | `sentients auth` authentifie le développeur via le flux OAuth2 **code d'autorisation + PKCE** (navigateur + serveur local en boucle), complément du `sentients connect` (email/mot de passe) |
+| FR-027 | `sentients auth` stocke la session OAuth (`access_token`, `refresh_token`, expiration) dans le keychain (repli vault chiffré) et la partage avec les commandes authentifiées |
 
 ### Exigences non-fonctionnelles
 
@@ -178,6 +186,7 @@ sentient-cli/
 │   ├── init.go                    # sentients init (--channel alpha|beta|rc|stable)
 │   ├── create.go                  # sentients create module
 │   ├── connect.go                 # sentients connect
+│   ├── auth.go                    # sentients auth (OAuth2 code + PKCE)
 │   ├── disconnect.go              # sentients disconnect
 │   ├── pack.go                    # sentients pack
 │   ├── sign.go                    # sentients sign (keygen / sign / verify)
@@ -200,6 +209,7 @@ sentient-cli/
 │   │   ├── credentials.go         # Keychain + fallback vault chiffré (SENTIENT_CLI_STORE)
 │   │   ├── connector.go           # Client API sentient-connect
 │   │   ├── mfa.go                 # Logique MFA (TOTP, backup codes)
+│   │   ├── oauth.go               # Flux OAuth2 authorization_code + PKCE (navigateur, callback loopback)
 │   │   └── session.go             # Session locale (token cache, refresh)
 │   ├── module/                    # Logique module
 │   │   ├── creator.go             # Création de module
@@ -235,6 +245,7 @@ sentient-cli/
 │       ├── http.go                # Client HTTP + enveloppe Raiton + APIError
 │       ├── uuid.go                # Génération UUID
 │       ├── crypto.go              # MachineSecret (PBKDF2), EncryptVault/DecryptVault (AES-256-GCM)
+│       ├── open.go                # Ouverture du navigateur (open / rundll32 / xdg-open)
 │       └── update.go              # Détection de mises à jour (NFR-006, cache 24 h)
 ├── e2e/                           # Tests E2E
 │   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-025 vs mock API)
@@ -356,23 +367,38 @@ Destination : /chemin/vers/mon-projet
 
 #### Purpose
 
-Créer un nouveau module dans `external_modules/<nom>/` à partir d'un **mockup de référence embarqué**
-dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun checkout externe requis.
+Créer un nouveau module dans `external_modules/<domain>/` à partir d'un **mockup de référence
+embarqué** dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun checkout
+externe requis. Le manifeste produit respecte le contrat canonique du workspace
+(`schemaVersion: 1`, `docs/modules/module-manifest.md`).
 
 #### Comportement
 
 1. **Vérifier le contexte** : être à la racine d'un projet Sentient (`sentients.config.json`,
    `sentient.config.toml` ou présence de `external_modules/`)
-2. **Demander le nom** (`kebab-case`, 3-64, pas de caractères spéciaux) et la **description** du module
+2. **Demander l'identité** du module (chaque prompt a un flag équivalent) :
+   - **domaine** reverse-DNS (`--domain`, ex. `com.organization.domain`) — validation `ValidateDomain`,
+     il nomme le dossier `external_modules/<domain>/` et le champ `manifest.domain`
+   - **identifiant** kebab-case (`--id`, ou argument positionnel `create module <name>`) — 3-64,
+     validation `ValidateName`, il nomme les composants et le champ `manifest.id`
+   - **nom applicatif** affiché (`--name`, défaut : Title Case de l'identifiant)
+   - **version** SemVer optionnelle (`--version`, défaut `0.0.0`)
+   - **icône** lucide en PascalCase (`--icon`, défaut `PuzzleIcon`)
+   - **url** de page (`--url`, défaut : identifiant) → `manifest.uri = /<url>` et
+     `src/app/<url>/page.tsx`
+   - **description** (`--description`)
+   - **type** de distribution (`--type`, `INTERNAL` ou `EXTERNAL`, défaut `EXTERNAL`)
+   - **catégorie** de store (`--category`, enum `ModuleCategory`, défaut `SYSTEM`)
 3. **Résoudre la source du mockup module** (ordre de priorité) :
    - `--mockup` (champ `Creator.MockupDir`)
    - `SENTIENT_MODULE_MOCKUP` (répertoire de module de référence)
    - mockup **embarqué** `internal/module/mockups/hello-world/`
    (une source custom doit ressembler à un module scaffoldable : `manifest.json` + `index.tsx`)
-4. **Scaffolder le module** (copie + renommage) :
-   - Les fichiers et identifiants du mockup sont renommés selon les 6 variantes du nom
-     (`Hello World` → affichable, `HelloWorld` → PascalCase, `helloWorld` → camelCase,
-     `hello-world` → kebab-case, `HELLO_WORLD` → UPPER_SNAKE, `helloworld` → minuscules)
+4. **Scaffolder le module** (copie + renommage, `internal/module/scaffold.go`) :
+   - Les fichiers et identifiants du mockup sont renommés selon les 6 variantes de
+     l'**identifiant** (`Hello World` → affichable, `HelloWorld` → PascalCase,
+     `helloWorld` → camelCase, `hello-world` → kebab-case, `HELLO_WORLD` → UPPER_SNAKE,
+     `helloworld` → minuscules)
    - Le contenu des fichiers textes est réécrit en conséquence (renommage des fichiers inclus)
 5. **Vérifier les requirements** : chaque module du champ `requirements` du `manifest.json` doit
    exister localement — dans `external_modules/` **ou** dans `src/modules/` (modules internes
@@ -388,9 +414,12 @@ dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun 
    d'installation est non-bloquant (simple avertissement `create.warn.install`). L'installation
    peut être désactivée avec le drapeau `--skip-install` (ou l'environnement
    `SENTIENT_CLI_SKIP_INSTALL=1`).
-7. **Patcher l'identité** :
-   - `manifest.json` : injection d'un **token UUID v4 unique** si absent + description fournie
-   - `index.tsx` : réécriture de la ligne `description` de la déclaration
+7. **Patcher l'identité** (le mockup fournit les valeurs par défaut) :
+   - `manifest.json` : injection d'un **token UUID v4 unique** si absent, puis réécriture de
+     `id`, `domain`, `key` (UPPER_SNAKE de l'identifiant), `name`, `description`, `version`,
+     `icon`, `type`, `category`, `uri`/`url`
+   - `index.tsx` : `identifier` (= domaine), `key`, `version`, `name`, `description`, `icon`,
+     `type`, `category`, `uri`/`url`
    - `package.json` : description mise à jour
    - `README.md` : généré (nom, description, structure)
 8. **Scaffolder la page** : si la déclaration du module porte un `uri`/`url`, générer
@@ -402,96 +431,153 @@ dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun 
 #### Structure générée (mockup embarqué hello-world)
 
 ```
-external_modules/<module-name>/
-├── manifest.json               # identité + token UUID v4 injecté
+external_modules/<domain>/
+├── manifest.json               # contrat module + token UUID v4 injecté
 ├── index.tsx                   # déclaration (identifier, widgets, service, routines, uri)
 ├── package.json                # dépendances du mockup
 ├── README.md
 ├── application/
-│   └── service/                # hello-world-api-service.ts (service de données)
+│   └── service/                # <id>-api-service.ts (service de données)
 ├── domain/
-│   ├── enums/                  # hello-world-status.enum.ts (statuts)
-│   └── hello-world.interface.ts
+│   ├── enums/                  # <id>-status.enum.ts (statuts)
+│   └── <id>.interface.ts
 ├── infrastructure/
-│   └── routines/               # hello-world-analytics.routine.ts
+│   └── routines/               # <id>-analytics.routine.ts
 └── presentation/
-    ├── components/             # hello-world-data-grid, -columns, -details-sheet, create-hello-world-dialog
-    ├── providers/              # hello-world-header.provider.tsx (layout)
-    ├── views/                  # hello-world.view.tsx
-    └── widgets/                # hello-world.widget.tsx
+    ├── components/             # <id>-data-grid, -columns, -details-sheet, create-<id>-dialog
+    ├── providers/              # <id>-header.provider.tsx (layout)
+    ├── views/                  # <id>.view.tsx
+    └── widgets/                # <id>.widget.tsx
 ```
 
-`manifest.json` (extrait — l'identité est forcée à la création) :
+> Les vues et conteneurs scaffoldés suivent la convention de disposition **`View` / `Activity`**
+> du socle (`docs/frontend/view-activity.md`) : `View.Wrapper`, `View.Helmet`, `View.Frame`,
+> `View.Status`, et `Activity.Container` / `Activity.Loader` (importés depuis `@sentients/sdk`).
+
+`manifest.json` — le scaffold part du manifeste du mockup embarqué (miroir du module `hello-world`
+du socle `sentient-socle`, conforme au contrat canonique du workspace) et réécrit `id`, `domain`,
+`key`, `name`, `description`, `version`, `icon`, `uri` :
 
 ```json
 {
+  "$schema": "../../node_modules/@sentients/sdk/schemas/module.schema.json",
   "schemaVersion": 1,
-  "id": "<module-name>",
-  "domain": "mod.sentients.<lowerName>",
-  "key": "<MODULE_NAME_UPPER>",
-  "name": "<Nom du module>",
+  "id": "<id>",
+  "domain": "<domain>",
+  "key": "<ID_UPPER_SNAKE>",
+  "name": "<Nom affiché>",
   "description": "<description>",
-  "version": "0.1.0",
-  "uri": "/<module-name>",
-  "token": "<UUID v4 généré>",
-  "type": "INTERNAL",
+  "version": "<SemVer>",
+  "icon": "<IconName>",
+  "type": "<EXTERNAL|INTERNAL>",
   "entry": "index.tsx",
+  "uri": "/<url>",
+  "category": "<Catégorie>",
+  "token": "<UUID v4 généré>",
+  "publisher": { "id": "", "name": "" },
+  "platforms": {
+    "web": { "supported": true, "modes": ["web"] },
+    "desktop": { "supported": true, "modes": ["local-webview"], "os": ["windows", "macos", "linux"] },
+    "mobile": { "supported": true, "modes": ["local-webview"], "os": ["android"], "iosSupported": false }
+  },
+  "managerCompatibility": { "min": "0.17.1", "max": "0.17.x" },
+  "apiCompatibility": { "min": "0.27.0", "max": "0.27.x" },
+  "permissions": ["<id>.read", "<id>.write", "<id>.manage"],
+  "apiScopes": ["<id>.read", "<id>.write"],
+  "capabilities": {
+    "needsNetwork": true,
+    "supportsOffline": false,
+    "requiresOrganization": true,
+    "requiresAuthenticatedUser": true
+  },
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": { "organization": ">=1.0.0", "identity": ">=1.0.0" },
+  "optionalRequirements": {},
+  "dependencies": { "@sentients/sdk": "workspace:*", "react": "^19.0.0", "react-dom": "^19.0.0" },
+  "devDependencies": { "typescript": "^6.0.3" },
   "widgets": ["analytics"],
-  "routines": ["<moduleName>AnalyticsRoutine"],
-  "requirements": { "organization": ">=1.0.0", "identity": ">=1.0.0" }
+  "routines": ["<camelId>AnalyticsRoutine"],
+  "providers": ["layout"],
+  "menu": { "items": [{ "label": "<Nom affiché>", "icon": "<IconName>", "url": "/<url>" }] }
 }
 ```
+
+> **Contrat canonique** : la référence des champs (identité, plateformes, compatibilité,
+> permissions, capacités, activation, prérequis, dépendances, interface) et les conventions de
+> nommage sont dans `docs/modules/module-manifest.md`. Le schéma JSON
+> (`module-manifest.schema.json`, `schemaVersion: 1`) est publié avec le SDK
+> (`@sentients/sdk`) et sert de référence à la validation CI. Les champs `requirements`,
+> `optionalRequirements`, `dependencies` et `devDependencies` sont **strictement** gérés par le
+> manifeste (jamais dupliqués dans `index.tsx`).
 
 `index.tsx` (déclaration déclarative, pas de `render` asynchrone) :
 
 ```tsx
 import {ModuleDeclarationInterface} from "@sentients/sdk/domain/entities/module.interface";
 
-const moduleDeclaration: ModuleDeclarationInterface = {
-    identifier: 'mod.sentients.<lowerName>',
-    key: '<MODULE_NAME_UPPER>',
-    name: '<Nom du module>',
+const <camelId>Module: ModuleDeclarationInterface = {
+    identifier: '<domain>',
+    key: '<ID_UPPER_SNAKE>',
+    version: '<SemVer>',
+    name: '<Nom affiché>',
     description: '<description>',
-    uri: '/<module-name>',
-    widgets: { analytics: <ModuleName>Widget },
-    service: { fetch: <ModuleName>ApiService },
-    routines: [<moduleName>AnalyticsRoutine],
-    providers: { layout: <ModuleName>HeaderProvider },
+    icon: '<IconName>',
+    uri: '/<url>',
+    widgets: { analytics: <PascalId>Widget },
+    service: { fetch: <PascalId>ApiService },
+    routines: [<camelId>AnalyticsRoutine],
+    providers: { layout: <PascalId>HeaderProvider },
+    menu: { items: [{ label: '<Nom affiché>', icon: '<IconName>', url: '/<url>' }] },
     isEnabled: true,
     isDefault: false,
-    type: 'INTERNAL',
-    category: 'SYSTEM',
-    requirements: { organization: '>=1.0.0', identity: '>=1.0.0' },
+    type: '<EXTERNAL|INTERNAL>',
+    category: '<Catégorie>',
 };
 
-export default moduleDeclaration;
+export default <camelId>Module;
 ```
 
-`src/app/<uri>/page.tsx` (scaffoldé si `uri` déclaré) :
+> **Séparation manifeste / déclaration** : `requirements`, `optionalRequirements`, `dependencies`
+> et `devDependencies` sont **uniquement** déclarés dans `manifest.json` (voir
+> `docs/modules/module-manifest.md` § 3) — ils ne figurent plus dans `index.tsx`. Le manifeste est
+> la source de vérité ; la déclaration React en est la projection runtime.
+
+`src/app/<url>/page.tsx` (scaffoldé quand la déclaration porte un `uri`/`url`) :
 
 ```tsx
-import {<ModuleName>View} from "@/external_modules/<module-name>/presentation/views/<module-name>.view";
+import {<PascalId>View} from "@/external_modules/<domain>/presentation/views/<id>.view";
 
-export default function <ModuleName>Page() {
-    return <<ModuleName>View/>;
+export default function <PascalId>Page() {
+    return <<PascalId>View/>;
 }
 ```
 
 #### Contraintes
 
 - Le token UUID est **unique** et généré à la création (injection dans le manifest scaffoldé)
-- Le nom du module ne peut pas entrer en conflit avec un module existant (`external_modules/`)
+- Le **domaine** (reverse-DNS) ne peut pas entrer en conflit avec un module existant
+  (`external_modules/<domain>/`) ; l'identifiant doit être kebab-case (3-64)
 - Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
+- Le manifeste est conforme au schéma canonique (24 champs requis, `schemaVersion: 1`) ;
+  `entry` pointe vers `index.tsx` et `domain` correspond au dossier du module
+- Les champs `requirements` / `optionalRequirements` / `dependencies` / `devDependencies` ne sont
+  présents que dans `manifest.json` (jamais dans `index.tsx`)
 - `--mockup` / `--page-mockup` (et `SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP`) permettent
   de remplacer les mockups (tests, templates d'équipe) — voir `internal/module/scaffold.go`
 
 #### Sortie TUI
 
 ```
-? Nom du module : blog-manager
-? Description du module : Gestion de blog et d'articles
+? Domaine du module (reverse-DNS) : com.example.blog-manager
+? Identifiant du module (kebab-case) : blog-manager
+? Nom de l'application : Blog Manager
+? Version : 0.0.0
+? Icône (lucide) : PuzzleIcon
+? URL de page : blog-manager
+? Description : Gestion de blog et d'articles
 
-  ✓ Module créé : external_modules/blog-manager/
+  ✓ Module créé : external_modules/com.example.blog-manager/
   ✓ Token généré : a1b2c3d4-e5f6-7890-abcd-ef1234567890
   ✓ manifest.json initialisé
   ✓ index.tsx initialisé
@@ -499,7 +585,7 @@ export default function <ModuleName>Page() {
 
   Prochaines étapes :
     sentients connect
-    sentients pack blog-manager
+    sentients pack com.example.blog-manager
     sentients publish
 ```
 
@@ -545,7 +631,9 @@ manière sécurisée.
 #### Sécurité
 
 - **Plus jamais** de credentials en clair sur disque
-- Session **à jeton unique** : le token Bearer est rafraîchi via `POST /api/auth/sessions/refresh` si expiré
+- Session **à jeton unique** : le token Bearer est rafraîchi à l'expiration — par `POST /oauth/token`
+  (`grant_type=refresh_token`, rotation) quand la session provient du flux OAuth `sentients auth`,
+  sinon par `POST /api/auth/sessions/refresh` (session legacy)
 - Le `mfa_secret` (si TOTP enrollment local) est chiffré dans le keychain
 - Après 5 échecs de connexion → temporaire (5 min) avec message clair
 - **Mode CI / headless** : les prompts sont alimentés par `SENTIENT_CLI_CONNECT_EMAIL`,
@@ -588,6 +676,7 @@ Supprimer toutes les credentials stockées et déconnecter le développeur.
    - `sentient-cli.user_email`
    - `sentient-cli.user_id`
    - `sentient-cli.mfa_secret`
+   - `sentient-cli.oauth_refresh_token`
 4. **Invalider le token** côté serveur (`POST /api/auth/logout`, best-effort)
 5. **Afficher confirmation**
 
@@ -616,13 +705,13 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 3. **Valider le `manifest.json`** (champs requis : `id`, `name`, `version`, `token`)
 4. **Construire les chemins** :
    - Source module : `external_modules/<module>/`
-   - Source assets : `src/app/<module.url>/`
+   - Source page : `src/app/<module.uri>/` (le `uri` du manifeste, sans `/` initial)
    - Source assets : `public/assets/<module>/` (si existe)
    - Destination : `.sentients/build/`
 5. **Créer l'archive ZIP** :
    - Nom : `<module>-<version>.SenMod` (le `.SenMod` est un ZIP renommé)
-   - Contenu : dossiers `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.url>` (si existe)
-   - Préfixe dans l'archive : `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.url>`
+   - Contenu : dossiers `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>` (si existe)
+   - Préfixe dans l'archive : `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>`
 6. **Déplacer** l'archive vers `.sentients/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
@@ -633,11 +722,12 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 ├── external_modules/<module>/
 │   ├── manifest.json
 │   ├── index.tsx
-│   ├── components/
-│   ├── hooks/
-│   └── ...
-└── src/app/<module.url>/
-    └── ...
+│   ├── application/
+│   ├── domain/
+│   ├── infrastructure/
+│   └── presentation/
+├── src/app/<module.uri>/
+│   └── page.tsx
 └── public/assets/<module>/    (optionnel)
     └── ...
 ```
@@ -684,10 +774,14 @@ Construire et publier un module dans le store via l'API `sentient-connect`.
      - `publisher.name` : nom affiché du développeur
    - Proposer de mettre à jour le `manifest.json` local
 4. **Exécuter `sentients pack`** en interne (construction de l'archive)
-5. **Envoyer l'archive** à l'API developer-store (les 3 étapes de §21 connect) :
+5. **Envoyer l'archive** à l'API developer-store (`sentient-api-connect`, §8.2 ;
+   `docs/specs/applications/sentient-connect.md`) en 3 étapes :
    - Résoudre le **produit module** : réutiliser le produit lié (`manifest.token`) sinon le créer
-     (`POST /api/developer-store/modules` — `{name, slug, type, primaryCategory}`)
-   - Créer la **version** (`POST /api/developer-store/modules/:id/versions` — `{versionString, buildNumber, …}`)
+     (`POST /api/developer-store/modules` — `{name, slug, type, primaryCategory, token,
+     description, icon, secondaryCategory?}` ; catégorie primaire = `manifest.category`, repli `SYSTEM`)
+   - Créer la **version** (`POST /api/developer-store/modules/:id/versions` —
+     `{versionString, buildNumber, …}` ; `buildNumber` = dernière build + 1, résolue via
+     `GET …/versions`)
    - **Déclarer l'artefact** (`POST /api/developer-store/modules/:id/versions/:versionId/artifact` —
      `manifest` JSON, `checksum` SHA-256 hex, `signature` base64 (.SenMod.sig), `size`)
    - Headers : `Authorization: Bearer <token>`
@@ -877,15 +971,28 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **manifest.json** | Champ `version` au format SemVer valide | ERROR |
 | **manifest.json** | Champ `token` UUID valide | ERROR |
 | **manifest.json** | Champ `entry` pointe vers un fichier existant | ERROR |
-| **manifest.json** | Champ `domain` au format `mod.sentients.<lowerName>` | WARNING |
+| **manifest.json** | Champ `domain` au format `mod.sentients.<name>` | WARNING |
+| **manifest.json** | Le `domain` correspond au dossier du module (`external_modules/<domain>`) | WARNING |
 | **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
+| **manifest.json** | `optionalRequirements` est présent (objet, `{}` admis) | WARNING |
+| **manifest.json** | `platforms` est présent et `modes` est déclaré pour chaque plateforme `supported: true` | WARNING |
+| **manifest.json** | `managerCompatibility` / `apiCompatibility` présents, plage `max` complète (`0.17.x`, pas `0.17.0`) | WARNING |
+| **manifest.json** | `capabilities` est présent | WARNING |
+| **manifest.json** | `category` appartient à l'enum `ModuleCategory` (si présent) | WARNING |
+| **manifest.json** | `publisher` est présent (`id` + `name`) | WARNING |
 | **index.tsx** | Fichier existe et exporte une valeur par défaut | ERROR |
 | **index.tsx** | Déclaration module présente (`identifier` + `widgets`) — déclaration déclarative, l'ancien `render` async n'existe plus | ERROR |
 | **Clean Architecture** | Les composants n'importent pas directement les services (`../services`, `application/service`) | ERROR |
 | **Clean Architecture** | Les services ne contiennent pas de JSX (`services/` et `application/service/`, heuristique regex JSX) | ERROR |
-| **requirements** | Les requirements listées existent dans `external_modules/` (exceptions : modules core plateforme `organization`, `identity`) | ERROR |
+| **requirements** | Les requirements listées existent dans `external_modules/` **ou** `src/modules/` (exceptions : modules core plateforme `organization`, `identity`) | ERROR |
 | **dependencies** | Les dépendances npm listées sont installées dans `node_modules` | ERROR |
 | **assets** | `public/assets/<module>/` contient des fichiers (si le dossier existe) | WARNING |
+
+> Les champs contrôlés (`id`, `name`, `version`, `token`, `entry`, `domain`, `permissions`) font
+> partie du contrat canonique du manifeste (`docs/modules/module-manifest.md`). La conformité
+> **complète** au schéma (`module-manifest.schema.json`, 24 champs requis, plateformes,
+> compatibilité, capacités, prérequis, dépendances…) est validée en CI par le SDK, pas par
+> l'audit CLI (qui reste une heuristique locale).
 
 > Note : la règle « pas de dépendances en double » a été retirée (itération d'une map — les clés
 > dupliquées sont impossibles par construction). La règle « pas de logique métier dans les hooks »
@@ -946,6 +1053,7 @@ Usage:
 
 Available Commands:
   audit         Audit a module's conformance
+  auth          Authenticate via OAuth2 (browser)
   connect       Connect to Sentient Connect
   create        Create a new module
   debug         Debug a module
@@ -998,7 +1106,7 @@ Afficher la version actuelle de la CLI.
 #### Sortie
 
 ```
-sentients v0.0.9 (darwin/arm64) abc1234
+sentients v0.6.0 (darwin/arm64) abc1234
 ```
 
 ---
@@ -1138,6 +1246,70 @@ avant publication.
 
 ---
 
+### 5.14 `sentients auth`
+
+#### Purpose
+
+Authentifier le développeur via le flux OAuth2 **code d'autorisation + PKCE** (RFC 7636),
+en passant par le navigateur. Complément du `sentients connect` (email/mot de passe), le
+flux ouvre la page d'autorisation de `sentient-auth`, reçoit la redirection sur un serveur
+local en boucle, échange le code contre des jetons, puis stocke la session de façon
+sécurisée.
+
+#### Comportement
+
+1. **Vérifier si déjà connecté** : credentials existantes dans le keychain — afficher le
+   statut et proposer la reconnexion (comme `connect`)
+2. **Résoudre la configuration OAuth** depuis l'entrée `oauth` de `sentient-auth` dans
+   `app.config.json` : `authorizationEndpoint`, `tokenEndpoint`, `revokeEndpoint`,
+   `clientId`, `scopes` (défauts : `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`,
+   client `sentient-cli`, scopes `openid profile email`)
+3. **Générer le PKCE** : `code_verifier` (43–128 caractères base64url) + `code_challenge`
+   S256, et un `state` aléatoire (anti-CSRF)
+4. **Ouvrir le navigateur** sur l'URL d'autorisation :
+   `GET <baseUrl><authorizationEndpoint>?response_type=code&client_id=…&redirect_uri=…&scope=…&code_challenge=…&code_challenge_method=S256&state=…`
+   — l'URL est affichée dans le terminal (recopiable si le navigateur ne s'ouvre pas)
+5. **Recevoir la redirection** sur un serveur HTTP local en boucle
+   (`http://127.0.0.1:<port>/callback`, port éphémère) ; extraire `code` + `state` et
+   vérifier le `state`
+6. **Échanger le code** au point d'entrée token (POST `application/x-www-form-urlencoded`) :
+   `grant_type=authorization_code&code=…&redirect_uri=…&client_id=…&code_verifier=…`
+7. **Stocker la session** : `access_token`, `refresh_token` (si présent) et expiration
+   (`expires_in`), dans le keychain (repli vault chiffré)
+8. **Afficher le résumé** : type de jeton, expiration, scope, présence d'un refresh token
+
+#### Mode non interactif (CI / headless)
+
+Le code d'autorisation est fourni via la variable d'environnement `SENTIENT_CLI_AUTH_CODE`
+(même pattern que `SENTIENT_CLI_YES`) : la CLI saute l'étape navigateur + serveur local et
+échange directement le code. Sans code en mode non interactif, la commande échoue avec une
+erreur catégorisée (exit 2).
+
+#### Sortie TUI
+
+```
+  Ouverture de la page d'autorisation dans votre navigateur…
+  https://auth.sentient.protorians.com/oauth/authorize?response_type=code&…
+
+  ⠋ Échange du code d'autorisation…
+
+  ✓ Authentifié via OAuth2
+    Type de jeton : Bearer
+    Portée        : openid profile email
+    Expiration du jeton : 2026-09-17 14:30:00 UTC
+```
+
+#### Contraintes
+
+- Le `state` renvoyé par le serveur doit correspondre à celui généré (anti-CSRF) — sinon
+  erreur catégorisée
+- Les jetons ne sont **jamais** en clair sur disque : ils sont stockés dans le keychain
+  (repli vault chiffré `credentials.enc`)
+- Le `redirect_uri` est toujours un loopback `http://127.0.0.1:<port>/callback` (client
+  public natif, PKCE `S256` obligatoire)
+
+---
+
 ## 6. Modèle de données local
 
 ### 6.1 Fichier `sentients.config.json` (optionnel)
@@ -1172,8 +1344,21 @@ Placé à la racine du projet Sentient, ce fichier permet de configurer la CLI.
 
 ### 6.2 Fichier `manifest.json` (par module)
 
-Le `manifest.json` est le fichier de métadonnées de chaque module. Voir la section
-`sentients create module` pour le schéma complet.
+Le `manifest.json` est le **contrat technique déclaratif** de chaque module (identité, plateformes,
+compatibilité, permissions/scopes, capacités, activation, prérequis, dépendances npm, interface).
+C'est la source de vérité dont découlent la déclaration React (`index.tsx`,
+`ModuleDeclarationInterface`) et le catalogue backend.
+
+- **Schéma canonique** : `schemaVersion: 1`, publié avec le SDK
+  (`@sentients/sdk`, `docs/modules/module-manifest.md`), validé en CI. La structure complète
+  est décrite en §5.2 (`sentients create module`).
+- **Identité stable** : `id`, `domain`, `key`, `name`, `permissions` ne changent jamais (le
+  catalogue, les activations et les contrôles d'accès en dépendent) ; `version` ne bouge que par
+  incrément SemVer.
+- **Séparation** : `requirements`, `optionalRequirements`, `dependencies`, `devDependencies` sont
+  déclarés **uniquement** ici (jamais dans `index.tsx`).
+- **`token`** : identifiant public de liaison produit (UUID local régénéré au `unlink`, remplacé
+  par l'id produit distant au `link`) — ce n'est pas un secret.
 
 ### 6.3 Keychain — Hiérarchie des clés
 
@@ -1185,7 +1370,8 @@ sentient-cli/
 ├── expires_at        # Timestamp d'expiration
 ├── user_id           # ID du développeur
 ├── user_email        # Email du développeur
-└── mfa_secret        # Secret TOTP (si enrollment local)
+├── mfa_secret        # Secret TOTP (si enrollment local)
+└── oauth_refresh_token  # Refresh token OAuth2 (flux `sentients auth`)
 
 sentient-cli-signing/
 ├── signing_public_key   # Clé publique Ed25519 (fingerprint du développeur)
@@ -1255,18 +1441,23 @@ sentient-cli-signing/
 
 ## 8. Communication API
 
-> Les endpoints sont servis par `sentient-api-core` (auth/MFA) et `sentient-api-connect`
-> (developer-store), derrière un préfixe global **`/api`** et une enveloppe Raiton unique :
-> `{ message, data, statusCode }` (`RaitonResponses(message, data, statusCode)`).
-> Les erreurs reprennent l'enveloppe (`message`), le code HTTP et un `code` optionnel.
+> La CLI consomme deux backends du workspace (`docs/specs/applications/module-distribution.md`) :
+> `sentient-api-core` (authentification, MFA, OAuth — port `5711`) et `sentient-api-connect`
+> (**Developer Store** de publication — port `5721`). Le **catalogue public** vit dans un troisième
+> service, `sentient-api-store` (port `5731`, `/api/catalog/*`), non appelé directement par la CLI.
+>
+> Tous les endpoints sont servis derrière un préfixe global **`/api`** (hors routes OAuth publiques)
+> et une enveloppe Raiton unique : `{ message, data, statusCode }`
+> (`RaitonResponses(message, data, statusCode)`). Les erreurs reprennent l'enveloppe (`message`), le
+> code HTTP et un `code` optionnel.
 >
 > La base URL du client est résolue par le **registre `app.config.json`** (TECH-009) : le binaire
-> embarque le registre workspace (`sentient-auth`, `sentient-store`, …), un `app.config.json` local
-> peut le surcharger, et `SENTIENT_AUTH_API` force la base URL (priorité max). Le timeout HTTP par
-> défaut est de 30 s (surchargeable par application via `api.timeout`). Le header
+> embarque le registre workspace (`sentient-auth`, `sentient-store`, `sentient-connect`, …), un
+> `app.config.json` local peut le surcharger, et `SENTIENT_AUTH_API` force la base URL (priorité max).
+> Le timeout HTTP par défaut est de 30 s (surchargeable par application via `api.timeout`). Le header
 > `Authorization: Bearer <token>` est posé à chaque requête quand une session existe.
 
-### 8.1 Endpoints `sentient-connect`
+### 8.1 Endpoints `sentient-api-core` — authentification, MFA, OAuth
 
 | Méthode | Chemin | Description |
 |---------|--------|-------------|
@@ -1276,7 +1467,19 @@ sentient-cli-signing/
 | POST | `/api/mfa/challenge` | Défi MFA (gardé) → `{mfaRequired, challenge?, factors}` |
 | POST | `/api/mfa/totp/verify` | Vérification code TOTP (gardé) → `{mfaVerified, mfaToken?}` |
 | POST | `/api/mfa/recovery/verify` | Vérification backup code (gardé) |
-| GET | `/api/developer-store/modules` | Liste des produits module du développeur (tableau brut ou paginé `{items, …}`) |
+| GET | `/oauth/authorize` | Autorisation OAuth2 (navigateur) — `response_type=code`, PKCE S256, `state` |
+| POST | `/oauth/token` | Échange de code / refresh OAuth2 (`authorization_code` / `refresh_token`, form-encoded) |
+| POST | `/oauth/revoke` | Révocation d'un token OAuth2 |
+
+> Le module OAuth (`docs/specs/applications/sentient-oauth.md`) expose aussi `client_credentials`,
+> `refresh_token` (rotation), `/oauth/introspect`, `/oauth/userinfo` (OIDC), `/.well-known/*` et
+> l'administration des clients ; la CLI n'utilise que le sous-ensemble **code + PKCE** ci-dessus.
+
+### 8.2 Endpoints `sentient-api-connect` — Developer Store (publication)
+
+| Méthode | Chemin | Description |
+|---------|--------|-------------|
+| GET | `/api/developer-store/modules` | Liste des produits module (`DeveloperModule`) du développeur (tableau brut ou paginé `{items, …}`) |
 | GET | `/api/developer-store/modules/:id` | Détail d'un produit module (id) |
 | GET | `/api/developer-store/modules/:id/versions` | Liste des versions publiées (meilleure version pour link/publish) |
 | POST | `/api/developer-store/modules` | Création d'un produit module |
@@ -1284,7 +1487,11 @@ sentient-cli-signing/
 | POST | `/api/developer-store/modules/:id/versions` | Création d'une version |
 | POST | `/api/developer-store/modules/:id/versions/:versionId/artifact` | Déclaration de l'artefact |
 
-### 8.2 DTOs
+> Modèles `DeveloperModule` / `DeveloperModuleVersion` / `DeveloperModuleArtifact` (anciens
+> `StoreModule*`) ; jeton `Bearer` partagé émis par `sentient-api-core` (`JWT_SECRET` aligné). Voir
+> `docs/specs/applications/sentient-connect.md`.
+
+### 8.3 DTOs
 
 #### POST `/api/auth/sign-in` — `SignInRequest`
 
@@ -1309,20 +1516,26 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
 | `name` | string | oui | Nom affiché (2-120) |
-| `slug` | string | oui | Identifiant unique du développeur (kebab-case) |
-| `type` | enum | oui | `DeveloperModuleType` (`WEB_APP_REMOTE` par défaut, …) |
+| `slug` | string | oui | Identifiant unique par compte développeur (kebab-case) |
+| `type` | enum | non | `DeveloperModuleType` (`WEB_APP_REMOTE` par défaut, …) |
 | `primaryCategory` | string | oui | Catégorie storefront |
+| `secondaryCategory` | string | non | Catégorie secondaire |
+| `token` | string | non | 3-64 ; **généré (UUID) si omis** — clé de réutilisation produit par la CLI |
+| `description` / `icon` | string | non | Description / icône de la fiche produit |
+
+> La CLI enregistre le `token` produit dans le `manifest.json` local et le réutilise pour retrouver
+> l'entrée de publication (idempotence du parcours `publish`).
 
 #### POST `/api/developer-store/modules/:id/versions` — `CreateVersionRequest`
 
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
-| `versionString` | string | oui | Version SemVer du manifest |
-| `buildNumber` | number | oui | Numéro de build (incrémenté par la CLI) |
-| `releaseNotes` | JSON | non | Notes de release (objet) |
-| `minManager` / `maxManager` | string | non | Compatibilité manager (manifest) |
-| `minApi` / `maxApi` | string | non | Compatibilité API (manifest) |
-| `supportedRuntimes` | string[] | non | Runtimes activés du manifest (`WEB`, `DESKTOP`, `MOBILE`) |
+| `versionString` | string | oui | Version SemVer du manifest, **strictement supérieure** à la dernière (sinon `409`) |
+| `buildNumber` | number | non | Numéro de build (défaut : dernière build + 1) |
+| `releaseNotes` | JSON | non | Notes de release (objet, par langue) |
+| `minManager` / `maxManager` | string | non | Compatibilité manager (`manifest.managerCompatibility`) |
+| `minApi` / `maxApi` | string | non | Compatibilité API (`manifest.apiCompatibility`) |
+| `supportedRuntimes` | string[] | non | Runtimes activés du manifest (défaut `["bun"]`) |
 
 #### POST `/api/developer-store/modules/:id/versions/:versionId/artifact` — `DeclareArtifactRequest`
 
@@ -1331,7 +1544,8 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 | `manifest` | JSON | oui | Contenu du `manifest.json` |
 | `checksum` | string | oui | SHA-256 hex de l'archive `.SenMod` |
 | `signature` | string | non | Signature Ed25519 (base64 du `.SenMod.sig`, vide si non signé) |
-| `size` | number | oui | Taille de l'archive en octets |
+| `size` | number | non | Taille de l'archive en octets (défaut 0) |
+| `storageKey` | string | non | Clé de stockage blob (téléversement binaire — réservé) |
 
 ---
 
@@ -1548,7 +1762,7 @@ fixtures portables `bun/npm/tsc/node` et donne un `HOME` isolé writable par scr
 
 Suite E2E réelle (11 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
 `03_create`, `04_pack`, `05_sign`, `06_debug`, `07_audit`, `08_network`, `09_mfa`,
-`10_link_unlink`.
+`10_link_unlink`, `11_auth`.
 
 | ID | Scénario |
 |----|----------|
@@ -1577,6 +1791,8 @@ Suite E2E réelle (11 scripts txtar) : `01_help_version`, `02_init`, `02b_init_b
 | TC-023 | `sentients sign <module>` signe l'archive `.SenMod` et produit un `.sig` |
 | TC-024 | `sentients sign verify <module>` vérifie une signature valide |
 | TC-025 | `sentients sign verify <module>` échoue sur archive modifiée ou signature invalide |
+| TC-026 | `sentients auth` échange un code d'autorisation (OAuth2 + PKCE) et stocke la session |
+| TC-027 | `sentients auth` en mode non-interactif sans `SENTIENT_CLI_AUTH_CODE` → erreur catégorisée (exit 2) |
 
 ---
 

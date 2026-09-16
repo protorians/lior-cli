@@ -246,8 +246,12 @@ func patchManifestIdentity(moduleDir string, spec ModuleSpec) error {
 	if spec.Icon != "" {
 		text = patchJSONField(text, "icon", spec.Icon)
 	}
+	text = patchJSONField(text, "type", spec.EffectiveType())
+	text = patchJSONField(text, "category", spec.EffectiveCategory())
 	text = patchJSONField(text, "uri", "/"+spec.URL)
-	text = patchJSONField(text, "url", "/"+spec.URL)
+	// Menu entries carry a nested `url`; sync them without ever injecting a
+	// non-canonical top-level `url` field.
+	text = patchJSONFieldExisting(text, "url", "/"+spec.URL)
 
 	return pkg.WriteString(manifestPath, text)
 }
@@ -269,8 +273,11 @@ func patchDeclarationIdentity(moduleDir string, spec ModuleSpec) error {
 	if spec.Icon != "" {
 		text = patchJSField(text, "icon", spec.Icon)
 	}
+	text = patchJSField(text, "type", spec.EffectiveType())
+	text = patchJSField(text, "category", spec.EffectiveCategory())
 	text = patchJSField(text, "uri", "/"+spec.URL)
-	text = patchJSField(text, "url", "/"+spec.URL)
+	// Menu entries carry a nested `url`; sync the existing ones only.
+	text = patchJSFieldExisting(text, "url", "/"+spec.URL)
 	if err := os.WriteFile(indexPath, []byte(text), 0o644); err != nil {
 		return fmt.Errorf("failed to update %s: %w", indexPath, err)
 	}
@@ -314,6 +321,19 @@ func patchJSONField(text, field, value string) string {
 	return lastBrace.ReplaceAllString(text, ",\n  \""+field+"\": "+replacement+"\n}")
 }
 
+// patchJSONFieldExisting rewrites every occurrence of a JSON string field at
+// any indentation (e.g. a nested menu-item `url`) without inserting a new
+// top-level field when the field is absent.
+func patchJSONFieldExisting(text, field, value string) string {
+	re := regexp.MustCompile(`(?m)^(\s*)"` + regexp.QuoteMeta(field) + `"\s*:\s*"[^"]*"`)
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return text
+	}
+	replacement := strings.ReplaceAll(string(encoded), "$", "$$")
+	return re.ReplaceAllString(text, "${1}\""+field+"\": "+replacement)
+}
+
 // patchJSField rewrites a `field: 'value'` line of the declarative module
 // declaration (index.tsx), preserving the leading indentation and the trailing
 // comma. When the field is absent it is inserted as the last member of the
@@ -327,6 +347,19 @@ func patchJSField(text, field, value string) string {
 	}
 	closing := regexp.MustCompile(`\n}\n\nexport default`)
 	return closing.ReplaceAllString(text, "\n    "+field+": '"+escaped+"',\n}\n\nexport default")
+}
+
+// patchJSFieldExisting rewrites an existing `field: 'value'` line of the
+// declarative module declaration without inserting a new member when the field
+// is absent.
+func patchJSFieldExisting(text, field, value string) string {
+	re := regexp.MustCompile(`(?m)^(\s*)(?:` + regexp.QuoteMeta(field) + `):.*$`)
+	if !re.MatchString(text) {
+		return text
+	}
+	escaped := strings.ReplaceAll(value, "'", `\'`)
+	escaped = strings.ReplaceAll(escaped, "$", "$$")
+	return re.ReplaceAllString(text, "${1}"+field+": '"+escaped+"',")
 }
 
 // scaffoldPage generates `src/app/<url>/page.tsx` from a page mockup file.

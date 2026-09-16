@@ -326,6 +326,69 @@ func TestPublishServerError(t *testing.T) {
 	}
 }
 
+func TestCreateProductRequestCarriesMetadata(t *testing.T) {
+	m := module.NewManifest("blog", "Gestion de blog")
+	m.Category = "FINANCE"
+	m.Icon = "WalletIcon"
+	m.Token = "tok-123"
+	m.Extra = map[string]json.RawMessage{"secondaryCategory": json.RawMessage(`"DATA"`)}
+
+	body := createProductRequest(&m)
+	want := map[string]string{
+		"name":              "Blog",
+		"slug":              "blog",
+		"type":              ModuleTypeWebAppRemote,
+		"primaryCategory":   "FINANCE",
+		"secondaryCategory": "DATA",
+		"description":       "Gestion de blog",
+		"icon":              "WalletIcon",
+		"token":             "tok-123",
+	}
+	for k, v := range want {
+		if body[k] != v {
+			t.Errorf("body[%q] = %q, want %q", k, body[k], v)
+		}
+	}
+
+	// The category falls back to SYSTEM when the manifest declares none.
+	m.Category = ""
+	if got := createProductRequest(&m)["primaryCategory"]; got != "SYSTEM" {
+		t.Errorf("primaryCategory = %q, want SYSTEM", got)
+	}
+}
+
+func TestCreateVersionIncrementsBuildNumber(t *testing.T) {
+	var gotBuild int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/developer-store/modules/prod-1/versions":
+			raiton(w, http.StatusOK, `[{"id":"v1","moduleProductId":"prod-1","versionString":"0.1.0","buildNumber":3,"status":"PUBLISHED"}]`)
+		case r.Method == http.MethodPost && r.URL.Path == "/api/developer-store/modules/prod-1/versions":
+			var body createVersionRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "bad body", http.StatusBadRequest)
+				return
+			}
+			gotBuild = body.BuildNumber
+			raiton(w, http.StatusCreated, `{"id":"v2","moduleProductId":"prod-1","versionString":"0.2.0","buildNumber":4,"status":"DRAFT"}`)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	client.SetToken("tok")
+	m := module.NewManifest("mod", "")
+	m.Version = "0.2.0"
+	if _, err := client.createVersion(t.Context(), "prod-1", &m); err != nil {
+		t.Fatalf("createVersion: %v", err)
+	}
+	if gotBuild != 4 {
+		t.Errorf("buildNumber = %d, want 4 (dernière build + 1)", gotBuild)
+	}
+}
+
 func TestDeveloperTypeFor(t *testing.T) {
 	cases := map[string]string{
 		"":              ModuleTypeWebAppRemote,

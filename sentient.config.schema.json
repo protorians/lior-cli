@@ -98,6 +98,17 @@
         "revokeEndpoint": {
           "type": "string",
           "description": "Point de révocation du token OAuth"
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Identifiant client OAuth (client public de la CLI)"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Scopes OAuth demandés"
         }
       },
       "additionalProperties": false

@@ -29,8 +29,8 @@ const (
 	ModuleTypeRemoteFrontend = "REMOTE_FRONTEND"
 )
 
-// defaultPrimaryCategory is used for products whose manifest declares no
-// category (the manifest format has no category field yet).
+// defaultPrimaryCategory is the store category used for products whose
+// manifest declares no `category`.
 const defaultPrimaryCategory = "SYSTEM"
 
 // Product is a StoreModuleProduct entity (`CreateModuleProductDto` payload).
@@ -41,6 +41,8 @@ type Product struct {
 	Name              string  `json:"name"`
 	Slug              string  `json:"slug"`
 	Type              string  `json:"type"`
+	Description       string  `json:"description,omitempty"`
+	Icon              string  `json:"icon,omitempty"`
 	PrimaryCategory   string  `json:"primaryCategory"`
 	SecondaryCategory string  `json:"secondaryCategory,omitempty"`
 	IsDeprecated      bool    `json:"isDeprecated"`
@@ -168,11 +170,11 @@ func (c *Client) GetModule(ctx context.Context, id string) (*RemoteModuleRespons
 	}, nil
 }
 
-// latestVersion returns the most recent published version string (best-effort).
-func (c *Client) latestVersion(ctx context.Context, productID string) string {
+// fetchVersions returns the published versions of a product (best-effort).
+func (c *Client) fetchVersions(ctx context.Context, productID string) []Version {
 	var raw json.RawMessage
 	if err := c.Connector.Client.Do(ctx, "GET", modulesPath+"/"+productID+"/versions", nil, &raw); err != nil {
-		return ""
+		return nil
 	}
 	var versions []Version
 	if err := json.Unmarshal(raw, &versions); err != nil {
@@ -180,19 +182,37 @@ func (c *Client) latestVersion(ctx context.Context, productID string) string {
 			Items []Version `json:"items"`
 		}
 		if err := json.Unmarshal(raw, &page); err != nil {
-			return ""
+			return nil
 		}
 		versions = page.Items
 	}
+	return versions
+}
+
+// latestVersion returns the most recent published version string (best-effort).
+func (c *Client) latestVersion(ctx context.Context, productID string) string {
 	best := ""
 	bestBuild := 0
-	for _, v := range versions {
+	for _, v := range c.fetchVersions(ctx, productID) {
 		if v.BuildNumber >= bestBuild {
 			best = v.VersionString
 			bestBuild = v.BuildNumber
 		}
 	}
 	return best
+}
+
+// nextBuildNumber returns one more than the highest published build number of
+// the product (spec connect §2.2: default = last build + 1). It defaults to 1
+// when the versions cannot be resolved.
+func (c *Client) nextBuildNumber(ctx context.Context, productID string) int {
+	maxBuild := 0
+	for _, v := range c.fetchVersions(ctx, productID) {
+		if v.BuildNumber > maxBuild {
+			maxBuild = v.BuildNumber
+		}
+	}
+	return maxBuild + 1
 }
 
 // UpdateModule syncs a module's remote metadata via PUT /api/developer-store/modules/:id.
@@ -274,7 +294,7 @@ func (c *Client) createVersion(ctx context.Context, productID string, m *module.
 	releaseNotes := json.RawMessage(`{}`)
 	body := createVersionRequest{
 		VersionString:     m.Version,
-		BuildNumber:       1,
+		BuildNumber:       c.nextBuildNumber(ctx, productID),
 		ReleaseNotes:      &releaseNotes,
 		MinManager:        m.ManagerCompat.Min,
 		MaxManager:        m.ManagerCompat.Max,
@@ -327,23 +347,63 @@ func artifactSignature(archivePath string) (string, error) {
 	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
-// createProductRequest maps the manifest to CreateModuleProductDto.
+// createProductRequest maps the manifest to CreateModuleProductDto. The
+// manifest token is forwarded so the store can reuse the product on subsequent
+// publishes (idempotence), alongside the descriptive metadata.
 func createProductRequest(m *module.Manifest) map[string]string {
-	return map[string]string{
-		"name":            m.Name,
-		"slug":            slugFor(m),
-		"type":            developerTypeFor(m.Type),
-		"primaryCategory": defaultPrimaryCategory,
-	}
+	body := productMetadata(m)
+	body["slug"] = slugFor(m)
+	return body
 }
 
 // updateProductRequest maps the manifest to the PUT /modules/:id body.
 func updateProductRequest(m *module.Manifest) map[string]string {
-	return map[string]string{
+	return productMetadata(m)
+}
+
+// productMetadata builds the shared product fields (name, type, category,
+// description, icon, token and optional secondary category).
+func productMetadata(m *module.Manifest) map[string]string {
+	body := map[string]string{
 		"name":            m.Name,
 		"type":            developerTypeFor(m.Type),
-		"primaryCategory": defaultPrimaryCategory,
+		"primaryCategory": primaryCategoryFor(m),
 	}
+	if token := strings.TrimSpace(m.Token); token != "" {
+		body["token"] = token
+	}
+	if description := strings.TrimSpace(m.Description); description != "" {
+		body["description"] = description
+	}
+	if icon := strings.TrimSpace(m.Icon); icon != "" {
+		body["icon"] = icon
+	}
+	if secondary := secondaryCategoryFor(m); secondary != "" {
+		body["secondaryCategory"] = secondary
+	}
+	return body
+}
+
+// primaryCategoryFor returns the manifest category, defaulting to SYSTEM.
+func primaryCategoryFor(m *module.Manifest) string {
+	if category := strings.ToUpper(strings.TrimSpace(m.Category)); category != "" {
+		return category
+	}
+	return defaultPrimaryCategory
+}
+
+// secondaryCategoryFor reads the optional `secondaryCategory` extension field
+// preserved from the manifest.
+func secondaryCategoryFor(m *module.Manifest) string {
+	raw, ok := m.Extra["secondaryCategory"]
+	if !ok {
+		return ""
+	}
+	var secondary string
+	if err := json.Unmarshal(raw, &secondary); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(secondary)
 }
 
 type createVersionRequest struct {

@@ -1,6 +1,6 @@
 {
   "$schema": "sentient.config.schema.json",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "applications": {
     "sentient-socle": {
       "name": "Sentient Socle",
@@ -69,7 +69,9 @@
       "oauth": {
         "authorizationEndpoint": "/oauth/authorize",
         "tokenEndpoint": "/oauth/token",
-        "revokeEndpoint": "/oauth/revoke"
+        "revokeEndpoint": "/oauth/revoke",
+        "clientId": "sentient-cli",
+        "scopes": ["openid", "profile", "email"]
       },
       "mfa": {
         "challengeEndpoint": "/mfa/challenge",

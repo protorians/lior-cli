@@ -81,7 +81,7 @@ func printSigningFingerprint() error {
 	s := tui.NewStyles()
 	fmt.Println()
 	fmt.Println(s.NeutralPanel(
-		s.SubHeader.Render(i18n.T("sign.header"))+"\n\n"+
+		s.SubHeader.Render(i18n.T("sign.header")) + "\n\n" +
 			s.KeyValue(i18n.T("label.fingerprint"),
 				s.Info.Render(signing.Fingerprint(ed25519.PublicKey(pub)))),
 	))
@@ -276,7 +276,7 @@ func verifySignature(args []string) error {
 		s.KeyValue(i18n.T("label.archive"), s.Info.Render(archivePath)),
 	}
 	fmt.Println(s.ErrorPanel(
-		s.Error.Render(i18n.T("sign.invalid"))+"\n\n"+strings.Join(rows, "\n")+"\n\n"+s.Hint.Render(i18n.T("sign.invalid.hint")),
+		s.Error.Render(i18n.T("sign.invalid")) + "\n\n" + strings.Join(rows, "\n") + "\n\n" + s.Hint.Render(i18n.T("sign.invalid.hint")),
 	))
 	return pkg.NewError(i18n.T("cat.signature"), i18n.T("sign.error.invalid"), pkg.ExitSigning)
 }

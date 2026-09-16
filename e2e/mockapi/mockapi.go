@@ -16,12 +16,16 @@ import (
 
 // Product mirrors the StoreModuleProduct entity.
 type Product struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Slug            string `json:"slug"`
-	Type            string `json:"type"`
-	PrimaryCategory string `json:"primaryCategory"`
-	IsDeprecated    bool   `json:"isDeprecated"`
+	ID                string `json:"id"`
+	Name              string `json:"name"`
+	Slug              string `json:"slug"`
+	Type              string `json:"type"`
+	Description       string `json:"description,omitempty"`
+	Icon              string `json:"icon,omitempty"`
+	PrimaryCategory   string `json:"primaryCategory,omitempty"`
+	SecondaryCategory string `json:"secondaryCategory,omitempty"`
+	Token             string `json:"token,omitempty"`
+	IsDeprecated      bool   `json:"isDeprecated"`
 }
 
 // Version mirrors the ModuleVersion entity.
@@ -41,7 +45,8 @@ type Server struct {
 	versions  map[string][]Version
 	created   map[string]int
 	nextID    int
-	knownToks map[string]string // token -> email
+	knownToks map[string]string // session token -> email
+	tokens    map[string]string // manifest token -> product id
 }
 
 // New builds a fresh mock server with no state.
@@ -51,6 +56,7 @@ func New() *Server {
 		versions:  map[string][]Version{},
 		created:   map[string]int{},
 		knownToks: map[string]string{},
+		tokens:    map[string]string{},
 	}
 }
 
@@ -64,6 +70,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/mfa/challenge", s.challenge)
 	mux.HandleFunc("/api/mfa/totp/verify", s.verifyTOTP)
 	mux.HandleFunc("/api/mfa/recovery/verify", s.verifyRecovery)
+
+	mux.HandleFunc("/oauth/token", s.oauthToken)
 
 	mux.HandleFunc("/api/developer-store/modules/", s.storeModules)
 	mux.HandleFunc("/api/developer-store/modules", s.storeModules)
@@ -233,6 +241,43 @@ func (s *Server) verifyRecovery(w http.ResponseWriter, r *http.Request) {
 	writeData(w, http.StatusOK, map[string]any{"mfaVerified": true, "mfaToken": "mfa-recovery-ok"})
 }
 
+// --- OAuth2 token endpoint (raw OAuth JSON, not the Raiton envelope) ---
+
+func (s *Server) oauthToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "Method not allowed")
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		writeError(w, 400, "invalid form body")
+		return
+	}
+	switch r.PostForm.Get("grant_type") {
+	case "authorization_code":
+		if r.PostForm.Get("code") == "" || r.PostForm.Get("code_verifier") == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_request","error_description":"code and code_verifier required"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"oauth-tok","token_type":"Bearer","expires_in":3600,"refresh_token":"oauth-refresh","scope":"openid profile email"}`))
+	case "refresh_token":
+		if r.PostForm.Get("refresh_token") == "" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_request","error_description":"refresh_token required"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"oauth-tok","token_type":"Bearer","expires_in":3600,"refresh_token":"oauth-refresh-rotated","scope":"openid profile email"}`))
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"unsupported_grant_type"}`))
+	}
+}
+
 // --- developer store ---
 
 func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
@@ -271,36 +316,65 @@ func (s *Server) handleModulesRoot(w http.ResponseWriter, r *http.Request) {
 		writeData(w, http.StatusOK, out)
 	case http.MethodPost:
 		var req struct {
-			Name            string `json:"name"`
-			Slug            string `json:"slug"`
-			Type            string `json:"type"`
-			PrimaryCategory string `json:"primaryCategory"`
+			Name              string `json:"name"`
+			Slug              string `json:"slug"`
+			Type              string `json:"type"`
+			Description       string `json:"description"`
+			Icon              string `json:"icon"`
+			PrimaryCategory   string `json:"primaryCategory"`
+			SecondaryCategory string `json:"secondaryCategory"`
+			Token             string `json:"token"`
 		}
 		if !decodeBody(w, r, &req) {
 			return
 		}
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		// A reused manifest token resolves to the existing product (idempotent
+		// publish, spec connect §2.1).
+		if token := strings.TrimSpace(req.Token); token != "" {
+			if existingID, ok := s.tokens[token]; ok {
+				writeData(w, http.StatusOK, s.products[existingID])
+				return
+			}
+		}
 		// Products carry UUID ids (like the real store); the manifest token is
-		// synchronized to this id after a successful publish.
+		// synchronized to this id after a successful publish unless provided.
 		id := uuid.NewString()
-		if _, exists := s.products[id]; exists {
-			writeError(w, 409, "A module with this slug already exists")
-			return
+		token := strings.TrimSpace(req.Token)
+		if token == "" {
+			token = id
 		}
 		s.products[id] = &Product{
-			ID: id, Name: req.Name, Slug: req.Slug,
-			Type: req.Type, PrimaryCategory: req.PrimaryCategory,
+			ID: id, Name: req.Name, Slug: req.Slug, Type: req.Type,
+			Description: req.Description, Icon: req.Icon,
+			PrimaryCategory: req.PrimaryCategory, SecondaryCategory: req.SecondaryCategory,
+			Token: token,
 		}
+		s.tokens[token] = id
 		writeData(w, http.StatusCreated, s.products[id])
 	default:
 		writeError(w, 405, "Method not allowed")
 	}
 }
 
+// lookupProduct resolves a product by its id or by its manifest token. The
+// caller must hold s.mu.
+func (s *Server) lookupProduct(id string) (*Product, bool) {
+	if p, ok := s.products[id]; ok {
+		return p, true
+	}
+	if pid, ok := s.tokens[id]; ok {
+		if p, ok := s.products[pid]; ok {
+			return p, true
+		}
+	}
+	return nil, false
+}
+
 func (s *Server) handleModule(w http.ResponseWriter, r *http.Request, id string) {
 	s.mu.Lock()
-	prod, ok := s.products[id]
+	prod, ok := s.lookupProduct(id)
 	s.mu.Unlock()
 	if !ok {
 		writeError(w, 404, "Module not found")
@@ -311,9 +385,12 @@ func (s *Server) handleModule(w http.ResponseWriter, r *http.Request, id string)
 		writeData(w, http.StatusOK, prod)
 	case http.MethodPut:
 		var req struct {
-			Name            string `json:"name"`
-			Type            string `json:"type"`
-			PrimaryCategory string `json:"primaryCategory"`
+			Name              string `json:"name"`
+			Type              string `json:"type"`
+			Description       string `json:"description"`
+			Icon              string `json:"icon"`
+			PrimaryCategory   string `json:"primaryCategory"`
+			SecondaryCategory string `json:"secondaryCategory"`
 		}
 		if !decodeBody(w, r, &req) {
 			return
@@ -321,7 +398,10 @@ func (s *Server) handleModule(w http.ResponseWriter, r *http.Request, id string)
 		s.mu.Lock()
 		prod.Name = orDefault(req.Name, prod.Name)
 		prod.Type = orDefault(req.Type, prod.Type)
+		prod.Description = orDefault(req.Description, prod.Description)
+		prod.Icon = orDefault(req.Icon, prod.Icon)
 		prod.PrimaryCategory = orDefault(req.PrimaryCategory, prod.PrimaryCategory)
+		prod.SecondaryCategory = orDefault(req.SecondaryCategory, prod.SecondaryCategory)
 		s.mu.Unlock()
 		writeData(w, http.StatusOK, prod)
 	default:
@@ -331,12 +411,12 @@ func (s *Server) handleModule(w http.ResponseWriter, r *http.Request, id string)
 
 func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request, id string) {
 	s.mu.Lock()
-	if _, ok := s.products[id]; !ok {
-		s.mu.Unlock()
+	_, ok := s.lookupProduct(id)
+	s.mu.Unlock()
+	if !ok {
 		writeError(w, 404, "Module not found")
 		return
 	}
-	s.mu.Unlock()
 
 	switch r.Method {
 	case http.MethodGet:

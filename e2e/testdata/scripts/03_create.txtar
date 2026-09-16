@@ -39,6 +39,15 @@ exec grep -q '"id": "blog-manager"' manifest.json
 exec grep -q '"domain": "com.example.blog-manager"' manifest.json
 exec grep -q '"token": "[0-9a-f-]*"' manifest.json
 exec grep -q '"devDependencies"' manifest.json
+exec grep -q '"$schema"' manifest.json
+exec grep -q '"optionalRequirements": {}' manifest.json
+exec grep -q '"platforms"' manifest.json
+exec grep -q '"iosSupported"' manifest.json
+exec grep -q '"type": "EXTERNAL"' manifest.json
+exec grep -q '"category": "SYSTEM"' manifest.json
+
+# The manifest is the single source of truth: no dependencies in index.tsx.
+! exec grep -q 'dependencies:' index.tsx
 
 # The declaration declares a uri → the page is scaffolded in src/app.
 cd ../../src/app/blog-manager
