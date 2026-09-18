@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // PKCE method (RFC 7636).

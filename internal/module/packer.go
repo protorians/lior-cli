@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // MaxArchiveSize is the maximum allowed archive size (store limit: 50 MB).
@@ -31,7 +31,7 @@ type PackResult struct {
 	Size    int64
 }
 
-// Pack builds and moves the archive of `name` into `.sentients/build/`.
+// Pack builds and moves the archive of `name` into `.liorian/build/`.
 func (p *Packer) Pack(name string) (*PackResult, error) {
 	v := &Validator{Root: p.Root}
 	res, err := v.ValidateModule(name)

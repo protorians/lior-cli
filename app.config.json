@@ -1,13 +1,13 @@
 {
-  "$schema": "sentient.config.schema.json",
-  "version": "0.11.0",
+  "$schema": "liorian.config.schema.json",
+  "version": "0.12.0",
   "applications": {
-    "sentient-socle": {
-      "name": "Sentient Socle",
-      "description": "Frontend Manager pour Sentient — Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
+    "liorian-socle": {
+      "name": "Liorian Socle",
+      "description": "Frontend Manager pour Liorian — Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
       "domains": {
-        "production": "socle.sentient.protorians.com",
-        "staging": "socle-staging.sentient.protorians.com",
+        "production": "socle.liorian.protorians.com",
+        "staging": "socle-staging.liorian.protorians.com",
         "development": "localhost:5010"
       },
       "api": {
@@ -15,12 +15,12 @@
         "timeout": 30000
       }
     },
-    "sentient-connect": {
-      "name": "Sentient Connect",
+    "liorian-connect": {
+      "name": "Liorian Connect",
       "description": "Espace Développeur & Publication de Modules",
       "domains": {
-        "production": "connect.sentient.protorians.com",
-        "staging": "connect-staging.sentient.protorians.com",
+        "production": "connect.liorian.protorians.com",
+        "staging": "connect-staging.liorian.protorians.com",
         "development": "localhost:5020"
       },
       "api": {
@@ -28,12 +28,12 @@
         "timeout": 30000
       }
     },
-    "sentient-console": {
-      "name": "Sentient Console",
+    "liorian-console": {
+      "name": "Liorian Console",
       "description": "Administration & gouvernance",
       "domains": {
-        "production": "console.sentient.protorians.com",
-        "staging": "console-staging.sentient.protorians.com",
+        "production": "console.liorian.protorians.com",
+        "staging": "console-staging.liorian.protorians.com",
         "development": "localhost:5030"
       },
       "api": {
@@ -41,12 +41,12 @@
         "timeout": 30000
       }
     },
-    "sentient-store": {
-      "name": "Sentient Store",
+    "liorian-store": {
+      "name": "Liorian Store",
       "description": "Storefront client pour l'installation de modules",
       "domains": {
-        "production": "store.sentient.protorians.com",
-        "staging": "store-staging.sentient.protorians.com",
+        "production": "store.liorian.protorians.com",
+        "staging": "store-staging.liorian.protorians.com",
         "development": "localhost:5040"
       },
       "api": {
@@ -54,12 +54,12 @@
         "timeout": 30000
       }
     },
-    "sentient-auth": {
-      "name": "Sentient Auth",
+    "liorian-auth": {
+      "name": "Liorian Auth",
       "description": "Service d'authentification SSO — Login, consentement OAuth, MFA",
       "domains": {
-        "production": "auth.sentient.protorians.com",
-        "staging": "auth-staging.sentient.protorians.com",
+        "production": "auth.liorian.protorians.com",
+        "staging": "auth-staging.liorian.protorians.com",
         "development": "localhost:5050"
       },
       "api": {
@@ -70,7 +70,7 @@
         "authorizationEndpoint": "/oauth/authorize",
         "tokenEndpoint": "/oauth/token",
         "revokeEndpoint": "/oauth/revoke",
-        "clientId": "sentient-cli",
+        "clientId": "liorian-cli",
         "scopes": ["openid", "profile", "email"]
       },
       "mfa": {

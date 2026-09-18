@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 )
 
-// DataDir returns the CLI data directory (~/.sentient-cli), creating it with
+// DataDir returns the CLI data directory (~/.liorian-cli), creating it with
 // user-only permissions when missing.
 func DataDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve the home directory: %w", err)
 	}
-	dir := filepath.Join(home, ".sentient-cli")
+	dir := filepath.Join(home, ".liorian-cli")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
@@ -22,7 +22,7 @@ func DataDir() (string, error) {
 
 // MachineSecret returns the per-user secret used to encrypt the fallback
 // stores (credentials.enc / signing.enc). The value is a random 32-byte key
-// persisted at ~/.sentient-cli/machine.secret with 0600 permissions; it is
+// persisted at ~/.liorian-cli/machine.secret with 0600 permissions; it is
 // created on first use. Never a hard-coded passphrase (see R-002).
 func MachineSecret() ([]byte, error) {
 	dataDir, err := DataDir()

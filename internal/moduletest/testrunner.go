@@ -1,5 +1,5 @@
-// Package moduletest runs the tests of Sentient modules (spec §6.x, future
-// scope moved to scope: `sentients test <module>`).
+// Package moduletest runs the tests of Liorian modules (spec §6.x, future
+// scope moved to scope: `liorian test <module>`).
 package moduletest
 
 import (
@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/runner"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/runner"
+	"github.com/protorians/liorian-cli/internal/tui"
 )
 
 const (
@@ -128,7 +128,7 @@ func (t *Tester) TestModuleCtx(ctx context.Context, name string) (*TestResult, e
 
 	result := &TestResult{Module: name}
 
-	// Step 1 — validate the module against the Sentient rules.
+	// Step 1 — validate the module against the Liorian rules.
 	v := &module.Validator{Root: t.Root}
 	res, err := v.ValidateModule(name)
 	if err != nil {

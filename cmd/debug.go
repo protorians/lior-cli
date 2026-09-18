@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/debug"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/debug"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 

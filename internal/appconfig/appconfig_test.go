@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 func TestResolvedWorkspaceOverridesEmbedded(t *testing.T) {
-	SetEmbedded([]byte(`{"applications":{"sentient-auth":{"api":{"baseUrl":"https://embedded.example.com","timeout":15000}}}}`))
+	SetEmbedded([]byte(`{"applications":{"liorian-auth":{"api":{"baseUrl":"https://embedded.example.com","timeout":15000}}}}`))
 
 	root := t.TempDir()
 	sub := filepath.Join(root, "a", "b")
@@ -18,7 +18,7 @@ func TestResolvedWorkspaceOverridesEmbedded(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, FileName),
-		[]byte(`{"applications":{"sentient-auth":{"api":{"baseUrl":"https://workspace.example.com","timeout":8000}}}}`), 0o644); err != nil {
+		[]byte(`{"applications":{"liorian-auth":{"api":{"baseUrl":"https://workspace.example.com","timeout":8000}}}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -49,7 +49,7 @@ func TestResolvedWorkspaceOverridesEmbedded(t *testing.T) {
 }
 
 func TestResolvedFallsBackToEmbedded(t *testing.T) {
-	SetEmbedded([]byte(`{"applications":{"sentient-auth":{"api":{"baseUrl":"https://embedded.example.com","timeout":20000}}}}`))
+	SetEmbedded([]byte(`{"applications":{"liorian-auth":{"api":{"baseUrl":"https://embedded.example.com","timeout":20000}}}}`))
 
 	dir := t.TempDir()
 	wd, err := os.Getwd()

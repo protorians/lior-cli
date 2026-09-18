@@ -1,26 +1,26 @@
-# TC-001 — `sentients init` with bun detected (fixture on the PATH) and local
-# template source (SENTIENT_CLI_TEMPLATE_REPO) to stay offline.
+# TC-001 — `liorian init` with bun detected (fixture on the PATH) and local
+# template source (LIORIAN_CLI_TEMPLATE_REPO) to stay offline.
 mkdir template
 cd template
 mkdir external_modules
 exec sh -c 'echo keep > external_modules/.gitkeep'
-exec sh -c 'printf "app = \"template\"\n" > sentient.config.toml'
-exec sh -c 'printf "{\"name\":\"sentients-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
+exec sh -c 'printf "app = \"template\"\n" > liorian.config.toml'
+exec sh -c 'printf "{\"name\":\"liorian-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
 cd $WORK
 
-env SENTIENT_CLI_TEMPLATE_REPO=$WORK/template
-exec $SENTIENTS --no-color init demo-app
+env LIORIAN_CLI_TEMPLATE_REPO=$WORK/template
+exec $LIORIAN --no-color init demo-app
 stdout '✓ Project initialized successfully'
 stdout 'Package manager: bun'
 
 cd demo-app
-exists sentients.config.json
+exists liorian.config.json
 exists external_modules
-exec grep -q 'autoAudit' sentients.config.json
+exec grep -q 'autoAudit' liorian.config.json
 cd $WORK
 
 # TC-002 — no package manager detected: explicit refusal (exit 1), before any
 # network download.
 env PATH=/nonexistent
-! exec $SENTIENTS --no-color init nomanager
+! exec $LIORIAN --no-color init nomanager
 stderr 'no package manager detected'

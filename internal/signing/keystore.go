@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 	"github.com/zalando/go-keyring"
 )
 
 // Keychain keys for signing key storage.
 const (
-	signingServiceName = "sentient-cli-signing"
+	signingServiceName = "liorian-cli-signing"
 	keyPublicKey       = "signing_public_key"
 	keyPrivateKey      = "signing_private_key"
 )
@@ -42,10 +42,10 @@ type fallbackKeyStore struct {
 
 // NewKeyStore returns the appropriate key store for the platform. The system
 // keychain is used when reachable; otherwise the CLI transparently falls back
-// to an encrypted vault file (spec §7.6, risk R-002). `SENTIENT_CLI_STORE` can
+// to an encrypted vault file (spec §7.6, risk R-002). `LIORIAN_CLI_STORE` can
 // force either backend for CI/headless runs (see auth.StoreEnv).
 func NewKeyStore() KeyStore {
-	switch os.Getenv("SENTIENT_CLI_STORE") {
+	switch os.Getenv("LIORIAN_CLI_STORE") {
 	case "file":
 		return newFallbackKeyStore(defaultKeyStorePath())
 	case "keychain":
@@ -70,7 +70,7 @@ func newFallbackKeyStore(path string) *fallbackKeyStore {
 func defaultKeyStorePath() string {
 	dir, err := pkg.DataDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), "sentient-cli-signing.enc")
+		return filepath.Join(os.TempDir(), "liorian-cli-signing.enc")
 	}
 	return filepath.Join(dir, "signing.enc")
 }
@@ -78,7 +78,7 @@ func defaultKeyStorePath() string {
 // keychainAvailable probes the OS keychain with a harmful read of a key that
 // cannot exist (see auth.credentials.keychainAvailable).
 func keychainAvailable() bool {
-	_, err := keyring.Get(signingServiceName, "__sentient-cli_probe__")
+	_, err := keyring.Get(signingServiceName, "__liorian-cli_probe__")
 	return err == nil || isKeyringNotExist(err)
 }
 

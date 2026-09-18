@@ -5,23 +5,23 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // createTestModule sets up a valid module under a project root. The default
-// dependency (@sentients/sdk) is stubbed in node_modules/ so the module audits
+// dependency (@liorian/sdk) is stubbed in node_modules/ so the module audits
 // cleanly, mirroring an installed project.
 func createTestModule(t *testing.T, root, id string) {
 	t.Helper()
 	creator := &module.Creator{Root: root}
-	if _, err := creator.Create(module.ModuleSpec{Domain: "mod.sentients." + id, ID: id, Description: "Test module"}); err != nil {
+	if _, err := creator.Create(module.ModuleSpec{Domain: "mod.liorian." + id, ID: id, Description: "Test module"}); err != nil {
 		t.Fatalf("Creator.Create(%q): %v", id, err)
 	}
 	// Stub every declared dependency in node_modules/ so the module audits
 	// cleanly, mirroring an installed project.
-	manifest, err := module.LoadManifest(filepath.Join(root, config.ExternalModulesDir, "mod.sentients."+id, config.ManifestFileName))
+	manifest, err := module.LoadManifest(filepath.Join(root, config.ExternalModulesDir, "mod.liorian."+id, config.ManifestFileName))
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}
@@ -48,7 +48,7 @@ func TestAuditCleanModule(t *testing.T) {
 	createTestModule(t, root, "blog-manager")
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.blog-manager")
+	result, err := auditor.AuditModules("mod.liorian.blog-manager")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestAuditCleanModule(t *testing.T) {
 func TestAuditMissingModule(t *testing.T) {
 	root := setupAuditProject(t)
 	auditor := &Auditor{Root: root}
-	_, err := auditor.AuditModules("mod.sentients.nonexistent")
+	_, err := auditor.AuditModules("mod.liorian.nonexistent")
 	if err == nil {
 		t.Error("AuditModules d'un module absent doit échouer")
 	}
@@ -119,7 +119,7 @@ func TestAuditArchitectureComponentsImportServices(t *testing.T) {
 	createTestModule(t, root, "bad-module")
 
 	// Write a component that imports from services
-	compDir := filepath.Join(root, config.ExternalModulesDir, "mod.sentients.bad-module", "components")
+	compDir := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.bad-module", "components")
 	if err := os.MkdirAll(compDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestAuditArchitectureComponentsImportServices(t *testing.T) {
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.bad-module")
+	result, err := auditor.AuditModules("mod.liorian.bad-module")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestAuditArchitectureServicesJSX(t *testing.T) {
 	createTestModule(t, root, "jsx-service")
 
 	// Write a service file containing JSX
-	svcDir := filepath.Join(root, config.ExternalModulesDir, "mod.sentients.jsx-service", "services")
+	svcDir := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.jsx-service", "services")
 	if err := os.MkdirAll(svcDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ const el = <div>hello</div>;
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.jsx-service")
+	result, err := auditor.AuditModules("mod.liorian.jsx-service")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -186,13 +186,13 @@ func TestAuditDependenciesInstalled(t *testing.T) {
 	createTestModule(t, root, "installed")
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.installed")
+	result, err := auditor.AuditModules("mod.liorian.installed")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
 
 	for _, f := range result.Modules[0].Findings {
-		if f.Category == "dependencies" && f.Rule == "@sentients/sdk" {
+		if f.Category == "dependencies" && f.Rule == "@liorian/sdk" {
 			if f.Severity != module.LevelOK {
 				t.Errorf("dépendance installée doit être OK, reçu %s", f.Severity)
 			}
@@ -212,13 +212,13 @@ func TestAuditDependenciesMissing(t *testing.T) {
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.mod-missing")
+	result, err := auditor.AuditModules("mod.liorian.mod-missing")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
 
 	for _, f := range result.Modules[0].Findings {
-		if f.Category == "dependencies" && f.Rule == "@sentients/sdk" {
+		if f.Category == "dependencies" && f.Rule == "@liorian/sdk" {
 			if f.Severity != module.LevelError {
 				t.Errorf("dépendance absente doit être ERROR, reçu %s", f.Severity)
 			}
@@ -233,7 +233,7 @@ func TestAuditRequirementsMissing(t *testing.T) {
 	createTestModule(t, root, "dependent")
 
 	// Add a requirement that doesn't exist
-	manifestPath := filepath.Join(root, config.ExternalModulesDir, "mod.sentients.dependent", "manifest.json")
+	manifestPath := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.dependent", "manifest.json")
 	manifest, err := module.LoadManifest(manifestPath)
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestAuditRequirementsMissing(t *testing.T) {
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.dependent")
+	result, err := auditor.AuditModules("mod.liorian.dependent")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestAuditRequirementsPresent(t *testing.T) {
 	createTestModule(t, root, "dep-b")
 
 	// dep-b requires dep-a
-	manifestPath := filepath.Join(root, config.ExternalModulesDir, "mod.sentients.dep-b", "manifest.json")
+	manifestPath := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.dep-b", "manifest.json")
 	manifest, err := module.LoadManifest(manifestPath)
 	if err != nil {
 		t.Fatal(err)
@@ -278,7 +278,7 @@ func TestAuditRequirementsPresent(t *testing.T) {
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.dep-b")
+	result, err := auditor.AuditModules("mod.liorian.dep-b")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -299,13 +299,13 @@ func TestAuditAssetsEmpty(t *testing.T) {
 	createTestModule(t, root, "with-assets")
 
 	// Create empty assets directory
-	assetsDir := config.ModuleAssetsDir(root, "mod.sentients.with-assets")
+	assetsDir := config.ModuleAssetsDir(root, "mod.liorian.with-assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.with-assets")
+	result, err := auditor.AuditModules("mod.liorian.with-assets")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -329,7 +329,7 @@ func TestAuditAssetsWithContent(t *testing.T) {
 	root := setupAuditProject(t)
 	createTestModule(t, root, "with-content")
 
-	assetsDir := config.ModuleAssetsDir(root, "mod.sentients.with-content")
+	assetsDir := config.ModuleAssetsDir(root, "mod.liorian.with-content")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestAuditAssetsWithContent(t *testing.T) {
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.with-content")
+	result, err := auditor.AuditModules("mod.liorian.with-content")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}
@@ -377,13 +377,13 @@ func TestAuditIndexMissingDeclaration(t *testing.T) {
 	createTestModule(t, root, "no-declaration")
 
 	// Overwrite index.tsx so it no longer declares a module (no identifier/widgets).
-	indexPath := filepath.Join(root, config.ExternalModulesDir, "mod.sentients.no-declaration", "index.tsx")
+	indexPath := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.no-declaration", "index.tsx")
 	if err := os.WriteFile(indexPath, []byte(`export default { name: "test" };`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	auditor := &Auditor{Root: root}
-	result, err := auditor.AuditModules("mod.sentients.no-declaration")
+	result, err := auditor.AuditModules("mod.liorian.no-declaration")
 	if err != nil {
 		t.Fatalf("AuditModules: %v", err)
 	}

@@ -1,37 +1,37 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
-exec $SENTIENTS --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 exec sh -c 'mkdir -p public/assets/com.example.blog-manager'
 exec sh -c 'echo "logo" > public/assets/com.example.blog-manager/logo.txt'
 exec sh -c 'mkdir -p src/app/blog-manager'
 exec sh -c 'echo "page" > src/app/blog-manager/page.tsx'
 
 # TC-009 — `pack` of an existing module, produces the .SenMod archive.
-exec $SENTIENTS --no-color pack com.example.blog-manager
+exec $LIORIAN --no-color pack com.example.blog-manager
 stdout '✓ Archive created successfully'
 stdout 'Module : com.example.blog-manager v1.0.0'
-exists .sentients/build/com.example.blog-manager-1.0.0.SenMod
+exists .liorian/build/com.example.blog-manager-1.0.0.SenMod
 
 # TC-010 — the archive contains the module manifest, app sources and assets.
-exec sh -c 'unzip -l .sentients/build/com.example.blog-manager-1.0.0.SenMod | grep -q "external_modules/com.example.blog-manager/manifest.json"'
-exec sh -c 'unzip -l .sentients/build/com.example.blog-manager-1.0.0.SenMod | grep -q "src/app/blog-manager/page.tsx"'
-exec sh -c 'unzip -l .sentients/build/com.example.blog-manager-1.0.0.SenMod | grep -q "public/assets/com.example.blog-manager/logo.txt"'
+exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "external_modules/com.example.blog-manager/manifest.json"'
+exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "src/app/blog-manager/page.tsx"'
+exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "public/assets/com.example.blog-manager/logo.txt"'
 
 # Missing module: exit 3 (ExitModuleNotFound).
-! exec $SENTIENTS --no-color pack com.example.missing
+! exec $LIORIAN --no-color pack com.example.missing
 stderr 'does not exist in external_modules'
-exec sh -c '"$SENTIENTS" --no-color pack com.example.missing >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color pack com.example.missing >/dev/null 2>&1; echo $?'
 stdout '^3$'
 
 # TC-011 — `pack <module>@<version>` builds a specific version.
-exec $SENTIENTS --no-color pack com.example.blog-manager@2.1.0
+exec $LIORIAN --no-color pack com.example.blog-manager@2.1.0
 stdout '✓ Archive created successfully'
 stdout 'Module : com.example.blog-manager v2.1.0'
-exists .sentients/build/com.example.blog-manager-2.1.0.SenMod
-exec sh -c 'test -f .sentients/build/com.example.blog-manager-2.1.0.SenMod'
+exists .liorian/build/com.example.blog-manager-2.1.0.SenMod
+exec sh -c 'test -f .liorian/build/com.example.blog-manager-2.1.0.SenMod'
 
 # Invalid version: rejected before building.
-! exec $SENTIENTS --no-color pack com.example.blog-manager@not-a-version
+! exec $LIORIAN --no-color pack com.example.blog-manager@not-a-version
 stderr 'invalid version'

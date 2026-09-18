@@ -11,7 +11,7 @@ func TestConfigDefaults(t *testing.T) {
 	if !cfg.Publish.AutoAudit {
 		t.Error("AutoAudit doit être true par défaut")
 	}
-	if cfg.Publish.DefaultRegistry != "https://store.sentient.dev" {
+	if cfg.Publish.DefaultRegistry != "https://store.liorian.dev" {
 		t.Errorf("DefaultRegistry incorrect: %q", cfg.Publish.DefaultRegistry)
 	}
 	if cfg.Debug.LogLevel != "info" {
@@ -20,7 +20,7 @@ func TestConfigDefaults(t *testing.T) {
 }
 
 func TestConfigSaveLoad(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sentients.config.json")
+	path := filepath.Join(t.TempDir(), "liorian.config.json")
 
 	cfg := Default()
 	cfg.Project.Name = "mon-projet"
@@ -52,7 +52,7 @@ func TestLoadMissingFileUsesDefaults(t *testing.T) {
 }
 
 func TestTestConfigRunnerPersistence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "sentients.config.json")
+	path := filepath.Join(t.TempDir(), "liorian.config.json")
 
 	cfg := Default()
 	cfg.Project.PackageManager = "bun"

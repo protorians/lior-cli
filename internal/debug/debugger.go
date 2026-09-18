@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/runner"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/runner"
+	"github.com/protorians/liorian-cli/internal/tui"
 )
 
 // Default execution windows (overridable via Debugger.Timeout).
@@ -112,7 +112,7 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 
 	result := &DebugResult{Module: name}
 
-	// Step 1 — validate the module against the Sentient rules.
+	// Step 1 — validate the module against the Liorian rules.
 	v := &module.Validator{Root: d.Root}
 	res, err := v.ValidateModule(name)
 	if err != nil {

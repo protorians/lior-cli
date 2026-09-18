@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Sentient Apps Configuration",
-  "description": "Configuration des domaines pour les applications Sentient",
+  "title": "Liorian Apps Configuration",
+  "description": "Configuration des domaines pour les applications Liorian",
   "type": "object",
   "required": ["version", "applications"],
   "properties": {
@@ -12,7 +12,7 @@
     },
     "applications": {
       "type": "object",
-      "description": "Applications Sentient configurées",
+      "description": "Applications Liorian configurées",
       "patternProperties": {
         "^[a-z][a-z0-9-]*$": {
           "$ref": "#/definitions/application"

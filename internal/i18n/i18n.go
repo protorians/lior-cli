@@ -1,11 +1,11 @@
-// Package i18n provides the internationalisation mechanism for the Sentient
+// Package i18n provides the internationalisation mechanism for the Liorian
 // CLI. Message catalogs are embedded in locales/*.json (en-US ships as the
 // default, fr-FR ships as the first translation) and are selected at runtime
 // from, in order of precedence:
 //
 //  1. the `--lang` root flag,
-//  2. the `SENTIENT_CLI_LANG` environment variable,
-//  3. the `"cli".lang` key of `sentients.config.json`,
+//  2. the `LIORIAN_CLI_LANG` environment variable,
+//  3. the `"cli".lang` key of `liorian.config.json`,
 //  4. the OS locale (LC_ALL, LC_MESSAGES, LANG).
 //
 // Every catalog key falls back to the en-US catalog, then to the key itself,
@@ -66,12 +66,12 @@ func init() {
 	Use(LangEnvOverride()())
 }
 
-// LangEnvOverride returns a resolver that honours SENTIENT_CLI_LANG first,
+// LangEnvOverride returns a resolver that honours LIORIAN_CLI_LANG first,
 // then the OS locale variables. Kept as a function so tests can read the
-// SENTIENT_CLI_LANG priority precisely.
+// LIORIAN_CLI_LANG priority precisely.
 func LangEnvOverride() func() string {
 	return func() string {
-		for _, key := range []string{"SENTIENT_CLI_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
+		for _, key := range []string{"LIORIAN_CLI_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
 			if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 				return Normalize(v)
 			}

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // setupProject creates a project root with one module via the Creator.
@@ -351,8 +351,8 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	}
 	// Publisher comes from the reference mockup (present locally), so the
 	// remote publisher (dev_42) must NOT overwrite it.
-	if m.Publisher.ID != "sentient" || m.Publisher.Name != "Sentient Workspace" {
-		t.Errorf("Publisher = %+v, want sentient/Sentient Workspace (valeur locale préservée)", m.Publisher)
+	if m.Publisher.ID != "liorian" || m.Publisher.Name != "Liorian Workspace" {
+		t.Errorf("Publisher = %+v, want liorian/Liorian Workspace (valeur locale préservée)", m.Publisher)
 	}
 
 	// Existing local metadata must NOT be overwritten.

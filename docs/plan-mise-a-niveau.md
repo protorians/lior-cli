@@ -1,14 +1,14 @@
-# Plan de mise à jour / mise à niveau — Sentient CLI
+# Plan de mise à jour / mise à niveau — Liorian CLI
 
-> Objectif : aligner le **code** de la CLI `sentients` sur les contrats de référence du workspace
-> (`sentient-workspace/docs`) qui ont évolué, et sur la spec réalignée `docs/specs/sentient.md`.
+> Objectif : aligner le **code** de la CLI `liorian` sur les contrats de référence du workspace
+> (`liorian-workspace/docs`) qui ont évolué, et sur la spec réalignée `docs/specs/liorian.md`.
 > Document de travail : à transformer en lots (issues/PR) et à tenir à jour dans
 > `docs/rapport-implementation.md`.
 >
 > Base : branche `alpha`, version courante `0.7.0`, Go `1.26`.
 > Références : `docs/modules/module-manifest.md`, `docs/specs/applications/module-distribution.md`,
-> `docs/modules/store.md`, `docs/specs/applications/sentient-connect.md`,
-> `docs/specs/applications/sentient-oauth.md`, `docs/frontend/view-activity.md`.
+> `docs/modules/store.md`, `docs/specs/applications/liorian-connect.md`,
+> `docs/specs/applications/liorian-oauth.md`, `docs/frontend/view-activity.md`.
 
 ---
 
@@ -76,7 +76,7 @@ round-trip **sans perte**.
 ### A.2 Corriger le mockup embarqué — ✅ Fait
 
 - `internal/module/mockups/hello-world/manifest.json` : aligner 1:1 sur
-  `frontend/sentient-socle/external_modules/hello-world/manifest.json` → ajouter `$schema`
+  `frontend/liorian-socle/external_modules/hello-world/manifest.json` → ajouter `$schema`
   (chemin SDK réel) et `optionalRequirements: {}`.
 - `internal/module/mockups/hello-world/index.tsx` : retirer `requirements`, `dependencies`,
   `devDependencies` (à ne laisser que dans `manifest.json`).
@@ -116,12 +116,12 @@ round-trip **sans perte**.
 - Valider `id` selon `^[a-z0-9]+(-[a-z0-9]+)*$` et `domain` selon `^mod\.<éditeur>\.[a-z0-9-]+` (aligner
   `ValidateDomain` sur le pattern canonique ; conserver la souplesse reverse-DNS si nécessaire). —
   🟡 `id` conforme ; `ValidateDomain` **reste volontairement reverse-DNS souple** (les fixtures/E2E
-  utilisent `com.example.*`) ; l'audit conserve le WARNING de format `mod.sentients.<name>`.
+  utilisent `com.example.*`) ; l'audit conserve le WARNING de format `mod.liorian.<name>`.
 - Vérifier que le scaffold `index.tsx` n'embarque pas les 4 champs de prérequis/dépendances. — ✅
 
-**DoD lot B** : un module créé passe la validation schéma SDK + `sentients audit` sans WARNING de domaine.
+**DoD lot B** : un module créé passe la validation schéma SDK + `liorian audit` sans WARNING de domaine.
 
-> ✅ Vérifié : `audit` sur un module `mod.sentients.<id>` neuf → aucune catégorie WARNING.
+> ✅ Vérifié : `audit` sur un module `mod.liorian.<id>` neuf → aucune catégorie WARNING.
 
 ---
 
@@ -175,31 +175,31 @@ E2E publish verts.
 > **Statut lot E : ✅ Fait** (OAuth + `$schema`) · **➖ sans objet** (catalogue).
 
 - **Catalog** : la CLI n'appelle pas `/api/catalog/*` aujourd'hui (normal). Si un jour `link`/`publish`
-  doit enrichir depuis le catalogue public, ajouter `sentient-store` au registre (déjà présent) et un
+  doit enrichir depuis le catalogue public, ajouter `liorian-store` au registre (déjà présent) et un
   client dédié. — ➖ aucune action requise (aucun appel catalogue prévu).
 - **OAuth** : vérifier si le rafraîchissement d'une session OAuth doit passer par `/oauth/token`
   (`grant_type=refresh_token`, rotation) plutôt que `/api/auth/sessions/refresh` (session legacy).
-  À trancher avec `sentient-oauth.md`. — ✅ tranché : `Session.Refresh` privilégie `/oauth/token`
+  À trancher avec `liorian-oauth.md`. — ✅ tranché : `Session.Refresh` privilégie `/oauth/token`
   (`grant_type=refresh_token`, rotation) lorsqu'un refresh token OAuth est stocké, avec repli
   legacy `POST /api/auth/sessions/refresh`.
 - **Schéma (`$schema`)** : résoudre l'incohérence de chemin avec le SDK (`schemas/module.schema.json`
   vs `domain/schemas/module-manifest.schema.json`) et fixer la valeur écrite dans les manifestes. —
-  ✅ chemin SDK réel figé : `../../node_modules/@sentients/sdk/schemas/module.schema.json`
+  ✅ chemin SDK réel figé : `../../node_modules/@liorian/sdk/schemas/module.schema.json`
   (mockup = miroir du socle).
 
 ---
 
 ## 6. Lot F — P3 : documentation & release — ✅ Fait
 
-> `rapport-implementation.md` (écarts E-01→E-13 clos + itération), `specs/sentient.md`
+> `rapport-implementation.md` (écarts E-01→E-13 clos + itération), `specs/liorian.md`
 > (create/publish/audit/OAuth/versions), `CHANGELOG.md` `v0.7.0`, `README.md`,
-> `app.config.json` + `npm/sentient-cli/package.json` (0.7.0), i18n fr/en
+> `app.config.json` + `npm/liorian-cli/package.json` (0.7.0), i18n fr/en
 > (`create.flag.type`/`create.flag.category`, `module.error.type`/`module.error.category`).
 > CI vérifiée localement : `gofmt -l`, `go vet`, `go test ./...`, `go test ./e2e/ -run TestScripts`.
 
 - `docs/rapport-implementation.md` : clore les écarts E-01 → E-12 une fois traités.
-- `docs/specs/sentient.md` : recompiler les sections concernées si un comportement change.
-- `CHANGELOG.md` + `README.md` + `npm/sentient-cli/package.json` (version) + `app.config.json`.
+- `docs/specs/liorian.md` : recompiler les sections concernées si un comportement change.
+- `CHANGELOG.md` + `README.md` + `npm/liorian-cli/package.json` (version) + `app.config.json`.
 - i18n : nouvelles clés `create.flag.category`, `create.flag.type`, messages d'audit — `en-US.json` **et** `fr-FR.json`.
 - CI : `go vet ./...`, `gofmt -l`, `go test ./...`, `go test ./e2e/ -run TestScripts`.
 
@@ -232,8 +232,8 @@ Lot A (manifeste)  ──▶ Lot B (create)  ──▶ Lot C (publish) ──▶
 |--------|------------|------|
 | Le round-trip typé perd des champs futurs | Conserver un sac d'extensions `json.RawMessage` (A.1) | ✅ `Extra` + test |
 | E2E cassés par les nouvelles assertions/mock | Mettre à jour `e2e/mockapi` et txtar dans le même lot | ✅ E2E verts |
-| Régression sur les projets existants (manifestes sans `optionalRequirements`) | Audit en WARNING ; migration douce via `sentients audit` | ✅ WARNING uniquement |
-| Bump `buildNumber` côté serveur déjà géré | Confirmer la règle « défaut = dernière build + 1 » dans `sentient-connect.md` | ✅ confirmé (spec §2.2) |
+| Régression sur les projets existants (manifestes sans `optionalRequirements`) | Audit en WARNING ; migration douce via `liorian audit` | ✅ WARNING uniquement |
+| Bump `buildNumber` côté serveur déjà géré | Confirmer la règle « défaut = dernière build + 1 » dans `liorian-connect.md` | ✅ confirmé (spec §2.2) |
 | Incohérence de chemin de schéma SDK | Trancher avec l'équipe workspace avant de figer `$schema` | ✅ chemin SDK figé |
 
 ---

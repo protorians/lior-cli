@@ -119,7 +119,7 @@ func normalizeArch(arch string) string {
 }
 
 // RaitonResponse is the standard Raiton API envelope `{message, data, statusCode}`
-// returned by every endpoint of `sentient-api-core` / `sentient-api-connect`
+// returned by every endpoint of `liorian-api-core` / `liorian-api-connect`
 // (see `RaitonResponses(message, data, statusCode)` in the Raiton framework).
 type RaitonResponse struct {
 	Message    string          `json:"message"`
@@ -127,7 +127,7 @@ type RaitonResponse struct {
 	StatusCode int             `json:"statusCode"`
 }
 
-// Client is a thin JSON-aware HTTP client used to talk to the sentient APIs.
+// Client is a thin JSON-aware HTTP client used to talk to the liorian APIs.
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
@@ -249,7 +249,7 @@ func parseAPIError(statusCode int, data []byte) *APIError {
 	return nil
 }
 
-// APIError represents an error returned by the sentient API.
+// APIError represents an error returned by the liorian API.
 type APIError struct {
 	StatusCode int    `json:"-"`
 	Code       string `json:"code,omitempty"`

@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // GenerateKeyPair generates a new Ed25519 key pair.
@@ -93,7 +93,7 @@ func SaveKeyPair(store KeyStore, pub ed25519.PublicKey, priv ed25519.PrivateKey)
 	return nil
 }
 
-// FindArchive finds the .SenMod archive for a module in .sentients/build/.
+// FindArchive finds the .SenMod archive for a module in .liorian/build/.
 func FindArchive(root, moduleName, version string) (string, error) {
 	buildDir := config.BuildDir(root)
 	path := filepath.Join(buildDir, moduleName+"-"+version+config.ArchiveExt)

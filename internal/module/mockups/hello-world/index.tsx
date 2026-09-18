@@ -1,11 +1,11 @@
-import {ModuleDeclarationInterface} from "@sentients/sdk/domain/entities/module.interface";
+import {ModuleDeclarationInterface} from "@liorian/sdk/domain/entities/module.interface";
 import {HelloWorldApiService} from "./application/service/hello-world-api-service";
 import {HelloWorldWidget} from "./presentation/widgets/hello-world.widget";
 import {HelloWorldHeaderProvider} from "./presentation/providers/hello-world-header.provider";
 import {helloWorldAnalyticsRoutine} from "./infrastructure/routines/hello-world-analytics.routine";
 
 const helloWorldModule: ModuleDeclarationInterface = {
-    identifier: 'mod.sentients.helloworld',
+    identifier: 'mod.liorian.helloworld',
     key: 'HELLO_WORLD',
     version: '1.0.0',
     name: 'Hello World',

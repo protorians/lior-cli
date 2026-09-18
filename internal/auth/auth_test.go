@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 func TestSessionSaveLoadClear(t *testing.T) {
@@ -82,7 +82,7 @@ func TestAPIConfigFromWorkspaceAppConfig(t *testing.T) {
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cfg := `{"applications":{"sentient-auth":{"api":{"baseUrl":"https://workspace.example.com","timeout":5000}}}}`
+	cfg := `{"applications":{"liorian-auth":{"api":{"baseUrl":"https://workspace.example.com","timeout":5000}}}}`
 	if err := os.WriteFile(filepath.Join(root, "app.config.json"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}

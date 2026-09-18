@@ -1,21 +1,21 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
 
 # TC-003 — invalid identifier: rejected (exit 1) with an explicit message.
-! exec $SENTIENTS --no-color create module Foo --domain com.example.foo
+! exec $LIORIAN --no-color create module Foo --domain com.example.foo
 stderr 'kebab-case'
-exec sh -c '"$SENTIENTS" --no-color create module Foo --domain com.example.foo >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color create module Foo --domain com.example.foo >/dev/null 2>&1; echo $?'
 stdout '^1$'
 
 # Invalid domain (must be a reverse-DNS dotted form): rejected.
-! exec $SENTIENTS --no-color create module blog-manager --domain blog-manager
+! exec $LIORIAN --no-color create module blog-manager --domain blog-manager
 stderr 'reverse-DNS'
 
 # TC-004 — valid name + domain: complete structure scaffolded from the
 # embedded mockup under external_modules/<domain>.
-exec $SENTIENTS --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 stdout 'Module created'
 stdout 'Token generated'
 stdout 'manifest.json initialized'

@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/protorians/sentient-cli/internal/audit"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/audit"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -42,7 +42,7 @@ var auditCmd = &cobra.Command{
 	Use:   "audit [module]",
 	Short: "Audit a module's conformance",
 	Long: `Audits the conformance of one (or all) module(s) against the
-Sentient rules: Clean Architecture, manifest.json and index.tsx.
+Liorian rules: Clean Architecture, manifest.json and index.tsx.
 
 Without an argument, all modules in external_modules/ are audited.`,
 	Args: cobra.MaximumNArgs(1),

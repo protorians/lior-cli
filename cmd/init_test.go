@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 // setupTemplateRepo creates a local template directory usable as the init
-// template source (SENTIENT_CLI_TEMPLATE_REPO) so tests stay offline.
+// template source (LIORIAN_CLI_TEMPLATE_REPO) so tests stay offline.
 func setupTemplateRepo(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -68,10 +68,10 @@ func TestConfirmExistingDirNonInteractive(t *testing.T) {
 	t.Setenv(tui.ConfirmYesEnv, "")
 	action, err := confirmExistingDir("dir", false)
 	if action != destActionAbort {
-		t.Errorf("without SENTIENT_CLI_YES the action must abort, got %d", action)
+		t.Errorf("without LIORIAN_CLI_YES the action must abort, got %d", action)
 	}
 	if err == nil || !strings.Contains(err.Error(), "already exists") {
-		t.Errorf("without SENTIENT_CLI_YES the call must refuse, got %v", err)
+		t.Errorf("without LIORIAN_CLI_YES the call must refuse, got %v", err)
 	}
 
 	t.Setenv(tui.ConfirmYesEnv, "1")
@@ -80,7 +80,7 @@ func TestConfirmExistingDirNonInteractive(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if action != destActionClear {
-		t.Errorf("with SENTIENT_CLI_YES the action must be clear, got %d", action)
+		t.Errorf("with LIORIAN_CLI_YES the action must be clear, got %d", action)
 	}
 }
 
@@ -123,9 +123,9 @@ func TestRunInitEmptyDestinationProceedsToPackageManagerDetection(t *testing.T) 
 
 func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
-		"package.json":              `{"name":"sentients-socle","scripts":{"dev":"vite"}}`,
+		"package.json":              `{"name":"liorian-socle","scripts":{"dev":"vite"}}`,
 		"external_modules/.gitkeep": "",
-		"sentient.config.toml":      "app = \"template\"\n",
+		"liorian.config.toml":      "app = \"template\"\n",
 	})
 	bin := installFakeBun(t)
 
@@ -138,7 +138,7 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("SENTIENT_CLI_TEMPLATE_REPO", repo)
+	t.Setenv("LIORIAN_CLI_TEMPLATE_REPO", repo)
 	t.Setenv(tui.ConfirmYesEnv, "1")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -152,14 +152,14 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	if _, err := os.Stat("proj/package.json"); err != nil {
 		t.Errorf("the template must have been cloned: %v", err)
 	}
-	if _, err := os.Stat("proj/sentients.config.json"); err != nil {
+	if _, err := os.Stat("proj/liorian.config.json"); err != nil {
 		t.Errorf("the config file must have been written: %v", err)
 	}
 }
 
 func TestRunInitInCWDWithExistingContentAndApproval(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
-		"package.json": `{"name":"sentients-socle","scripts":{"dev":"vite"}}`,
+		"package.json": `{"name":"liorian-socle","scripts":{"dev":"vite"}}`,
 	})
 	bin := installFakeBun(t)
 
@@ -169,7 +169,7 @@ func TestRunInitInCWDWithExistingContentAndApproval(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv("SENTIENT_CLI_TEMPLATE_REPO", repo)
+	t.Setenv("LIORIAN_CLI_TEMPLATE_REPO", repo)
 	t.Setenv(tui.ConfirmYesEnv, "1")
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -183,14 +183,14 @@ func TestRunInitInCWDWithExistingContentAndApproval(t *testing.T) {
 	if _, err := os.Stat("package.json"); err != nil {
 		t.Errorf("the template must have been cloned into the cwd: %v", err)
 	}
-	if _, err := os.Stat("sentients.config.json"); err != nil {
+	if _, err := os.Stat("liorian.config.json"); err != nil {
 		t.Errorf("the config file must have been written: %v", err)
 	}
 }
 
 func TestMergeTemplateInto(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
-		"package.json": `{"name":"sentients-socle"}`,
+		"package.json": `{"name":"liorian-socle"}`,
 		"README.md":    "template\n",
 	})
 
@@ -263,9 +263,9 @@ func TestGithubOwnerRepo(t *testing.T) {
 		owner string
 		name  string
 	}{
-		{"https://github.com/protorians/sentients-socle", "protorians", "sentients-socle"},
-		{"https://github.com/protorians/sentients-socle.git", "protorians", "sentients-socle"},
-		{"https://github.com/protorians/sentients-socle/", "protorians", "sentients-socle"},
+		{"https://github.com/protorians/liorian-socle", "protorians", "liorian-socle"},
+		{"https://github.com/protorians/liorian-socle.git", "protorians", "liorian-socle"},
+		{"https://github.com/protorians/liorian-socle/", "protorians", "liorian-socle"},
 		{"not-a-github-url", "", ""},
 		{"", "", ""},
 	}

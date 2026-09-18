@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/i18n"
 )
 
 // GitHubRelease is the minimal representation of a GitHub release for version
@@ -21,26 +21,26 @@ type GitHubRelease struct {
 }
 
 // UpdateCheckURL is the GitHub API endpoint for the latest release.
-const UpdateCheckURL = "https://api.github.com/repos/protorians/sentient-cli/releases/latest"
+const UpdateCheckURL = "https://api.github.com/repos/protorians/liorian-cli/releases/latest"
 
 // CacheDuration controls how often the update check runs (once per day).
 const CacheDuration = 24 * time.Hour
 
 // cachePath returns the path to the update check cache file.
 func cachePath() string {
-	dir := filepath.Join(os.TempDir(), "sentient-cli")
+	dir := filepath.Join(os.TempDir(), "liorian-cli")
 	_ = os.MkdirAll(dir, 0o755)
 	return filepath.Join(dir, ".update-check")
 }
 
 // SkipUpdateEnvVar disables the network update check when set to a truthy
 // value (e.g. `1`, `true`). It lets CI/CD runs stay off the network.
-const SkipUpdateEnvVar = "SENTIENT_CLI_SKIP_UPDATE"
+const SkipUpdateEnvVar = "LIORIAN_CLI_SKIP_UPDATE"
 
 // CheckForUpdate queries the GitHub releases API and returns a notification
 // message when a newer version is available. Returns empty string when the
 // CLI is up-to-date or when the check should be skipped (cached, offline,
-// `SENTIENT_CLI_SKIP_UPDATE` set, running in CI, etc.).
+// `LIORIAN_CLI_SKIP_UPDATE` set, running in CI, etc.).
 func CheckForUpdate(currentVersion string) string {
 	if currentVersion == "" || currentVersion == "dev" {
 		return ""
@@ -77,7 +77,7 @@ func CheckForUpdate(currentVersion string) string {
 
 // skipUpdate reports whether the network check is disabled by configuration.
 // A CLI-invokable env var is honoured first (only a truthy value disables,
-// so `SENTIENT_CLI_SKIP_UPDATE=0` stays online); otherwise the presence of a
+// so `LIORIAN_CLI_SKIP_UPDATE=0` stays online); otherwise the presence of a
 // CI environment is taken as a signal to stay offline unless an explicit opt-in.
 func skipUpdate() bool {
 	if v := os.Getenv(SkipUpdateEnvVar); v != "" {
@@ -88,7 +88,7 @@ func skipUpdate() bool {
 		return true
 	}
 	if _, ok := os.LookupEnv("CI"); ok {
-		return os.Getenv("SENTIENT_CLI_UPDATE") == ""
+		return os.Getenv("LIORIAN_CLI_UPDATE") == ""
 	}
 	return false
 }

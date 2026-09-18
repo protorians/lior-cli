@@ -3,7 +3,7 @@ package main
 import (
 	_ "embed"
 
-	"github.com/protorians/sentient-cli/cmd"
+	"github.com/protorians/liorian-cli/cmd"
 )
 
 var (

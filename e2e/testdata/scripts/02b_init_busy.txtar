@@ -1,27 +1,27 @@
-# TC-001b — `sentients init .` into a non-empty directory:
-#   * refused without SENTIENT_CLI_YES, the existing content stays untouched,
-#   * approved via SENTIENT_CLI_YES, the contents are cleared and the
+# TC-001b — `liorian init .` into a non-empty directory:
+#   * refused without LIORIAN_CLI_YES, the existing content stays untouched,
+#   * approved via LIORIAN_CLI_YES, the contents are cleared and the
 #     template is copied in place.
 mkdir template
 cd template
-exec sh -c 'printf "{\"name\":\"sentients-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
+exec sh -c 'printf "{\"name\":\"liorian-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
 cd $WORK
 
-env SENTIENT_CLI_TEMPLATE_REPO=$WORK/template
+env LIORIAN_CLI_TEMPLATE_REPO=$WORK/template
 
 mkdir busy
 exec sh -c 'echo keep > busy/existing.txt'
 cd busy
 
-# 1 — non-interactive refusal (no SENTIENT_CLI_YES): content untouched.
-! exec $SENTIENTS --no-color init .
+# 1 — non-interactive refusal (no LIORIAN_CLI_YES): content untouched.
+! exec $LIORIAN --no-color init .
 stderr 'already exists'
 exists existing.txt
 
 # 2 — approval: contents cleared, template copied, config written.
-env SENTIENT_CLI_YES=1
-exec $SENTIENTS --no-color init .
+env LIORIAN_CLI_YES=1
+exec $LIORIAN --no-color init .
 stdout 'Project initialized successfully'
 ! exists existing.txt
 exists package.json
-exists sentients.config.json
+exists liorian.config.json

@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/protorians/sentient-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/i18n"
 )
 
 // SummaryCard wraps a success headline and its metadata block in a soft,
@@ -30,7 +30,7 @@ func (s *Styles) Wordmark() string {
 	name := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(s.palette.accent)).
-		Render("sentients")
+		Render("liorian")
 	return badge + " " + name
 }
 

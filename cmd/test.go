@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/moduletest"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/moduletest"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +28,7 @@ var testCmd = &cobra.Command{
 Validates the module, resolves a test package with the package manager chosen
 at install (bun/pnpm/yarn/npm), installs it within that manager's scope when
 needed and streams the suite output in real time. The chosen test package is
-persisted in sentients.config.json. The run exits non-zero when any module's
+persisted in liorian.config.json. The run exits non-zero when any module's
 tests fail.
 
 Without an argument, all modules are tested.`,
@@ -235,7 +235,7 @@ func runTestAll(tester *moduletest.Tester, root string) error {
 }
 
 // persistTestConfig stores the resolved test packages and package manager in
-// sentients.config.json so later runs skip detection and selection.
+// liorian.config.json so later runs skip detection and selection.
 func persistTestConfig(root string, results ...*moduletest.TestResult) {
 	cfg, err := config.Load(config.ConfigPath(root))
 	if err != nil {

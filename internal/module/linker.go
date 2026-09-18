@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // linksFileName is the project-local state recording module ↔ remote store
@@ -183,7 +183,7 @@ func (l *Linker) RemoteToken(name string) string {
 
 // linksPath returns the project-local links state file path.
 func (l *Linker) linksPath() string {
-	return filepath.Join(l.Root, config.SentientDir, linksFileName)
+	return filepath.Join(l.Root, config.LiorianDir, linksFileName)
 }
 
 // linksState maps local module names to remote store tokens.
@@ -206,7 +206,7 @@ func (l *Linker) loadLinks() linksState {
 	return state
 }
 
-// saveLinks writes the links state file, creating `.sentients/` if needed.
+// saveLinks writes the links state file, creating `.liorian/` if needed.
 func (l *Linker) saveLinks(state linksState) error {
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {

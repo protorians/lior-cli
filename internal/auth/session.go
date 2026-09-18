@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/appconfig"
-	"github.com/protorians/sentient-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/appconfig"
+	"github.com/protorians/liorian-cli/internal/i18n"
 )
 
 // TokenTTL is the client-side lifetime of a session token. The API responses

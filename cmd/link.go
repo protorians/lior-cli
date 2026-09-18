@@ -6,20 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/auth"
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/store"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/auth"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/store"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var linkCmd = &cobra.Command{
 	Use:   "link [module] [token]",
 	Short: "Link a local module to a remote module",
-	Long: `Links a module created in sentient-connect with the local module (via its token).
+	Long: `Links a module created in liorian-connect with the local module (via its token).
 
 Checks authentication, lists the online modules, and associates
 the chosen local module with the provided remote token.
@@ -34,8 +34,8 @@ token as arguments: link <module> <token>.`,
 
 var unlinkCmd = &cobra.Command{
 	Use:   "unlink [module]",
-	Short: "Unlink a local module from sentient-connect",
-	Long: `Unlinks a local module from its counterpart in sentient-connect.
+	Short: "Unlink a local module from liorian-connect",
+	Long: `Unlinks a local module from its counterpart in liorian-connect.
 The manifest.json token is replaced with a new local UUID token.
 
 --sync-remote first syncs the local metadata (name, type,

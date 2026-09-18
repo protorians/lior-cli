@@ -6,13 +6,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 )
 
-// requireProjectRoot locates the current Sentient project root or returns a
+// requireProjectRoot locates the current Liorian project root or returns a
 // dedicated error (exit code 3 per spec).
 func requireProjectRoot() (string, error) {
 	cwd, err := os.Getwd()

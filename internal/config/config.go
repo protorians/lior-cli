@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Config mirrors the optional `sentients.config.json` file at the project root.
+// Config mirrors the optional `liorian.config.json` file at the project root.
 type Config struct {
 	Project ProjectConfig `json:"project"`
 	Publish PublishConfig `json:"publish"`
@@ -16,9 +16,9 @@ type Config struct {
 	Cli     CliConfig     `json:"cli"`
 }
 
-// TestConfig configures `sentients test`: which package manager installs and
+// TestConfig configures `liorian test`: which package manager installs and
 // runs the test packages, and which test package each module uses. The values
-// are persisted in `sentients.config.json` so later runs skip detection and
+// are persisted in `liorian.config.json` so later runs skip detection and
 // selection.
 type TestConfig struct {
 	// PackageManager overrides the package manager used to install/run test
@@ -69,7 +69,7 @@ func (c *TestConfig) SetRunner(module, runner string) {
 // CliConfig configures CLI-level settings.
 type CliConfig struct {
 	// Lang is the UI locale of the CLI (e.g. "fr-FR", "en-US"). An empty
-	// value keeps the auto-detection (SENTIENT_CLI_LANG / OS locale).
+	// value keeps the auto-detection (LIORIAN_CLI_LANG / OS locale).
 	Lang string `json:"lang"`
 }
 
@@ -96,7 +96,7 @@ func Default() Config {
 	return Config{
 		Project: ProjectConfig{},
 		Publish: PublishConfig{
-			DefaultRegistry: "https://store.sentient.dev",
+			DefaultRegistry: "https://store.liorian.dev",
 			AutoAudit:       true,
 		},
 		Debug: DebugConfig{

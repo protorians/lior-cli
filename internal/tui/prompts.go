@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/protorians/sentient-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/i18n"
 )
 
 // inputModel is a Bubble Tea model wrapping a text input.
@@ -289,12 +289,12 @@ func (s *Styles) questionMark() string {
 }
 
 // ConfirmYesEnv forces confirmations to succeed in non-interactive runs
-// (`SENTIENT_CLI_YES` non-empty) — the CI pattern mentioned in spec §5.13.1.
-const ConfirmYesEnv = "SENTIENT_CLI_YES"
+// (`LIORIAN_CLI_YES` non-empty) — the CI pattern mentioned in spec §5.13.1.
+const ConfirmYesEnv = "LIORIAN_CLI_YES"
 
 // Confirm asks a yes/no question. defYes is the answer given by pressing
 // strictly <enter>. In non-interactive runs the answer comes from
-// `SENTIENT_CLI_YES` (truthy → yes, empty → explicit error).
+// `LIORIAN_CLI_YES` (truthy → yes, empty → explicit error).
 func Confirm(title string, defYes bool) (bool, error) {
 	if !IsInteractive() {
 		if os.Getenv(ConfirmYesEnv) != "" {

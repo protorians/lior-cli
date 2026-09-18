@@ -134,7 +134,7 @@ func matchChannel(ch Channel, rel ChannelRelease) bool {
 // directory; its contents are extracted directly into dest. onProgress, when
 // non-nil, is called as the download progresses.
 func downloadAndExtractZip(url, dest string, onProgress func(done, total int64)) error {
-	tmpFile, err := os.CreateTemp("", "sentient-zip-*.zip")
+	tmpFile, err := os.CreateTemp("", "liorian-zip-*.zip")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}

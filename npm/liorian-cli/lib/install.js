@@ -9,8 +9,8 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 
-const REPO = "protorians/sentient-cli";
-const BINARY_NAME = "sentients";
+const REPO = "protorians/liorian-cli";
+const BINARY_NAME = "liorian";
 
 function getOsToken() {
   const platform = os.platform();
@@ -111,9 +111,9 @@ async function main() {
   const version = getVersion();
   const platform = getPlatform();
   const binDir = path.join(__dirname, "..", "bin");
-  const tmpDir = path.join(os.tmpdir(), `sentient-install-${Date.now()}`);
+  const tmpDir = path.join(os.tmpdir(), `liorian-install-${Date.now()}`);
 
-  console.log(`Installing @sentients/cli ${version} for ${platform.triple}...`);
+  console.log(`Installing @liorian/cli ${version} for ${platform.triple}...`);
 
   try {
     fs.mkdirSync(tmpDir, { recursive: true });
@@ -152,9 +152,9 @@ async function main() {
       fs.chmodSync(targetBinary, 0o755);
     }
 
-    console.log(`@sentients/cli ${version} installed successfully.`);
+    console.log(`@liorian/cli ${version} installed successfully.`);
   } catch (err) {
-    console.error(`Failed to install @sentients/cli: ${err.message}`);
+    console.error(`Failed to install @liorian/cli: ${err.message}`);
     console.error("");
     console.error("You can install the binary manually from:");
     console.error(`  https://github.com/${REPO}/releases`);

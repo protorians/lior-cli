@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 func TestValidateName(t *testing.T) {
@@ -28,7 +28,7 @@ func TestValidateName(t *testing.T) {
 }
 
 func TestValidateDomain(t *testing.T) {
-	valid := []string{"com.example.app", "com.organization.domain", "io.sentient-sdk.a", "fr.dev.demo"}
+	valid := []string{"com.example.app", "com.organization.domain", "io.liorian-sdk.a", "fr.dev.demo"}
 	for _, d := range valid {
 		if err := ValidateDomain(d); err != nil {
 			t.Errorf("ValidateDomain(%q) = %v, want nil", d, err)
@@ -97,8 +97,8 @@ func TestNewManifest(t *testing.T) {
 	if m.Key != "BLOG_MANAGER" {
 		t.Errorf("Key = %q, want BLOG_MANAGER", m.Key)
 	}
-	if m.Domain != "mod.sentients.blog-manager" {
-		t.Errorf("Domain = %q, want mod.sentients.blog-manager", m.Domain)
+	if m.Domain != "mod.liorian.blog-manager" {
+		t.Errorf("Domain = %q, want mod.liorian.blog-manager", m.Domain)
 	}
 	if m.URI != "/blog-manager" {
 		t.Errorf("URI = %q, want /blog-manager", m.URI)
@@ -222,7 +222,7 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	m.Widgets = []string{"analytics"}
 	m.Routines = []string{"billingAnalyticsRoutine"}
 	m.Providers = []string{"layout"}
-	m.Dependencies = map[string]string{"@sentients/sdk": "workspace:*"}
+	m.Dependencies = map[string]string{"@liorian/sdk": "workspace:*"}
 	m.DevDependencies = map[string]string{"typescript": "^6.0.3"}
 	m.Menu.Items = []MenuItem{
 		{Label: "Factures", Icon: "FileIcon", URL: "/billing/invoices"},
@@ -247,7 +247,7 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	if len(loaded.Menu.Items) != 1 || loaded.Menu.Items[0].URL != "/billing/invoices" {
 		t.Errorf("Menu non conforme: %+v", loaded.Menu)
 	}
-	if loaded.Dependencies["@sentients/sdk"] != "workspace:*" {
+	if loaded.Dependencies["@liorian/sdk"] != "workspace:*" {
 		t.Errorf("Dependencies non conformes: %+v", loaded.Dependencies)
 	}
 	if loaded.DevDependencies["typescript"] != "^6.0.3" {

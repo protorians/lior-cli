@@ -1,21 +1,21 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > sentient.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
 
-# TC-006 — connect with MFA TOTP: SENTIENT_CLI_MFA_CODE read from the environment.
-env SENTIENT_CLI_CONNECT_EMAIL=mfa@example.com
-env SENTIENT_CLI_CONNECT_PASSWORD=secret
-env SENTIENT_CLI_MFA_CODE=123456
-exec $SENTIENTS --no-color connect
+# TC-006 — connect with MFA TOTP: LIORIAN_CLI_MFA_CODE read from the environment.
+env LIORIAN_CLI_CONNECT_EMAIL=mfa@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+env LIORIAN_CLI_MFA_CODE=123456
+exec $LIORIAN --no-color connect
 stdout '✓ Connected as mfa@example.com'
-exists $HOME/.sentient-cli/credentials.enc
+exists $HOME/.liorian-cli/credentials.enc
 
 # Wrong MFA code: the TOTP then recovery challenges fail → refusal.
-env SENTIENT_CLI_CONNECT_EMAIL=mfa@example.com
-env SENTIENT_CLI_CONNECT_PASSWORD=secret
-env SENTIENT_CLI_MFA_CODE=000000
-! exec $SENTIENTS --no-color connect
+env LIORIAN_CLI_CONNECT_EMAIL=mfa@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+env LIORIAN_CLI_MFA_CODE=000000
+! exec $LIORIAN --no-color connect
 stderr 'MFA verification failed'
-exec sh -c '"$SENTIENTS" --no-color connect >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color connect >/dev/null 2>&1; echo $?'
 stdout '^[0-9]+$'

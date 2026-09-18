@@ -7,18 +7,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/appconfig"
-	"github.com/protorians/sentient-cli/internal/auth"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/appconfig"
+	"github.com/protorians/liorian-cli/internal/auth"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 // EnvAuthCode lets a non-interactive (CI/headless) run feed the authorization
 // code directly, skipping the browser and the local callback server — the same
-// pattern as `SENTIENT_CLI_CONNECT_*`.
-const envAuthCode = "SENTIENT_CLI_AUTH_CODE"
+// pattern as `LIORIAN_CLI_CONNECT_*`.
+const envAuthCode = "LIORIAN_CLI_AUTH_CODE"
 
 // authCallbackPath is the loopback path receiving the OAuth redirect.
 const authCallbackPath = "/callback"
@@ -30,16 +30,16 @@ var authCmd = &cobra.Command{
 	Use:   "auth",
 	Short: "Authenticate via OAuth2 (browser)",
 	Long: `Authenticates the developer using the OAuth2 authorization-code flow
-with PKCE (RFC 7636): opens the browser on the sentient-auth authorization
+with PKCE (RFC 7636): opens the browser on the liorian-auth authorization
 endpoint, receives the redirect on a local loopback server, exchanges the code
 for tokens, then stores the session securely (system keychain).
 
-The OAuth endpoints come from the 'oauth' entry of 'sentient-auth' in
+The OAuth endpoints come from the 'oauth' entry of 'liorian-auth' in
 app.config.json (authorizationEndpoint, tokenEndpoint, revokeEndpoint,
 clientId, scopes).
 
 In non-interactive (CI) mode, provide the authorization code via the
-SENTIENT_CLI_AUTH_CODE environment variable to skip the browser step.`,
+LIORIAN_CLI_AUTH_CODE environment variable to skip the browser step.`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runAuth()
@@ -78,7 +78,7 @@ func runAuth() error {
 
 	connector := auth.NewConnector()
 	base, source := auth.DebugInfo()
-	debugf("API sentient-auth : %s (source: %s)", base, source)
+	debugf("API liorian-auth : %s (source: %s)", base, source)
 
 	oauth := appconfig.Resolved("").OAuth(appconfig.AuthAppID)
 	scope := strings.Join(oauth.Scopes, " ")

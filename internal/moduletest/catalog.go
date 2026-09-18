@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
-// Sentinels used as a runner name in `sentients.config.json` and in-memory.
+// Sentinels used as a runner name in `liorian.config.json` and in-memory.
 const (
 	// ScriptRunner forces the module's (then the project's) package.json
 	// `test` script: `<pm> run test`.

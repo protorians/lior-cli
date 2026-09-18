@@ -1,5 +1,5 @@
-// Package e2e runs the end-to-end (testscript) suite of the Sentient CLI
-// against a mock sentient-connect API (spec §12: TC-001 → TC-029).
+// Package e2e runs the end-to-end (testscript) suite of the Liorian CLI
+// against a mock liorian-connect API (spec §12: TC-001 → TC-029).
 package e2e
 
 import (
@@ -9,19 +9,19 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/sentient-cli/e2e/mockapi"
+	"github.com/protorians/liorian-cli/e2e/mockapi"
 	"github.com/rogpeppe/go-internal/testscript"
 )
 
-// sentientsBin is the path of the CLI binary built in TestMain.
-var sentientsBin string
+// liorianBin is the path of the CLI binary built in TestMain.
+var liorianBin string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "sentients-e2e-")
+	dir, err := os.MkdirTemp("", "liorian-e2e-")
 	if err != nil {
 		panic(err)
 	}
-	sentientsBin = filepath.Join(dir, "sentients")
+	liorianBin = filepath.Join(dir, "liorian")
 
 	// Build the CLI from the repository root (the test binary runs with cwd
 	// set to this package's directory).
@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	build := exec.Command("go", "build", "-o", sentientsBin, ".")
+	build := exec.Command("go", "build", "-o", liorianBin, ".")
 	build.Dir = root
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -44,15 +44,15 @@ func TestScripts(t *testing.T) {
 		Dir: "testdata/scripts",
 		Setup: func(env *testscript.Env) error {
 			// Whole CLI under test is the freshly built binary.
-			env.Setenv("SENTIENTS", sentientsBin)
-			// Network: a dedicated mock sentient-auth API per script, so
+			env.Setenv("LIORIAN", liorianBin)
+			// Network: a dedicated mock liorian-auth API per script, so
 			// store/auth state never leaks between TC scenarios.
 			server := httptest.NewServer(mockapi.New().Handler())
-			env.Setenv("SENTIENT_AUTH_API", server.URL)
+			env.Setenv("LIORIAN_AUTH_API", server.URL)
 			// Deterministic, isolated state: force the encrypted-file vault
 			// and skip the update check.
-			env.Setenv("SENTIENT_CLI_STORE", "file")
-			env.Setenv("SENTIENT_CLI_SKIP_UPDATE", "1")
+			env.Setenv("LIORIAN_CLI_STORE", "file")
+			env.Setenv("LIORIAN_CLI_SKIP_UPDATE", "1")
 			// Portable fixture toolchain (fake bun/npm/tsc/node) used by
 			// init/install, debug and type-check scripts.
 			env.Setenv("PATH", fixturesBin()+string(os.PathListSeparator)+env.Getenv("PATH"))

@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/auth"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/auth"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 func raiton(w http.ResponseWriter, status int, data string) {
@@ -212,7 +212,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 				http.Error(w, "manifest id = "+m.ID, http.StatusBadRequest)
 				return
 			}
-			raiton(w, http.StatusCreated, `{"url":"https://cdn.sentient.dev/artifacts/prod-new/version-1.SenMod","key":"prod-new/version-1","checksum":"`+body.Checksum+`","sizeBytes":17}`)
+			raiton(w, http.StatusCreated, `{"url":"https://cdn.liorian.dev/artifacts/prod-new/version-1.SenMod","key":"prod-new/version-1","checksum":"`+body.Checksum+`","sizeBytes":17}`)
 		default:
 			http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
 		}
@@ -234,7 +234,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 	if resp.Version != "0.1.0" {
 		t.Errorf("Version = %q, want 0.1.0", resp.Version)
 	}
-	if resp.URL != "https://cdn.sentient.dev/artifacts/prod-new/version-1.SenMod" {
+	if resp.URL != "https://cdn.liorian.dev/artifacts/prod-new/version-1.SenMod" {
 		t.Errorf("URL = %q, want CDN URL", resp.URL)
 	}
 	if len(calls) != 3 {

@@ -15,7 +15,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BINARY="sentients"
+BINARY="liorian"
 BUILD_DIR="$ROOT_DIR/dist"
 
 PREFIX=""

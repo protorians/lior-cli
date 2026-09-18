@@ -5,12 +5,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/appconfig"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/appconfig"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // EnvAPIBase overrides the resolved API base URL.
-const EnvAPIBase = "SENTIENT_AUTH_API"
+const EnvAPIBase = "LIORIAN_AUTH_API"
 
 // API paths (global `/api` prefix, Raiton envelope responses).
 const (
@@ -121,17 +121,17 @@ type VerifyResponse struct {
 	MFAToken    string `json:"mfaToken,omitempty"`
 }
 
-// Connector talks to the sentient-auth API.
+// Connector talks to the liorian-auth API.
 type Connector struct {
 	Client *pkg.Client
 }
 
-// apiBaseURL resolves the sentient-auth base URL. Resolution order:
-//  1. `SENTIENT_AUTH_API` environment variable,
+// apiBaseURL resolves the liorian-auth base URL. Resolution order:
+//  1. `LIORIAN_AUTH_API` environment variable,
 //  2. workspace `app.config.json` (walked up from the current directory),
 //  3. the `app.config.json` registry embedded in the binary.
 //
-// The URL always comes from the API-side configuration of `sentient-auth`
+// The URL always comes from the API-side configuration of `liorian-auth`
 // (the `api.baseUrl` entry of `app.config.json`) — never a hardcoded domain.
 func apiBaseURL() string {
 	if v := os.Getenv(EnvAPIBase); v != "" {
@@ -141,7 +141,7 @@ func apiBaseURL() string {
 	return base
 }
 
-// apiTimeout resolves the sentient-auth API timeout from `app.config.json`
+// apiTimeout resolves the liorian-auth API timeout from `app.config.json`
 // (`api.timeout`, milliseconds), falling back to the CLI default.
 func apiTimeout() time.Duration {
 	return appconfig.Resolved("").Timeout(appconfig.AuthAppID)

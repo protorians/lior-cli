@@ -126,7 +126,7 @@ jobs:
       - name: Publish ./dist artifacts as workflow artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: sentients-cli-${{ steps.version.outputs.version }}-dist
+          name: liorian-cli-${{ steps.version.outputs.version }}-dist
           path: dist/
           retention-days: 30
 
@@ -152,7 +152,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-npm:
-    name: Publish @sentients/cli to npm
+    name: Publish @liorian/cli to npm
     runs-on: ubuntu-latest
     needs: [release, prepare]
     if: needs.release.result == 'success'
@@ -193,14 +193,14 @@ jobs:
 
       - name: Update npm package version
         if: steps.npm-token.outputs.available == 'true'
-        working-directory: npm/sentient-cli
+        working-directory: npm/liorian-cli
         run: |
           VERSION="${{ needs.release.outputs.version }}"
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Publish to npm
         if: steps.npm-token.outputs.available == 'true'
-        working-directory: npm/sentient-cli
+        working-directory: npm/liorian-cli
         run: npm publish --access public --tag "${{ steps.dist-tag.outputs.tag }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

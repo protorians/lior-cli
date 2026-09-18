@@ -1,5 +1,5 @@
 // Package appconfig reads the workspace `app.config.json` registry used to
-// parameterise the CLI: each Sentient application carries its API `baseUrl`
+// parameterise the CLI: each Liorian application carries its API `baseUrl`
 // and `timeout`. The registry is embedded in the binary at build time, so any
 // command keeps working outside a workspace; a local `app.config.json`
 // (walked up from the current directory) overrides the embedded one.
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // FileName is the well-known workspace registry file.
@@ -21,11 +21,11 @@ const FileName = "app.config.json"
 
 // Well-known application ids in `applications`.
 const (
-	AuthAppID  = "sentient-auth"
-	StoreAppID = "sentient-store"
+	AuthAppID  = "liorian-auth"
+	StoreAppID = "liorian-store"
 )
 
-// Config mirrors the registry schema (sentient.config.schema.json).
+// Config mirrors the registry schema (liorian.config.schema.json).
 type Config struct {
 	Version      string                 `json:"version"`
 	Applications map[string]Application `json:"applications"`
@@ -155,7 +155,7 @@ const (
 	DefaultOAuthAuthorizationEndpoint = "/oauth/authorize"
 	DefaultOAuthTokenEndpoint         = "/oauth/token"
 	DefaultOAuthRevokeEndpoint        = "/oauth/revoke"
-	DefaultOAuthClientID              = "sentient-cli"
+	DefaultOAuthClientID              = "liorian-cli"
 )
 
 // OAuth returns the OAuth2 configuration for an application id, filling any

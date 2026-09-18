@@ -4,33 +4,33 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > sentients.config.json'
-exec $SENTIENTS --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
+exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
-env SENTIENT_CLI_CONNECT_EMAIL=dev@example.com
-env SENTIENT_CLI_CONNECT_PASSWORD=secret
-exec $SENTIENTS --no-color connect
-exec $SENTIENTS --no-color publish com.example.blog-manager
+env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+exec $LIORIAN --no-color connect
+exec $LIORIAN --no-color publish com.example.blog-manager
 stdout '✓ Published successfully'
 
 # TC-013 — link (remote token read from the manifest, synced by publish).
 exec sh -c 'awk -F\" "/\"token\"/{print \$4}" external_modules/com.example.blog-manager/manifest.json > remote.token'
-exec sh -c '"$SENTIENTS" --no-color link com.example.blog-manager "$(cat remote.token)"'
+exec sh -c '"$LIORIAN" --no-color link com.example.blog-manager "$(cat remote.token)"'
 stdout '✓ Module linked successfully'
 stdout 'Remote'
-exists .sentients/links.json
-exec grep -q '[0-9a-f]' .sentients/links.json
+exists .liorian/links.json
+exec grep -q '[0-9a-f]' .liorian/links.json
 exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
 
 # TC-014 — simple unlink: new local UUID token, remote link removed.
-env SENTIENT_CLI_YES=1
-exec $SENTIENTS --no-color unlink com.example.blog-manager
+env LIORIAN_CLI_YES=1
+exec $LIORIAN --no-color unlink com.example.blog-manager
 stdout '✓ Module unlinked successfully'
 exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
 
 # Re-link (remote token kept) then unlink with remote synchronization
 # (metadata → PUT /api/developer-store/modules/:id).
-exec sh -c '"$SENTIENTS" --no-color link com.example.blog-manager "$(cat remote.token)"'
-exec $SENTIENTS --no-color unlink --sync-remote com.example.blog-manager
+exec sh -c '"$LIORIAN" --no-color link com.example.blog-manager "$(cat remote.token)"'
+exec $LIORIAN --no-color unlink --sync-remote com.example.blog-manager
 stdout '✓ Metadata synced to the remote module'
 stdout '✓ Module unlinked successfully'

@@ -7,21 +7,21 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/audit"
-	"github.com/protorians/sentient-cli/internal/auth"
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/store"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/audit"
+	"github.com/protorians/liorian-cli/internal/auth"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/store"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var publishCmd = &cobra.Command{
 	Use:   "publish [module]",
 	Short: "Publish a module to the store",
-	Long: `Builds and publishes a module to the store via the sentient-connect API.
+	Long: `Builds and publishes a module to the store via the liorian-connect API.
 
 Checks authentication, validates the manifest, builds the .SenMod archive,
 then sends it to the store.`,
@@ -68,7 +68,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto-audit before publishing (spec §5.6) — configurable via
-	// `"publish".autoAudit` in `sentients.config.json` (default: true).
+	// `"publish".autoAudit` in `liorian.config.json` (default: true).
 	cfg, err := config.Load(config.ConfigPath(root))
 	if err != nil {
 		debugf("reading configuration: %v", err)

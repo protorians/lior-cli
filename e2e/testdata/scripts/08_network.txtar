@@ -1,47 +1,47 @@
 # TC-005 / TC-007 / TC-008 / TC-011 / TC-012 — full network flow against the
-# sentient-auth mock (SENTIENT_AUTH_API).
+# liorian-auth mock (LIORIAN_AUTH_API).
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > sentients.config.json'
-exec $SENTIENTS --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
+exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
 # TC-007 — wrong credentials: explicit failure (exit 2 / ExitAuth).
-env SENTIENT_CLI_CONNECT_EMAIL=invalid@example.com
-env SENTIENT_CLI_CONNECT_PASSWORD=wrong
-! exec $SENTIENTS --no-color connect
+env LIORIAN_CLI_CONNECT_EMAIL=invalid@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=wrong
+! exec $LIORIAN --no-color connect
 stderr 'Invalid credentials'
-exec sh -c '"$SENTIENTS" --no-color connect >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color connect >/dev/null 2>&1; echo $?'
 stdout '^2$'
 
 # TC-005 — connect without MFA: session persisted.
-env SENTIENT_CLI_CONNECT_EMAIL=dev@example.com
-env SENTIENT_CLI_CONNECT_PASSWORD=secret
-exec $SENTIENTS --no-color connect
+env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+exec $LIORIAN --no-color connect
 stdout '✓ Connected as dev@example.com'
-exists $HOME/.sentient-cli/credentials.enc
+exists $HOME/.liorian-cli/credentials.enc
 
-# TC-008 — disconnect (auto-confirm SENTIENT_CLI_YES): credentials removed.
-env SENTIENT_CLI_YES=1
-exec $SENTIENTS --no-color disconnect
+# TC-008 — disconnect (auto-confirm LIORIAN_CLI_YES): credentials removed.
+env LIORIAN_CLI_YES=1
+exec $LIORIAN --no-color disconnect
 stdout '✓ Disconnected successfully'
-! exec test -e $HOME/.sentient-cli/credentials.enc
+! exec test -e $HOME/.liorian-cli/credentials.enc
 
 # Re-connect for TC-011/TC-012.
-env SENTIENT_CLI_CONNECT_EMAIL=dev@example.com
-env SENTIENT_CLI_CONNECT_PASSWORD=secret
-exec $SENTIENTS --no-color connect
+env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+exec $LIORIAN --no-color connect
 stdout '✓ Connected as dev@example.com'
 
 # TC-011 — publish: product created + version + artifact; remote token synced
 # into the manifest.
-exec $SENTIENTS --no-color publish com.example.blog-manager
+exec $LIORIAN --no-color publish com.example.blog-manager
 stdout '✓ Published successfully'
-stdout 'URL : https://store.sentient.dev/modules/blog-manager'
+stdout 'URL : https://store.liorian.dev/modules/blog-manager'
 exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
 
 # TC-012 — same version already published: 409 conflict (exit 11 / ExitPublish).
-! exec $SENTIENTS --no-color publish com.example.blog-manager
+! exec $LIORIAN --no-color publish com.example.blog-manager
 stderr 'An identical version already exists'
-exec sh -c '"$SENTIENTS" --no-color publish com.example.blog-manager >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color publish com.example.blog-manager >/dev/null 2>&1; echo $?'
 stdout '^11$'

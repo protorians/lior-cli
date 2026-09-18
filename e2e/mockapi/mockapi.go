@@ -1,5 +1,5 @@
 // Package mockapi is an in-memory HTTP server replicating the
-// `sentient-connect` wire contract (Raiton envelope `{message, data,
+// `liorian-connect` wire contract (Raiton envelope `{message, data,
 // statusCode}`) for the E2E testscript suite: auth, guarded MFA and the
 // developer-store pipeline (product → version → artifact).
 package mockapi
@@ -38,7 +38,7 @@ type Version struct {
 	ArtifactURL   string `json:"artifactUrl,omitempty"`
 }
 
-// Server is the in-memory fake of the sentient-connect API.
+// Server is the in-memory fake of the liorian-connect API.
 type Server struct {
 	mu        sync.Mutex
 	products  map[string]*Product
@@ -481,7 +481,7 @@ func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request, productI
 	slug := s.products[productID].Slug
 	s.mu.Unlock()
 	writeData(w, http.StatusCreated, map[string]any{
-		"url":       "https://store.sentient.dev/modules/" + slug,
+		"url":       "https://store.liorian.dev/modules/" + slug,
 		"key":       "artifacts/" + productID + "/" + versionID + ".SenMod",
 		"checksum":  req.Checksum,
 		"signature": req.Signature,

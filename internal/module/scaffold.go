@@ -10,11 +10,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
-// Embedded reference mockups shipped inside the CLI so `sentients create
+// Embedded reference mockups shipped inside the CLI so `liorian create
 // module` works on any machine with no external checkout.
 //
 //go:embed mockups
@@ -30,10 +30,10 @@ const (
 const (
 	// EnvModuleMockup points to a custom directory of a reference module to
 	// copy (a hello-world style module whose components are renamed).
-	EnvModuleMockup = "SENTIENT_MODULE_MOCKUP"
+	EnvModuleMockup = "LIORIAN_MODULE_MOCKUP"
 	// EnvPageMockup points to a custom `src/app/<name>/page.tsx` template used
 	// when the module declaration declares a `uri`/`url`.
-	EnvPageMockup = "SENTIENT_PAGE_MOCKUP"
+	EnvPageMockup = "LIORIAN_PAGE_MOCKUP"
 )
 
 // moduleMockupSource returns the custom module mockup directory to scaffold
@@ -430,7 +430,7 @@ func mockupReadmeTemplate(spec ModuleSpec) string {
 	if desc := spec.Description; desc != "" {
 		b.WriteString(desc + "\n\n")
 	}
-	b.WriteString(fmt.Sprintf("Sentient module `%s` (`%s`).\n\n", spec.Domain, spec.ID))
+	b.WriteString(fmt.Sprintf("Liorian module `%s` (`%s`).\n\n", spec.Domain, spec.ID))
 	b.WriteString("## Structure\n\n")
 	b.WriteString("- `manifest.json` — module metadata\n")
 	b.WriteString("- `index.tsx` — module declaration (identifier, widgets, service, routines, uri)\n")

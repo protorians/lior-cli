@@ -1,14 +1,14 @@
-# Rapport d'implémentation — Sentient CLI
+# Rapport d'implémentation — Liorian CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-18 — version courante du code : `v0.11.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.11.0).
+> Dernière mise à jour : 2026-09-18 — version courante du code : `v0.12.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/liorian.md` (statut *active* — implémentée, dernière release 0.12.0).
 
 ---
 
 ## 1. Vue d'ensemble
 
-La CLI est un binaire Go (module `github.com/protorians/sentient-cli`, **Go 1.26.0**) qui couvre le
+La CLI est un binaire Go (module `github.com/protorians/liorian-cli`, **Go 1.26.0**) qui couvre le
 cycle de vie :
 
 ```
@@ -23,8 +23,8 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 15 commandes Cobra (13 de la spec + `sign` à 3 sous-commandes + helper) | ✅ implémentées |
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
-| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `sentient-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.11.0) |
+| E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `liorian-connect` in-memory) |
+| CI/CD GoReleaser + package npm (`@liorian/cli`) | ✅ en place (releases v0.0.1 → v0.12.0) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -34,13 +34,13 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 
 ## 2. Ce qui est implémenté (par commande)
 
-### `sentients init` (FR-001, FR-002, FR-003)
-- Clone shallow de `protorians/sentients-socle` (dossier cible demandé, confirmation/écrasement si existe).
+### `liorian init` (FR-001, FR-002, FR-003)
+- Clone shallow de `protorians/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
 - Détection des package managers `bun → pnpm → yarn → npm` (FR-001) + choix interactif.
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
-- Écrit `sentients.config.json` (config projet).
+- Écrit `liorian.config.json` (config projet).
 
-### `sentients create module [nom]` (FR-004, FR-005)
+### `liorian create module [nom]` (FR-004, FR-005)
 - Génère la structure `external_modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
   `components/`, `hooks/`, `services/` (avec `.gitkeep`).
 - Token UUID v4 dans le manifest (FR-005), key en `UPPER_SNAKE_CASE`.
@@ -49,40 +49,40 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   manquant, puis résolution des `dependencies`/`devDependencies` via le gestionnaire de paquets détecté
   (`bun → pnpm → yarn → npm`) à la racine du projet (`--skip-install` pour désactiver).
 
-### `sentients connect` (FR-006, FR-007, FR-008)
+### `liorian connect` (FR-006, FR-007, FR-008)
 - Sign-in email/mot de passe via `POST /api/auth/sign-in` → `{user, token, device}` (**jeton unique**).
 - MFA via les endpoints **gardés** `POST /api/mfa/challenge`, `/api/mfa/totp/verify`, `/api/mfa/recovery/verify`
   (le token de session est attaché en Bearer après le sign-in).
 - Expiration estimée à 24 h ; rafraîchissement via `POST /api/auth/sessions/refresh` (plus de refresh token).
 - Credentials stockées dans le keychain OS (`go-keyring`), avec store chiffré de repli.
-- Base URL et timeout via l'entrée `sentient-auth` de `app.config.json` (`api.baseUrl`, `api.timeout`), surchargée par l'env `SENTIENT_AUTH_API` ; le registre `app.config.json` est embarqué dans le binaire.
+- Base URL et timeout via l'entrée `liorian-auth` de `app.config.json` (`api.baseUrl`, `api.timeout`), surchargée par l'env `LIORIAN_AUTH_API` ; le registre `app.config.json` est embarqué dans le binaire.
 
-### `sentients disconnect` (FR-008, FR-009)
+### `liorian disconnect` (FR-008, FR-009)
 - Invalidation serveur best-effort (`POST /api/auth/logout`) + suppression locale, avec confirmation.
 
-### `sentients auth` (spec §5.14 — ex périmètre futur)
+### `liorian auth` (spec §5.14 — ex périmètre futur)
 - Flux OAuth2 **code d'autorisation + PKCE** (RFC 7636) : `code_verifier`/`code_challenge` S256 +
   `state` anti-CSRF, navigation navigateur, redirection reçue sur un serveur local en boucle
   (`http://127.0.0.1:<port>/callback`, port éphémère), échange du code au `tokenEndpoint`
   (POST form-encoded), stockage de la session (access token + refresh token + expiration) dans
   le keychain (`KeyOAuthRefreshToken` ajouté au store, purgé au `disconnect`).
-- Config `oauth` de `sentient-auth` dans `app.config.json` (`authorizationEndpoint`,
+- Config `oauth` de `liorian-auth` dans `app.config.json` (`authorizationEndpoint`,
   `tokenEndpoint`, `revokeEndpoint`, `clientId`, `scopes`) avec défauts côté `appconfig.OAuth`.
-- Mode CI / headless : `SENTIENT_CLI_AUTH_CODE` fournit le code directement (pas de navigateur
+- Mode CI / headless : `LIORIAN_CLI_AUTH_CODE` fournit le code directement (pas de navigateur
   ni de serveur local) ; sans code en non-interactif → erreur catégorisée (exit 2).
 - `pkg.OpenBrowser` (cross-platform `open` / `rundll32` / `xdg-open`) ; l'échange de token est
   tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
-### `sentients pack [module]` (FR-010, FR-011)
-- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.sentients/build/<module>-<version>.SenMod`.
+### `liorian pack [module]` (FR-010, FR-011)
+- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.liorian/build/<module>-<version>.SenMod`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
-### `sentients sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
-- Paires de clés **Ed25519**, stockées dans le keychain (service `sentient-cli-signing`).
+### `liorian sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
+- Paires de clés **Ed25519**, stockées dans le keychain (service `liorian-cli-signing`).
 - Signature binaire 64 octets dans `<archive>.SenMod.sig` ; vérification sur archive + clé publique.
 - Fingerprint SHA-256 de la clé publique (commande `sign` sans argument).
 
-### `sentients publish [module]` (FR-012, FR-013)
+### `liorian publish [module]` (FR-012, FR-013)
 - Authentification obligatoire, auto-audit pré-publication (config `autoAudit`), complétion
   interactive des métadonnées (`name`, `description`, `publisher.*`), pack puis publication en
   **3 étapes** sur l'API developer-store (spec connect §21) :
@@ -93,17 +93,17 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Conflit SemVer → bump patch interactif (jusqu'à 5 essais) ; après succès, le manifest local
   est synchronisé (version publiée + **token produit résolu**).
 
-### `sentients link` / `sentients unlink` (FR-014, FR-015)
+### `liorian link` / `liorian unlink` (FR-014, FR-015)
 - `link` : liste les produits modules (`GET /api/developer-store/modules`), valide l'id
   (`GET /api/developer-store/modules/:id`), écrit l'id distant dans le `manifest.json` local et
   **fusionne les métadonnées distantes absentes** (`name`, `description`, `publisher.*`) — §5.7 étape 6.
-- Liaison persistée dans un état projet `.sentients/links.json` (nom → id distant) : `LinkedModules`
+- Liaison persistée dans un état projet `.liorian/links.json` (nom → id distant) : `LinkedModules`
   ne dépend plus du **format** du token (fini le « UUID ⇒ local » fragile) — pont de migration vers
   l'ancienne heuristique conservé.
 - `unlink` : régénère un token UUID local et purge l'état `links.json` (déliaison locale ; pas d'appel
   API de mise à jour).
 
-### `sentients debug [module]` (FR-016)
+### `liorian debug [module]` (FR-016)
 - Validation du module + détection du gestionnaire de paquets + résolution de la commande de build
   (script `debug`/`dev`/`build` du `package.json`, repli bundler `esbuild`/`tsup`, repli `tsc --noEmit`).
 - Trace **pas-à-pas** des étapes (`internal/tui/step.go` : `RUNNING`/`SUCCESS`/`NOTICE`/`WARNING`/
@@ -117,12 +117,12 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Clôture par un **récapitulatif de sévérité** (`Summary`) ; mode all modules : tableau + logs +
   récapitulatif global.
 
-### `sentients audit [module]` (FR-017, FR-018)
+### `liorian audit [module]` (FR-017, FR-018)
 - Audit : Clean Architecture (imports croisés, JSX dans services, index async+render), manifest
   (id/name/version semver/token UUID/entry/domain), index.tsx, requirements, assets.
 - Sortie tableau TUI ou JSON (`--output json`), résumé erreurs/warnings.
 
-### `sentients test [module]` (first chunk of §2.4 future scope, v0.9.0)
+### `liorian test [module]` (first chunk of §2.4 future scope, v0.9.0)
 
 - Nouveau package **`internal/moduletest`** (`Tester`, `TestResult`, catalogue `catalog.go`) :
   validation du module + résolution du package de test.
@@ -142,7 +142,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - **Installation** : un package configuré mais absent est installé en dépendance de développement
   dans le périmètre du gestionnaire (`pkg.DevDependencyArgs`). **Sélection interactive** (code
   principal, état d'installation, package personnalisé) **avant** la trace pas-à-pas.
-- **Persistance** dans `sentients.config.json` (bloc `test` : `packageManager`, `runner`,
+- **Persistance** dans `liorian.config.json` (bloc `test` : `packageManager`, `runner`,
   `modules`) via `TestConfig.RunnerFor`/`SetRunner`.
 - **Streaming** live de la sortie de test (queue de 8 lignes), **plafond** 2 min par défaut
   (dépassement → `ERROR`), **annulation** `Ctrl+C`/`Esc`/`SIGINT` (arbre de process, exit **130**).
@@ -152,7 +152,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   plafonds et arrêt SIGINT→SIGKILL est extrait dans **`internal/runner`** (partagé avec le `debug`,
   désormais allégé de ses helpers `runStream`/`scanLines`/proc).
 
-### `sentients help`, `sentients -v` / `--version` (FR-019, FR-020)
+### `liorian help`, `liorian -v` / `--version` (FR-019, FR-020)
 - Aide contextuelle Cobra ; version injectée via ldflags (`main.version/commit/date`).
 - Auto-update non bloquant (NFR-006) via GitHub releases (cache 24 h, **notification seule**).
 
@@ -165,7 +165,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 | `auth` | Authentification | `Store`, `Session`, `Connector`, `Authenticator`, `MFAFactor` |
 | `appconfig` | Registre d'applications embarqué (`app.config.json`, TECH-009) | `Applications`, `BaseURL`, `OAuth` |
 | `i18n` | Internationalisation (NFR-007) | `T`, `Tf`, `SetLanguage`, catalogues `en-US`/`fr-FR` |
-| `config` | Config projet `sentients.config.json` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
+| `config` | Config projet `liorian.config.json` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
 | `module` | Logique module | `Manifest`, `Creator`, `Packer`, `Linker`, `Validator` |
 | `signing` | Signature Ed25519 | `KeyStore`, `GenerateKeyPair`, `SignArchive`, `VerifySignature`, `Fingerprint`, `FindArchive` |
 | `audit` | Audit conformité | `Auditor`, `AuditResult` |
@@ -195,12 +195,12 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >
 > Itération du 2026-09-12 (bis) : `link` fusionne désormais les métadonnées
 > distantes absentes (§5.7) ; `LinkedModules` s'appuie sur un état projet
-> `.sentients/links.json` (plus de dépendance au format du token) ; le schéma
+> `.liorian/links.json` (plus de dépendance au format du token) ; le schéma
 > `widgets`/`routines`/`menu` du manifest est modélisé ; couleurs TUI
 > dérivées de la palette (fin des hex hardcodés hors palette).
 >
 > Itération du 2026-09-12 (ter) : **alignement API sur les contrats documentés**
-> (`sentient-workspace`) — enveloppe Raiton `{message, data, statusCode}` dans
+> (`liorian-workspace`) — enveloppe Raiton `{message, data, statusCode}` dans
 > `pkg/http.go`, préfixe global `/api`, auth à **jeton unique**
 > (`POST /api/auth/sign-in`, `/logout`, `/sessions/refresh`), MFA **gardée**
 > (`/api/mfa/challenge|totp|recovery` — challenge après sign-in), store sur
@@ -209,7 +209,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > spec §8.1/§8.2 réalignés.
 >
 > Itération du 2026-09-12 (quater) : **suite E2E testscript** — harnais `e2e/`
-> (binaire construit depuis la racine, mock `sentient-connect` in-memory
+> (binaire construit depuis la racine, mock `liorian-connect` in-memory
 > **isolé par scénario**, README des scripts), 10 scénarios `01_help_version`
 > → `10_link_unlink` couvrant TC-001 → TC-025 avec les codes de sortie
 > (§11.1), fixtures `bun/npm/tsc/node`, HOME writable par script (vault
@@ -218,7 +218,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > la validation du token et atteint le conflit de version (TC-012, exit 11).
 >
 > Itération du 2026-09-15 : **mockup hello-world aligné 1:1 sur le socle**
-> (le mockup embarqué est identique à `sentients-socle/external_modules/hello-world`
+> (le mockup embarqué est identique à `liorian-socle/external_modules/hello-world`
 > : composants `View.*` / `Activity.*`, `AutoBreadcrumb`, suppression des
 > `Wrapper/Header/Main/Footer` et `WaitingActivity`/`AnimatedContent`) ;
 > `create module` expose les flags **`--mockup` / `--page-mockup`** (priorité
@@ -233,12 +233,12 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > `store.Client.WithAutoRefresh(sess)` connecte le rafraîchissement aux commandes
 > `publish`, `link` et `unlink --sync-remote` (les seules qui effectuent des
 > appels API authentifiés) ; le check d'audit `domain` (spec §5.10, WARNING)
-> vérifie désormais le format attendu `mod.sentients.<name>` au lieu d'accepter
+> vérifie désormais le format attendu `mod.liorian.<name>` au lieu d'accepter
 > toute forme reverse-DNS valide ; tests E2E et unitaires mis à jour (domaine
-> `mod.sentients.*` dans les fixtures audit).
+> `mod.liorian.*` dans les fixtures audit).
 >
 > Itération du 2026-09-16 (bis) : **alignement de la spec sur les docs de référence
-> du workspace** (`sentient-workspace/docs`) — manifeste de module conforme au
+> du workspace** (`liorian-workspace/docs`) — manifeste de module conforme au
 > schéma canonique `module-manifest.schema.json` (24 champs requis : identité,
 > plateformes, compatibilité, permissions/apiScopes, capacités, activation,
 > `optionalRequirements`, dépendances), `create module` décrit par domaine
@@ -275,7 +275,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >   refresh token OAuth est présent, avec repli sur `/api/auth/sessions/refresh`.
 >
 > Itération du 2026-09-16 (quater) : **`debug` pas-à-pas et sortie temps réel (v0.8.0)** —
-> `sentients debug` rapporte désormais chaque étape au fil de sa complétion (validation,
+> `liorian debug` rapporte désormais chaque étape au fil de sa complétion (validation,
 > détection du gestionnaire de paquets, résolution de la commande de build, exécution) et
 > clôt l'exécution par un **récapitulatif de sévérité** (succès, notice, avertissement,
 > erreur, obsolète) :
@@ -298,20 +298,20 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
   `signing.NewKeyStore()` sondent désormais le keychain OS (`keychainAvailable`,
   lecture d'une clé sentinelle) ; s'il est indisponible, elles basculent
-  réellement sur le vault chiffré `~/.sentient-cli/credentials.enc` /
+  réellement sur le vault chiffré `~/.liorian-cli/credentials.enc` /
   `signing.enc` (spec §7.6, R-002).
-- **Passphrases dures supprimées** : les AES utilisaient `"sentient-cli-fallback-v1"` /
-  `"sentient-cli-signing-v1"`. Désormais le secret est **aléatoire** (32 octets,
-  `pkg.MachineSecret` → `~/.sentient-cli/machine.secret`, 0600) et la clé AES est
+- **Passphrases dures supprimées** : les AES utilisaient `"liorian-cli-fallback-v1"` /
+  `"liorian-cli-signing-v1"`. Désormais le secret est **aléatoire** (32 octets,
+  `pkg.MachineSecret` → `~/.liorian-cli/machine.secret`, 0600) et la clé AES est
   **dérivée par PBKDF2-HMAC-SHA256** (210 000 itérations, sel par message,
   `pkg.EncryptVault`/`DecryptVault`). Aucun secret en dur dans le binaire.
-- **Update désactivable en CI** : `SENTIENT_CLI_SKIP_UPDATE` (ou `CI` posée sans
-  opt-in `SENTIENT_CLI_UPDATE`) coupe l'appel réseau (`pkg.update.skipUpdate`).
+- **Update désactivable en CI** : `LIORIAN_CLI_SKIP_UPDATE` (ou `CI` posée sans
+  opt-in `LIORIAN_CLI_UPDATE`) coupe l'appel réseau (`pkg.update.skipUpdate`).
 - **Erreurs du challenge MFA remontées** : `mfa.go` ne masque plus un
   `/api/mfa/challenge` en panne — l'erreur est rapportée avec le détail de la
   vérification.
 - `NewStoreVolatile` = fallback isolé dans `/tmp` (secret aléatoire, ne pollue
-  plus `~/.sentient-cli` en test) ; `NewKeyStoreVolatile` (mort) supprimé.
+  plus `~/.liorian-cli` en test) ; `NewKeyStoreVolatile` (mort) supprimé.
 - **Rotation automatique du token (SEC-003, 🔧 renforcé au 2026-09-16)** :
   `pkg.Client.Do` retente les requêtes en échec HTTP 401 avec un token
   rafraîchi via `POST /api/auth/sessions/refresh` (`TokenRefreshFunc`, un seul
@@ -349,7 +349,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   de balises JSX (`jsxTagRE`) qui ignore `Array<string>` tout en attrapant
   `</div>`, `<Foo/>`, `<div className=…/>`. Pas de vrai parseur TS/JSX.
 - **`Linker.LinkedModules`** ✅ : les liaisons sont persistées dans
-  `.sentients/links.json` (nom → token distant) ; la distinction local/distant
+  `.liorian/links.json` (nom → token distant) ; la distinction local/distant
   ne repose plus sur le format de chaîne du token (un token distant au format
   UUID est désormais reconnu). Pont de migration vers l'ancienne heuristique
   conservé pour les projets liés avant l'état.
@@ -380,11 +380,11 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 `debug` ✅ (vrai build + trace pas-à-pas v0.8.0) · `sign keygen/sign/verify` ✅
 
 ### Release 0.3.0 (Qualité) — ✅ largement faite
-- S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `SENTIENT_CLI_DEBUG`).
-- S-014 config `sentients.config.json` ✅ déjà présente.
+- S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `LIORIAN_CLI_DEBUG`).
+- S-014 config `liorian.config.json` ✅ déjà présente.
 - S-015 auto-update ✅ partiel (notification seule, pas de download ; désactivable en CI).
 - S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (15 packages), **E2E ✅** (13 scénarios
-  txtar, TC-001 → TC-029, mock `sentient-connect` in-memory), **CI ✅** (job `e2e`).
+  txtar, TC-001 → TC-029, mock `liorian-connect` in-memory), **CI ✅** (job `e2e`).
 
 ### Prochaines itérations proposées (par priorité)
 1. **Sécurité/robustesse** — ✅ fait au 2026-09-12 : fallback keychain↔fichier chiffré
@@ -402,29 +402,29 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
    **trace pas-à-pas + streaming + timeout + annulation** (v0.8.0, `internal/tui/step.go`).
 6. **Candidats restants** :
    - testscript E2E (S-017) + CI sur scénarios TC-001 → TC-029 — ✅ fait : `e2e/` (mock
-     `sentient-connect` in-memory, 13 scénarios `01_help_version` → `12_test` couvrant
+     `liorian-connect` in-memory, 13 scénarios `01_help_version` → `12_test` couvrant
      TC-001 → TC-029, fixtures `bun/npm/tsc/node/esbuild`, job CI `e2e`) ;
    - `disconnect`/`unlink` : option de mise à jour distante via `PUT /api/developer-store/modules/:id` (✅
      `unlink --sync-remote` couvert par TC-014) ;
    - **token refresh auto (SEC-003)** — ✅ fait au 2026-09-16 : retry 401 avec rotation du bearer
      token (`pkg.Client.TokenRefreshFunc` + `store.Client.WithAutoRefresh`) sur `publish`/`link`/
      `unlink --sync-remote` ;
-   - **audit `domain` conforme spec §5.10** — ✅ fait au 2026-09-16 : format `mod.sentients.<name>`
+   - **audit `domain` conforme spec §5.10** — ✅ fait au 2026-09-16 : format `mod.liorian.<name>`
      vérifié (WARNING), plus de simple reverse-DNS ;
    - **bâtir un vrai build de module dans `debug`** — ✅ fait au 2026-09-16 : sans script
      `debug/dev/build`, `debug` tente un **bundle réel** via un bundler résolvable
      (`esbuild`/`tsup`, node_modules module → racine → PATH) qui compile l'entrée dans `dist/`,
 avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
    `esbuild`).
-- **`sentients test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
+- **`liorian test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
       package `internal/moduletest` (validation + résolution script/runner + streaming + plafond),
       exit code **13** (échec de tests), extraction du runner partagé `internal/runner`, i18n
       `en-US`/`fr-FR`, tests unitaires + scénario E2E `12_test.txtar` (TC-028/TC-029). **Rehaussé en
       v0.10.0** : gestionnaire de paquets choisi à l'installation + catalogue (vitest/jest/mocha/ava)
       + installation dans le périmètre du gestionnaire + sélection interactive + persistance de la
-      section `test` de `sentients.config.json` (cf. §2.4).
-7. **Future spec** : `sentients watch` (hot-reload), `sentients deploy`,
-   `sentients marketplace` (§2.4 future scope) — `sentients auth` (OAuth2 PKCE) ✅ fait au
+      section `test` de `liorian.config.json` (cf. §2.4).
+7. **Future spec** : `liorian watch` (hot-reload), `liorian deploy`,
+   `liorian marketplace` (§2.4 future scope) — `liorian auth` (OAuth2 PKCE) ✅ fait au
    2026-09-16.
 
 ---
@@ -432,8 +432,8 @@ avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (f
 ## 6. Commandes utiles
 
 ```bash
-go build -o sentients .
-./sentients --help
+go build -o liorian .
+./liorian --help
 go test ./...              # unitaires + E2E testscript (TC-001 → TC-029)
 go test ./e2e/ -run TestScripts -v   # suite E2E seule
 go vet ./...
@@ -441,6 +441,6 @@ goreleaser release --clean   # release multi-plateforme
 ```
 
 Couverture de test : unitaires ✅ (15 packages ok) + **E2E ✅** (`e2e/` : `TestMain` construit la CLI
-depuis la racine repo, mock `sentient-connect` in-memory dans `e2e/mockapi/`, 13 scripts txtar
+depuis la racine repo, mock `liorian-connect` in-memory dans `e2e/mockapi/`, 13 scripts txtar
 `e2e/testdata/scripts/01_help_version.txtar` → `12_test.txtar` couvrant TC-001 → TC-029, fixtures
 exécutables `e2e/testdata/fixtures/bin/{bun,npm,tsc,node,esbuild}`, job CI `e2e`).

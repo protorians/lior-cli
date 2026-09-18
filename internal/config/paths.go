@@ -6,28 +6,28 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/protorians/sentient-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/i18n"
 )
 
-// Well-known directory and file names within a Sentient project.
+// Well-known directory and file names within a Liorian project.
 const (
-	ConfigFileName      = "sentients.config.json"
-	SentientConfigName  = "sentient.config.toml"
+	ConfigFileName      = "liorian.config.json"
+	LiorianConfigName  = "liorian.config.toml"
 	ExternalModulesDir  = "external_modules"
 	InternalModulesDir  = "src/modules"
 	PublicAssetsDir     = "public/assets"
 	AppSrcDir           = "src/app"
-	SentientDir         = ".sentients"
-	SentientBuildsDir   = ".sentients/build"
+	LiorianDir         = ".liorian"
+	LiorianBuildsDir   = ".liorian/build"
 	ManifestFileName    = "manifest.json"
 	ModuleEntryFileName = "index.tsx"
 	// ArchiveExt is the extension of built module archives (`<name>-<version>.SenMod`).
 	ArchiveExt = ".SenMod"
 )
 
-// IsProjectRoot reports whether dir looks like a Sentient project root.
+// IsProjectRoot reports whether dir looks like a Liorian project root.
 func IsProjectRoot(dir string) bool {
-	if fileExists(filepath.Join(dir, SentientConfigName)) {
+	if fileExists(filepath.Join(dir, LiorianConfigName)) {
 		return true
 	}
 	if fileExists(filepath.Join(dir, ConfigFileName)) {
@@ -40,7 +40,7 @@ func IsProjectRoot(dir string) bool {
 }
 
 // FindProjectRoot walks up from start (default: current directory) looking
-// for a Sentient project root. Returns an error when none is found.
+// for a Liorian project root. Returns an error when none is found.
 func FindProjectRoot(start string) (string, error) {
 	dir := start
 	if dir == "" {
@@ -57,7 +57,7 @@ func FindProjectRoot(start string) (string, error) {
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			return "", errors.New(i18n.Tf("config.error.no_project",
-				SentientConfigName, ExternalModulesDir))
+				LiorianConfigName, ExternalModulesDir))
 		}
 		dir = parent
 	}
@@ -88,9 +88,9 @@ func ModuleAppSrcDir(root, module string) string {
 	return filepath.Join(root, AppSrcDir, module)
 }
 
-// BuildDir returns the `.sentients/build/` directory for a project root.
+// BuildDir returns the `.liorian/build/` directory for a project root.
 func BuildDir(root string) string {
-	return filepath.Join(root, SentientBuildsDir)
+	return filepath.Join(root, LiorianBuildsDir)
 }
 
 // ManifestPath returns the path of a module manifest.

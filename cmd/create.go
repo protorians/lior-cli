@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -28,7 +28,7 @@ the manifest.json uri of the deployed module (default: the identifier).
 
 The module's unique UUID token is generated automatically.
 
-Usage : sentients create module [name] [--domain com.org.app] [--id hello-world]`,
+Usage : liorian create module [name] [--domain com.org.app] [--id hello-world]`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runCreate(cmd, args)
@@ -51,7 +51,7 @@ var (
 
 // createSkipInstallEnv disables the dependency installation step of
 // `create module` (used by the unit test suite and CI-constrained runs).
-const createSkipInstallEnv = "SENTIENT_CLI_SKIP_INSTALL"
+const createSkipInstallEnv = "LIORIAN_CLI_SKIP_INSTALL"
 
 func init() {
 	createCmd.Flags().StringVar(&createMockup, "mockup", "", i18n.T("create.flag.mockup"))
@@ -169,9 +169,9 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println(s.SuccessPanel(panel))
 	fmt.Println(s.StepsList(i18n.T("init.next"),
-		s.Info.Render("sentients connect"),
-		s.Info.Render("sentients pack "+result.Name),
-		s.Info.Render("sentients publish"),
+		s.Info.Render("liorian connect"),
+		s.Info.Render("liorian pack "+result.Name),
+		s.Info.Render("liorian publish"),
 	))
 	fmt.Println()
 	return nil

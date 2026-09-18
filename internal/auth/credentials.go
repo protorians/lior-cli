@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 	"github.com/zalando/go-keyring"
 )
 
 // Keychain keys storing credentials.
 const (
-	ServiceName = "sentient-cli"
-	prefix      = "sentient-cli."
+	ServiceName = "liorian-cli"
+	prefix      = "liorian-cli."
 
 	KeyAccessToken = prefix + "access_token"
 	KeyMFAToken    = prefix + "mfa_token"
@@ -24,7 +24,7 @@ const (
 	KeyUserEmail   = prefix + "user_email"
 	KeyMFASecret   = prefix + "mfa_secret"
 	// KeyOAuthRefreshToken stores the OAuth2 refresh token obtained by
-	// `sentients auth` (authorization-code + PKCE).
+	// `liorian auth` (authorization-code + PKCE).
 	KeyOAuthRefreshToken = prefix + "oauth_refresh_token"
 	// KeyRefreshTokenLegacy was dropped from the session model (single-token
 	// sessions). Kept in AllKeys so stale keychain entries are purged on
@@ -53,7 +53,7 @@ type Store interface {
 	Set(key string, value string) error
 	// Delete removes a single key.
 	Delete(kind string) error
-	// DeleteAll removes every sentient-cli credential.
+	// DeleteAll removes every liorian-cli credential.
 	DeleteAll() error
 }
 
@@ -71,14 +71,14 @@ type fallbackStore struct {
 }
 
 // StoreEnv forces the credential backend in headless/CI runs
-// (`SENTIENT_CLI_STORE=file` → encrypted vault, `=keychain` → OS keychain).
+// (`LIORIAN_CLI_STORE=file` → encrypted vault, `=keychain` → OS keychain).
 // An empty value keeps the automatic platform probe.
-const StoreEnv = "SENTIENT_CLI_STORE"
+const StoreEnv = "LIORIAN_CLI_STORE"
 
 // NewStore returns the appropriate credential store for the platform. The
 // system keychain is used when reachable; otherwise the CLI transparently
 // falls back to a vault file encrypted with the per-user machine secret.
-// `SENTIENT_CLI_STORE` can force either backend for CI/headless runs.
+// `LIORIAN_CLI_STORE` can force either backend for CI/headless runs.
 func NewStore() Store {
 	switch os.Getenv(StoreEnv) {
 	case "file":
@@ -97,7 +97,7 @@ func NewStore() Store {
 // not touch either the system keychain or the user data directory.
 func NewStoreVolatile() Store {
 	return &fallbackStore{
-		path:   filepath.Join(os.TempDir(), "sentient-cli-test-"+pkg.NewUUID()+".enc"),
+		path:   filepath.Join(os.TempDir(), "liorian-cli-test-"+pkg.NewUUID()+".enc"),
 		secret: mustRandomSecret(),
 	}
 }
@@ -115,7 +115,7 @@ func newFallbackStore(path string) *fallbackStore {
 func defaultFallbackPath() string {
 	dir, err := pkg.DataDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), "sentient-cli-credentials.enc")
+		return filepath.Join(os.TempDir(), "liorian-cli-credentials.enc")
 	}
 	return filepath.Join(dir, "credentials.enc")
 }
@@ -133,7 +133,7 @@ func mustRandomSecret() []byte {
 // (missing Secret Service, no Credential Manager, headless session…) means the
 // CLI must fall back to the encrypted file store.
 func keychainAvailable() bool {
-	_, err := keyring.Get(ServiceName, "__sentient-cli_probe__")
+	_, err := keyring.Get(ServiceName, "__liorian-cli_probe__")
 	return err == nil || isKeyringNotExist(err)
 }
 

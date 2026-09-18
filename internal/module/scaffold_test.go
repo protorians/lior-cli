@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // writeScaffoldFixture builds a minimal hello-world-style module mockup plus a
-// page mockup, mirroring the reference mockups used by `sentients create module`.
+// page mockup, mirroring the reference mockups used by `liorian create module`.
 func writeScaffoldFixture(t *testing.T) (mockupDir, pageMockup string) {
 	t.Helper()
 	base := t.TempDir()
@@ -26,7 +26,7 @@ func writeScaffoldFixture(t *testing.T) (mockupDir, pageMockup string) {
 	mustWrite(filepath.Join(mockupDir, "manifest.json"), `{
   "schemaVersion": 1,
   "id": "hello-world",
-  "domain": "mod.sentients.helloworld",
+  "domain": "mod.liorian.helloworld",
   "key": "HELLO_WORLD",
   "name": "Hello World",
   "description": "Module d'exemple pour l'onboarding des développeurs",
@@ -43,11 +43,11 @@ func writeScaffoldFixture(t *testing.T) (mockupDir, pageMockup string) {
 }
 `)
 
-	mustWrite(filepath.Join(mockupDir, "index.tsx"), `import {ModuleDeclarationInterface} from "@sentients/sdk/domain/entities/module.interface";
+	mustWrite(filepath.Join(mockupDir, "index.tsx"), `import {ModuleDeclarationInterface} from "@liorian/sdk/domain/entities/module.interface";
 import {HelloWorldWidget} from "./presentation/widgets/hello-world.widget";
 
 const helloWorldModule: ModuleDeclarationInterface = {
-    identifier: 'mod.sentients.helloworld',
+    identifier: 'mod.liorian.helloworld',
     key: 'HELLO_WORLD',
     name: 'Hello World',
     description: 'Module d\'exemple pour l\'onboarding des développeurs',

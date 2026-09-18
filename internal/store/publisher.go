@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/auth"
-	"github.com/protorians/sentient-cli/internal/module"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/auth"
+	"github.com/protorians/liorian-cli/internal/module"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
 // Developer store API paths (Raiton envelope, `/api` prefix).
@@ -335,7 +335,7 @@ func (c *Client) declareArtifact(ctx context.Context, productID, versionID, arch
 }
 
 // artifactSignature base64-encodes the `.SenMod.sig` signature file when present
-// (produced by `sentients sign`). The signature stays empty when absent.
+// (produced by `liorian sign`). The signature stays empty when absent.
 func artifactSignature(archivePath string) (string, error) {
 	raw, err := os.ReadFile(archivePath + ".sig")
 	if err != nil {
@@ -439,7 +439,7 @@ func slugFor(m *module.Manifest) string {
 
 // developerTypeFor maps the manifest module type to a DeveloperModuleType.
 // Remote web apps are the default (the "EXTERNAL" module type published in the
-// storefront consumes a remote frontend served by Sentient).
+// storefront consumes a remote frontend served by Liorian).
 func developerTypeFor(manifestType string) string {
 	switch strings.ToUpper(strings.TrimSpace(manifestType)) {
 	case "", "EXTERNAL", "WEB", "WEB_APP", "WEB_APP_REMOTE":

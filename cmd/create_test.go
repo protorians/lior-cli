@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/pkg"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +18,7 @@ func TestRunCreateUsesMockupAndPageFlags(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sentient.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -38,7 +38,7 @@ func TestRunCreateUsesMockupAndPageFlags(t *testing.T) {
 	write("manifest.json", `{
   "schemaVersion": 1,
   "id": "hello-world",
-  "domain": "mod.sentients.helloworld",
+  "domain": "mod.liorian.helloworld",
   "key": "HELLO_WORLD",
   "name": "Hello World",
   "description": "demo",
@@ -48,7 +48,7 @@ func TestRunCreateUsesMockupAndPageFlags(t *testing.T) {
 }
 `)
 	write("index.tsx", `const helloWorldModule = {
-    identifier: 'mod.sentients.helloworld',
+    identifier: 'mod.liorian.helloworld',
     name: 'Hello World',
     uri: '/hello-world',
 }
@@ -92,7 +92,7 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sentient.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -152,7 +152,7 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sentient.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -186,7 +186,7 @@ func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "src", "modules", "analytics"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "sentient.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

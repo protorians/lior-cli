@@ -1,4 +1,4 @@
-module github.com/protorians/sentient-cli
+module github.com/protorians/liorian-cli
 
 go 1.26.0
 

@@ -236,7 +236,7 @@ func TestSkipUpdate(t *testing.T) {
 			// "" means unset; only set the variable when it has a value.
 			setOrUnset(t, SkipUpdateEnvVar, tc.skip)
 			setOrUnset(t, "CI", tc.ci)
-			setOrUnset(t, "SENTIENT_CLI_UPDATE", tc.optIn)
+			setOrUnset(t, "LIORIAN_CLI_UPDATE", tc.optIn)
 			if got := skipUpdate(); got != tc.want {
 				t.Errorf("skipUpdate() = %v, want %v", got, tc.want)
 			}

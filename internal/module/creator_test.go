@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/sentient-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/config"
 )
 
 func TestModuleExists(t *testing.T) {

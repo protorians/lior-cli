@@ -6,27 +6,27 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 // templateRepo is the repository whose release zip is downloaded by
-// `sentients init` (spec FR-002). `SENTIENT_CLI_TEMPLATE_REPO` overrides it:
+// `liorian init` (spec FR-002). `LIORIAN_CLI_TEMPLATE_REPO` overrides it:
 // it accepts a GitHub repository URL, a direct zip download URL or a local
 // directory (useful for tests and mirrors).
-const defaultTemplateRepo = "https://github.com/protorians/sentients-socle"
+const defaultTemplateRepo = "https://github.com/protorians/liorian-socle"
 
 func templateRepo() string {
-	if v := os.Getenv("SENTIENT_CLI_TEMPLATE_REPO"); v != "" {
+	if v := os.Getenv("LIORIAN_CLI_TEMPLATE_REPO"); v != "" {
 		return v
 	}
 	return defaultTemplateRepo
 }
 
-// packageManagers is the detection + install order for `sentients init`.
+// packageManagers is the detection + install order for `liorian init`.
 var packageManagers = []struct {
 	name       string
 	installCmd []string
@@ -39,9 +39,9 @@ var packageManagers = []struct {
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize a new Sentient project",
-	Long: `Initializes a new Sentient project by downloading the release
-archive of the template protorians/sentients-socle (ZIP) and installing
+	Short: "Initialize a new Liorian project",
+	Long: `Initializes a new Liorian project by downloading the release
+archive of the template protorians/liorian-socle (ZIP) and installing
 the dependencies.
 
 The package manager is detected automatically (bun, pnpm, yarn, npm)
@@ -69,7 +69,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	// Step 1 — project name
 	if projectName == "" {
 		if !tui.IsInteractive() {
-			projectName = "sentients-socle"
+			projectName = "liorian-socle"
 		} else {
 			defaultName := defaultProjectName()
 			name, err := tui.AskText(i18n.T("init.prompt.name"), defaultName)
@@ -204,7 +204,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		warn(i18n.Tf("init.warn.install", err.Error()))
 	}
 
-	// Step 6 — write sentients.config.json
+	// Step 6 — write liorian.config.json
 	cfg := config.Default()
 	cfg.Project.Name = projectName
 	cfg.Project.PackageManager = pmName
@@ -222,8 +222,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println(s.StepsList(i18n.T("init.next"),
 		s.Info.Render("cd "+targetDir),
-		s.Info.Render("sentients connect"),
-		s.Info.Render("sentients create module"),
+		s.Info.Render("liorian connect"),
+		s.Info.Render("liorian create module"),
 	))
 	fmt.Println()
 	return nil
@@ -235,7 +235,7 @@ func defaultProjectName() string {
 			return base
 		}
 	}
-	return "sentients-socle"
+	return "liorian-socle"
 }
 
 // destAction describes how to reuse an existing, non-empty destination.
@@ -271,7 +271,7 @@ func clearDirContents(dir string) error {
 // confirmExistingDir asks for approval before reusing a destination that
 // already contains files. Interactive runs let the user Cancel, clear/delete
 // the destination, or merge the template into it. Non-interactive runs fall
-// back to SENTIENT_CLI_YES (approve the clear) or refuse.
+// back to LIORIAN_CLI_YES (approve the clear) or refuse.
 func confirmExistingDir(dir string, isCWD bool) (destAction, error) {
 	if !tui.IsInteractive() {
 		if os.Getenv(tui.ConfirmYesEnv) != "" {
@@ -352,7 +352,7 @@ func mergeTemplateInto(repo, channel, dest string, report func(done, total int64
 	if err != nil {
 		return fmt.Errorf("failed to resolve destination %s: %w", dest, err)
 	}
-	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".sentients-init-*")
+	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".liorian-init-*")
 	if err != nil {
 		return fmt.Errorf("failed to create a temporary directory: %w", err)
 	}

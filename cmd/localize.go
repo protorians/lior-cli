@@ -4,15 +4,15 @@ import (
 	"os"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/config"
-	"github.com/protorians/sentient-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/config"
+	"github.com/protorians/liorian-cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
 // i18n annotation keys storing the translation key of a command's help text.
 const (
-	i18nShortKey = "sentient.i18n.short"
-	i18nLongKey  = "sentient.i18n.long"
+	i18nShortKey = "liorian.i18n.short"
+	i18nLongKey  = "liorian.i18n.long"
 )
 
 // i18nHelp marks the Short and Long help texts of a command with their
@@ -53,8 +53,8 @@ func i18nFlag(cmd *cobra.Command, name, key string) {
 // ResolveLanguage picks the UI language in order of precedence:
 //
 //  1. the `--lang` flag,
-//  2. the `SENTIENT_CLI_LANG` environment variable,
-//  3. the `"cli".lang` key of `sentients.config.json`,
+//  2. the `LIORIAN_CLI_LANG` environment variable,
+//  3. the `"cli".lang` key of `liorian.config.json`,
 //  4. the OS locale (LC_ALL / LC_MESSAGES / LANG).
 //
 // It applies the selection and returns the effective catalog code.
@@ -62,7 +62,7 @@ func ResolveLanguage(args []string) string {
 	if v := langFromArgs(args); v != "" {
 		return i18n.Use(v)
 	}
-	if v := os.Getenv("SENTIENT_CLI_LANG"); v != "" {
+	if v := os.Getenv("LIORIAN_CLI_LANG"); v != "" {
 		return i18n.Use(v)
 	}
 	if lang, ok := configLang(); ok {
@@ -90,7 +90,7 @@ func langFromArgs(args []string) string {
 }
 
 // configLang reads the `"cli".lang` key from the project config when the
-// current directory sits inside a Sentient project.
+// current directory sits inside a Liorian project.
 func configLang() (string, bool) {
 	cwd, err := os.Getwd()
 	if err != nil {

@@ -7,17 +7,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/sentient-cli/internal/auth"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/auth"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var connectCmd = &cobra.Command{
 	Use:   "connect",
-	Short: "Connect to Sentient Connect",
-	Long: `Authenticates the developer with their sentient-connect account
+	Short: "Connect to Liorian Connect",
+	Long: `Authenticates the developer with their liorian-connect account
 (email + password, MFA supported) and stores the credentials securely
 (system keychain).`,
 	Args: cobra.NoArgs,
@@ -58,8 +58,8 @@ func runConnect(cmd *cobra.Command) error {
 	}
 
 	// Credentials input. In non-interactive (CI) mode the values come from
-	// the environment (SENTIENT_CLI_CONNECT_EMAIL/PASSWORD/MFA_CODE) — the
-	// same pattern as `SENTIENT_CLI_YES`.
+	// the environment (LIORIAN_CLI_CONNECT_EMAIL/PASSWORD/MFA_CODE) — the
+	// same pattern as `LIORIAN_CLI_YES`.
 	email := ""
 	if tui.IsInteractive() {
 		value, err := tui.AskText(i18n.T("connect.prompt.email"), "")
@@ -68,7 +68,7 @@ func runConnect(cmd *cobra.Command) error {
 		}
 		email = strings.TrimSpace(value)
 	} else {
-		email = strings.TrimSpace(os.Getenv("SENTIENT_CLI_CONNECT_EMAIL"))
+		email = strings.TrimSpace(os.Getenv("LIORIAN_CLI_CONNECT_EMAIL"))
 	}
 	if email == "" {
 		return pkg.NewError(i18n.T("cat.authentication"), i18n.T("connect.error.email"), pkg.ExitAuth)
@@ -82,7 +82,7 @@ func runConnect(cmd *cobra.Command) error {
 		}
 		password = value
 	} else {
-		password = os.Getenv("SENTIENT_CLI_CONNECT_PASSWORD")
+		password = os.Getenv("LIORIAN_CLI_CONNECT_PASSWORD")
 	}
 	if password == "" {
 		return pkg.NewError(i18n.T("cat.authentication"), i18n.T("connect.error.password"), pkg.ExitAuth)
@@ -90,7 +90,7 @@ func runConnect(cmd *cobra.Command) error {
 
 	connector := auth.NewConnector()
 	base, source := auth.DebugInfo()
-	debugf("API sentient-connect : %s (source: %s)", base, source)
+	debugf("API liorian-connect : %s (source: %s)", base, source)
 
 	signIn, err := tui.RunWithSpinner(i18n.T("connect.spinner.checking"), func() (*auth.SignInResponse, error) {
 		return connector.SignIn(ctx, auth.SignInRequest{Email: email, Password: password})
@@ -136,7 +136,7 @@ func runMFA(ctx context.Context, authn *auth.Authenticator) (*auth.VerifyRespons
 		}
 		if !tui.IsInteractive() {
 			// CI: read the verification code from the environment.
-			if code := os.Getenv("SENTIENT_CLI_MFA_CODE"); code != "" {
+			if code := os.Getenv("LIORIAN_CLI_MFA_CODE"); code != "" {
 				return code, nil
 			}
 			return "", pkg.NewError(i18n.T("cat.mfa"), i18n.T("connect.mfa.non_interactive"), pkg.ExitMFA)

@@ -1,17 +1,17 @@
-# TC-019 — `sentients help` without arguments prints the general help.
-exec $SENTIENTS --no-color help
-stdout 'Sentient CLI is the one development tool'
+# TC-019 — `liorian help` without arguments prints the general help.
+exec $LIORIAN --no-color help
+stdout 'Liorian CLI is the one development tool'
 stdout 'Available Commands:'
 stdout '  pack '
 
-# TC-020 — `sentients help` with a command prints that command's help.
-exec $SENTIENTS --no-color help pack
+# TC-020 — `liorian help` with a command prints that command's help.
+exec $LIORIAN --no-color help pack
 stdout 'Builds a module'
 stdout 'Usage:'
-stdout '  sentients pack \[<module>\[@<version>\]\] \[flags\]'
+stdout '  liorian pack \[<module>\[@<version>\]\] \[flags\]'
 
-# TC-021 — `sentients -v` / `--version` affiche la version.
-exec $SENTIENTS --no-color -v
-stdout '^sentients vdev'
-exec $SENTIENTS --no-color --version
-stdout '^sentients vdev'
+# TC-021 — `liorian -v` / `--version` affiche la version.
+exec $LIORIAN --no-color -v
+stdout '^liorian vdev'
+exec $LIORIAN --no-color --version
+stdout '^liorian vdev'

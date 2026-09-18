@@ -1,8 +1,8 @@
 {
-  "$schema": "../../node_modules/@sentients/sdk/schemas/module.schema.json",
+  "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
   "schemaVersion": 1,
   "id": "hello-world",
-  "domain": "mod.sentients.helloworld",
+  "domain": "mod.liorian.helloworld",
   "key": "HELLO_WORLD",
   "name": "Hello World",
   "description": "Module d'exemple pour l'onboarding des développeurs",
@@ -12,8 +12,8 @@
   "entry": "index.tsx",
   "uri": "/hello-world",
   "publisher": {
-    "id": "sentient",
-    "name": "Sentient Workspace"
+    "id": "liorian",
+    "name": "Liorian Workspace"
   },
   "platforms": {
     "web": {
@@ -56,7 +56,7 @@
   },
   "optionalRequirements": {},
   "dependencies": {
-    "@sentients/sdk": "workspace:*",
+    "@liorian/sdk": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-table": "^8.21.3",
     "date-fns": "^4.4.0",

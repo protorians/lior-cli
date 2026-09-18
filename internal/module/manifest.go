@@ -11,13 +11,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
 )
 
-// Manifest is the metadata file of a Sentient module (`manifest.json`).
+// Manifest is the metadata file of a Liorian module (`manifest.json`).
 //
-// The canonical schema (`@sentients/sdk/schemas/module.schema.json`) admits
+// The canonical schema (`@liorian/sdk/schemas/module.schema.json`) admits
 // additional properties: unknown top-level fields are preserved in Extra and
 // re-emitted on Marshal so a round-trip never loses forward-compatible data.
 type Manifest struct {
@@ -223,7 +223,7 @@ func NewManifest(name, description string) Manifest {
 	return Manifest{
 		SchemaVersion: 1,
 		ID:            name,
-		Domain:        "mod.sentients." + name,
+		Domain:        "mod.liorian." + name,
 		Key:           upperKey,
 		Name:          displayName(name),
 		Description:   description,
@@ -254,7 +254,7 @@ func NewManifest(name, description string) Manifest {
 		IsDefault:            false,
 		Requirements:         map[string]any{},
 		OptionalRequirements: map[string]string{},
-		Dependencies:         map[string]string{"@sentients/sdk": "workspace:*"},
+		Dependencies:         map[string]string{"@liorian/sdk": "workspace:*"},
 		DevDependencies:      map[string]string{},
 		Widgets:              []string{},
 		Routines:             []string{},

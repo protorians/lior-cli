@@ -1,19 +1,19 @@
-# sentients auth — OAuth2 authorization-code + PKCE (CI mode).
-# SENTIENT_CLI_AUTH_CODE feeds the code directly, skipping the browser + the
+# liorian auth — OAuth2 authorization-code + PKCE (CI mode).
+# LIORIAN_CLI_AUTH_CODE feeds the code directly, skipping the browser + the
 # local loopback callback server.
 mkdir project
 cd project
 
 # Without a code, the command refuses (exit 2 / ExitAuth).
-! exec $SENTIENTS --no-color auth
+! exec $LIORIAN --no-color auth
 stderr 'Authentication'
-exec sh -c '"$SENTIENTS" --no-color auth >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color auth >/dev/null 2>&1; echo $?'
 stdout '^2$'
 
 # With a code, the token is exchanged at the mock /oauth/token and the session
 # (access token + refresh token) is persisted.
-env SENTIENT_CLI_AUTH_CODE=the-code
-exec $SENTIENTS --no-color auth
+env LIORIAN_CLI_AUTH_CODE=the-code
+exec $LIORIAN --no-color auth
 stdout '✓ Authenticated via OAuth2'
 stdout 'Token type : Bearer'
-exists $HOME/.sentient-cli/credentials.enc
+exists $HOME/.liorian-cli/credentials.enc

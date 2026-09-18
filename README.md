@@ -1,7 +1,7 @@
-# Sentient CLI
+# Liorian CLI
 
 Outil de développement en ligne de commande pour créer, maintenir et publier
-des modules dans l'écosystème Sentient (spécification : `docs/specs/sentient.md`).
+des modules dans l'écosystème Liorian (spécification : `docs/specs/liorian.md`).
 
 Cycle de vie : `init → create → develop → debug → audit → pack → sign → publish`
 
@@ -17,34 +17,34 @@ Cycle de vie : `init → create → develop → debug → audit → pack → sig
 ## Installation (développement)
 
 ```bash
-go build -o sentients .
-./sentients --help
+go build -o liorian .
+./liorian --help
 ```
 
 ## Commandes
 
 | Commande | Description |
 |----------|-------------|
-| `sentients init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `protorians/sentients-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
-| `sentients create module [nom] [--domain d] [--type INTERNAL\|EXTERNAL] [--category CAT] [--mockup dir] [--page-mockup file]` | Créer un module dans `external_modules/` depuis le mockup hello-world (renommé avec le nom du module), surchargeable via `--mockup` / `--page-mockup` (`SENTIENT_MODULE_MOCKUP` / `SENTIENT_PAGE_MOCKUP`) ; `--type` (défaut `EXTERNAL`) et `--category` (défaut `SYSTEM`) sont écrits dans le manifeste et la déclaration |
-| `sentients connect` | Authentification via sentient-connect (email + mot de passe, MFA TOTP / backup codes) |
-| `sentients auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `sentient-auth`) ; mode CI via `SENTIENT_CLI_AUTH_CODE` |
-| `sentients disconnect` | Invalider le token côté serveur et supprimer les credentials |
-| `sentients pack [module]` | Construire l'archive `.SenMod` dans `.sentients/build/` |
-| `sentients sign keygen` | Générer une paire de clés Ed25519 pour la signature |
-| `sentients sign [module]` | Signer l'archive `.SenMod` d'un module |
-| `sentients sign verify [module]` | Vérifier la signature d'un module |
-| `sentients publish [module]` | Auditer, packer et publier un module sur le store |
-| `sentients link` / `unlink` | Associer un module local à un module distant du store (token) |
-| `sentients audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
-| `sentients debug [module]` | Valider le module et lancer un build de diagnostic |
-| `sentients test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `sentients.config.json` ; exit `13` en cas d'échec |
-| `sentients -v` / `--version` | Afficher la version |
-| `sentients help` | Aide contextuelle |
+| `liorian init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `protorians/liorian-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
+| `liorian create module [nom] [--domain d] [--type INTERNAL\|EXTERNAL] [--category CAT] [--mockup dir] [--page-mockup file]` | Créer un module dans `external_modules/` depuis le mockup hello-world (renommé avec le nom du module), surchargeable via `--mockup` / `--page-mockup` (`LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) ; `--type` (défaut `EXTERNAL`) et `--category` (défaut `SYSTEM`) sont écrits dans le manifeste et la déclaration |
+| `liorian connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
+| `liorian auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |
+| `liorian disconnect` | Invalider le token côté serveur et supprimer les credentials |
+| `liorian pack [module]` | Construire l'archive `.SenMod` dans `.liorian/build/` |
+| `liorian sign keygen` | Générer une paire de clés Ed25519 pour la signature |
+| `liorian sign [module]` | Signer l'archive `.SenMod` d'un module |
+| `liorian sign verify [module]` | Vérifier la signature d'un module |
+| `liorian publish [module]` | Auditer, packer et publier un module sur le store |
+| `liorian link` / `unlink` | Associer un module local à un module distant du store (token) |
+| `liorian audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
+| `liorian debug [module]` | Valider le module et lancer un build de diagnostic |
+| `liorian test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `liorian.config.json` ; exit `13` en cas d'échec |
+| `liorian -v` / `--version` | Afficher la version |
+| `liorian help` | Aide contextuelle |
 
 ## Configuration
 
-`sentients.config.json` (optionnel, à la racine du projet) :
+`liorian.config.json` (optionnel, à la racine du projet) :
 
 ```json
 {
@@ -53,7 +53,7 @@ go build -o sentients .
     "packageManager": "bun"
   },
   "publish": {
-    "defaultRegistry": "https://store.sentient.dev",
+    "defaultRegistry": "https://store.liorian.dev",
     "autoAudit": true
   },
   "debug": {
@@ -70,7 +70,7 @@ go build -o sentients .
 }
 ```
 
-> Le bloc `test` est écrit automatiquement par `sentients test` : `packageManager` reprend le
+> Le bloc `test` est écrit automatiquement par `liorian test` : `packageManager` reprend le
 > gestionnaire choisi à l'installation, `runner` le package de test par défaut et
 > `modules.<domaine>.runner` une surcharge par module (`vitest`, `jest`, `mocha`, `ava`, un package
 > personnalisé, `builtin` ou `script`).
@@ -79,20 +79,20 @@ go build -o sentients .
 
 | Variable | Description |
 |----------|-------------|
-| `SENTIENT_AUTH_API` | URL de base de l'API sentient-auth (authentications) |
-| `SENTIENT_CLI_AUTH_CODE` | Code d'autorisation OAuth2 pour `sentients auth` en mode non interactif (CI) |
-| `SENTIENT_CLI_DEBUG` | Active les logs détaillés (`--verbose` équivalent) |
-| `SENTIENT_CLI_LANG` | Force la langue d'interface (`fr-FR`, `en-US`) |
-| `SENTIENT_MODULE_MOCKUP` | Répertoire du module de référence pour `create module` (repli sur le mockup embarqué) |
-| `SENTIENT_PAGE_MOCKUP` | Gabarit `page.tsx` pour `create module` (repli sur le mockup embarqué) |
-| `SENTIENT_CLI_TEMPLATE_REPO` | Source du template `init` (repo GitHub, URL ZIP directe ou répertoire local) |
+| `LIORIAN_AUTH_API` | URL de base de l'API liorian-auth (authentications) |
+| `LIORIAN_CLI_AUTH_CODE` | Code d'autorisation OAuth2 pour `liorian auth` en mode non interactif (CI) |
+| `LIORIAN_CLI_DEBUG` | Active les logs détaillés (`--verbose` équivalent) |
+| `LIORIAN_CLI_LANG` | Force la langue d'interface (`fr-FR`, `en-US`) |
+| `LIORIAN_MODULE_MOCKUP` | Répertoire du module de référence pour `create module` (repli sur le mockup embarqué) |
+| `LIORIAN_PAGE_MOCKUP` | Gabarit `page.tsx` pour `create module` (repli sur le mockup embarqué) |
+| `LIORIAN_CLI_TEMPLATE_REPO` | Source du template `init` (repo GitHub, URL ZIP directe ou répertoire local) |
 
 ## Sécurité
 
 - Credentials stockés dans le keychain système, jamais en clair sur disque
-- Repli : fichier chiffré AES-256-GCM (`~/.sentient-cli/credentials.enc`)
-- Clés de signature Ed25519 dans le keychain (service `sentient-cli-signing`),
-  avec fichier chiffré en repli (`~/.sentient-cli/signing.enc`)
+- Repli : fichier chiffré AES-256-GCM (`~/.liorian-cli/credentials.enc`)
+- Clés de signature Ed25519 dans le keychain (service `liorian-cli-signing`),
+  avec fichier chiffré en repli (`~/.liorian-cli/signing.enc`)
 - Archives `.SenMod` : ZIP contenant uniquement `external_modules/<module>/` +
   `public/assets/<module>/` + `src/app/<module>/` — aucun token ni credential
 
@@ -107,7 +107,7 @@ go vet ./...
 
 ```bash
 # Binaire local
-go build -ldflags "-X main.version=$(git describe --tags) -X main.commit=$(git rev-parse --short HEAD)" -o sentients .
+go build -ldflags "-X main.version=$(git describe --tags) -X main.commit=$(git rev-parse --short HEAD)" -o liorian .
 
 # Release multi-plateforme
 goreleaser release --clean

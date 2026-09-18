@@ -9,10 +9,10 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/protorians/sentient-cli/internal/appconfig"
-	"github.com/protorians/sentient-cli/internal/i18n"
-	"github.com/protorians/sentient-cli/internal/pkg"
-	"github.com/protorians/sentient-cli/internal/tui"
+	"github.com/protorians/liorian-cli/internal/appconfig"
+	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/liorian-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -23,20 +23,20 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "sentients",
-	Short: "Sentient CLI — Development tool for Sentient modules",
-	Long: `Sentient CLI is the one development tool to create, maintain
-and publish modules in the Sentient ecosystem.
+	Use:   "liorian",
+	Short: "Liorian CLI — Development tool for Liorian modules",
+	Long: `Liorian CLI is the one development tool to create, maintain
+and publish modules in the Liorian ecosystem.
 
 Full lifecycle: init → create → develop → debug → audit → pack → sign → publish.
 `,
-	Example: `  sentients init
-  sentients create module
-  sentients connect
-  sentients pack com.example.blog-manager
-  sentients sign com.example.blog-manager
-  sentients publish com.example.blog-manager
-  sentients audit`,
+	Example: `  liorian init
+  liorian create module
+  liorian connect
+  liorian pack com.example.blog-manager
+  liorian sign com.example.blog-manager
+  liorian publish com.example.blog-manager
+  liorian audit`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -64,7 +64,7 @@ func init() {
 	i18nFlag(rootCmd, "no-color", "flag.no_color")
 	i18nFlag(rootCmd, "lang", "flag.lang")
 
-	rootCmd.SetVersionTemplate("sentients {{.Version}}\n")
+	rootCmd.SetVersionTemplate("liorian {{.Version}}\n")
 
 	// Themed help: section labels are tinted when colors are enabled, and
 	// degrade to plain text under --no-color (so E2E regexes stay stable).
@@ -133,7 +133,7 @@ func setupHelpTemplates(root *cobra.Command) {
 
 	// Help template: brand wordmark on top of the main screen, then the
 	// description and the (shared) usage template.
-	root.SetHelpTemplate(`{{if eq .Name "sentients"}}{{wordmark}}{{println}}{{println}}{{end}}{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
+	root.SetHelpTemplate(`{{if eq .Name "liorian"}}{{wordmark}}{{println}}{{println}}{{end}}{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
 
 {{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}`)
 }
@@ -193,10 +193,10 @@ func printCmdError(err error) {
 // debugf logs a verbose line to stderr when --verbose (or the debug env var)
 // is enabled (spec NFR-005).
 func debugf(format string, args ...any) {
-	if !flagVerbose && os.Getenv("SENTIENT_CLI_DEBUG") == "" {
+	if !flagVerbose && os.Getenv("LIORIAN_CLI_DEBUG") == "" {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[sentients] "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "[liorian] "+format+"\n", args...)
 }
 
 // warn prints a warning to stderr.

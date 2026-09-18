@@ -1,11 +1,11 @@
 # Build artifacts
-/sentients
+/liorian
 /dist/
-npm/sentient-cli/bin/sentients
-npm/sentient-cli/bin/sentients.exe
+npm/liorian-cli/bin/liorian
+npm/liorian-cli/bin/liorian.exe
 
 # Local build outputs
-.sentients/
+.liorian/
 
 # Go
 *.test
