@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Sentient CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-16 — version courante du code : `v0.10.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.10.0).
+> Dernière mise à jour : 2026-09-18 — version courante du code : `v0.11.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/sentient.md` (statut *active* — implémentée, dernière release 0.11.0).
 
 ---
 
@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `sentient-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.10.0) |
+| CI/CD GoReleaser + package npm (`@sentients/cli`) | ✅ en place (releases v0.0.1 → v0.11.0) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -132,11 +132,13 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   (`test.runner` / `test.modules.<domaine>.runner`, sentinelles `script`/`builtin`), script `test`
   du `package.json` (module puis projet), catalogue installé (`vitest run`,
   `jest --ci --runInBand`, `mocha`, `ava`), runner intégré (`bun test`) — **uniquement si le module
-  contient des fichiers de test** (`*.test.*`, `*.spec.*`, `__tests__/`) ; sinon `WARNING`
-  (`no_test_script`), jamais un faux « OK ».
-- **Skip sans fichier de test** : un module sans fichier de test est **ignoré** (statut `SKIPPED`,
-  étape `NOTICE`, `test.no_tests`) même si un script ou un runner est configuré — la commande n'est
-  pas lancée, ce qui évite l'échec « No test files found » du runner et le faux `ERROR`.
+  contient des fichiers ou dossiers de test** (fichiers `*.test.*` / `*.spec.*`, ou dossier
+  `__tests__/`, `test/`, `tests/`, `spec/`, `specs/`) ; sinon `WARNING` (`no_test_script`), jamais
+  un faux « OK ».
+- **Skip sans fichier ni dossier de test** : un module sans fichier ni dossier de test est
+  **ignoré** (statut `SKIPPED`, étape `NOTICE`, `test.no_tests`) même si un script ou un runner est
+  configuré — la commande n'est pas lancée, ce qui évite l'échec « No test files found » du runner
+  et le faux `ERROR`.
 - **Installation** : un package configuré mais absent est installé en dépendance de développement
   dans le périmètre du gestionnaire (`pkg.DevDependencyArgs`). **Sélection interactive** (code
   principal, état d'installation, package personnalisé) **avant** la trace pas-à-pas.

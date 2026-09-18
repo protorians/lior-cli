@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.11.0] - 2026-09-18
+
+### Added
+- **Dossiers de test conventionnels détectés** — `sentients test` reconnaît désormais un module
+  comme testable dès qu'il possède un dossier de test conventionnel (`__tests__/`, `__test__/`,
+  `test/`, `tests/`, `spec/`, `specs/`), même lorsque ses fichiers n'ont pas le nommage
+  `*.test.*` / `*.spec.*`. Ces modules ne sont plus faussement ignorés (`SKIPPED`) : la commande est
+  bien lancée, ce qui élimine les faux `WARNING`/`ERROR` « No test files found ». Les dossiers
+  `node_modules` et `.git` restent exclus de la détection.
+
+### Changed
+- **Spec `test` alignée** — `docs/specs/sentient.md` §5.15 (détection des fichiers **ou dossiers**
+  de test) et `docs/rapport-implementation.md` synchronisés.
+
 ## [v0.10.0] - 2026-09-16
 
 ### Added

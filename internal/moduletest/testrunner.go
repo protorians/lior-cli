@@ -754,8 +754,21 @@ func readPackageScript(path, name string) (string, bool) {
 	return v, ok
 }
 
+// testDirNames are the conventional directories that hold test files. Their
+// presence alone marks a module as testable, even when the files they contain
+// do not follow the *.test.* / *.spec.* naming convention.
+var testDirNames = map[string]bool{
+	"__tests__": true,
+	"__test__":  true,
+	"test":      true,
+	"tests":     true,
+	"spec":      true,
+	"specs":     true,
+}
+
 // moduleHasTests reports whether the module directory contains any test file
-// (*.test.* / *.spec.* or a __tests__ directory), excluding node_modules.
+// (*.test.* / *.spec.*) or test directory (__tests__/, test/, tests/, spec/,
+// …), excluding node_modules and .git.
 func moduleHasTests(moduleDir string) bool {
 	found := false
 	_ = filepath.WalkDir(moduleDir, func(path string, d os.DirEntry, err error) error {
@@ -763,10 +776,12 @@ func moduleHasTests(moduleDir string) bool {
 			return nil
 		}
 		if d.IsDir() {
-			if d.Name() == "node_modules" || d.Name() == ".git" {
+			name := strings.ToLower(d.Name())
+			if name == "node_modules" || name == ".git" {
 				return filepath.SkipDir
 			}
-			if d.Name() == "__tests__" {
+			// The walk root is the module itself, not a test directory.
+			if path != moduleDir && testDirNames[name] {
 				found = true
 				return filepath.SkipDir
 			}

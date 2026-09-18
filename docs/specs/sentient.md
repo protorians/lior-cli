@@ -28,7 +28,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Sentient |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.10.0) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.11.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `sentient.md` |
 
@@ -1411,15 +1411,17 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
    - Repli : **package de test installé** du catalogue principal (`vitest run`,
      `jest --ci --runInBand`, `mocha`, `ava` — `node_modules` du module → `node_modules` racine →
      PATH), puis **runner intégré** (`bun test`) lorsque le gestionnaire est `bun`, **uniquement si
-     le module contient des fichiers de test** (`*.test.*`, `*.spec.*` ou `__tests__/`)
+     le module contient des fichiers ou dossiers de test** (fichiers `*.test.*` / `*.spec.*`, ou
+     dossier conventionnel `__tests__/`, `test/`, `tests/`, `spec/`, `specs/`)
    - Si aucun package n'est disponible, le développeur **choisit** parmi le catalogue (avec
      l'état d'installation) ou saisit un package personnalisé, puis valide son installation
      (mode interactif uniquement) ; le choix est persisté
    - Aucun script ni runner ni fichier de test → statut `WARNING` (`no_test_script`, avec la liste
      des packages disponibles), jamais un faux « OK »
-   - Un module **sans fichier de test** (`*.test.*`, `*.spec.*`, `__tests__/`) est **ignoré**
-     (statut `SKIPPED`, étape `NOTICE`, `test.no_tests`) même lorsqu'un script ou un runner est
-     configuré : la commande n'est **pas** lancée, ce qui évite l'échec « No test files found »
+   - Un module **sans fichier ni dossier de test** (`*.test.*`, `*.spec.*`, ou dossier
+     `__tests__/`, `test/`, `tests/`, `spec/`, `specs/`) est **ignoré** (statut `SKIPPED`, étape
+     `NOTICE`, `test.no_tests`) même lorsqu'un script ou un runner est configuré : la commande n'est
+     **pas** lancée, ce qui évite l'échec « No test files found »
 5. **Persister** le package de test résolu (et le gestionnaire utilisé) dans la section `test` de
    `sentients.config.json`, pour que les exécutions suivantes n'aient plus à détecter/choisir.
 6. **Exécuter la commande** sous une étape dédiée `RUNNING` qui se met à jour **en place** : elle

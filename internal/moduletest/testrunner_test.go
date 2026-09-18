@@ -137,6 +137,40 @@ func TestTestModuleSkipsWithoutTestFiles(t *testing.T) {
 	}
 }
 
+func TestModuleHasTests(t *testing.T) {
+	write := func(t *testing.T, path, content string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{"no test", "index.tsx", false},
+		{"test file", filepath.Join("src", "foo.test.ts"), true},
+		{"spec file", filepath.Join("src", "foo.spec.tsx"), true},
+		{"test directory", filepath.Join("tests", "smoke.ts"), true},
+		{"spec directory", filepath.Join("spec", "helpers.ts"), true},
+		{"node_modules ignored", filepath.Join("node_modules", "pkg", "foo.test.ts"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, filepath.Join(dir, tc.path), "")
+			if got := moduleHasTests(dir); got != tc.want {
+				t.Errorf("moduleHasTests(%q) = %v, want %v", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestTestModuleRunsPackageScript(t *testing.T) {
 	root := setupTestProject(t)
 	createTestModule(t, root, "my-module")
