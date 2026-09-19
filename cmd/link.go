@@ -6,13 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/auth"
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/module"
-	"github.com/protorians/liorian-cli/internal/pkg"
-	"github.com/protorians/liorian-cli/internal/store"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/auth"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/store"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 

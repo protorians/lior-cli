@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 	"golang.org/x/term"
 )
 

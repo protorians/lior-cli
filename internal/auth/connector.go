@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/protorians/liorian-cli/internal/appconfig"
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/appconfig"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // EnvAPIBase overrides the resolved API base URL.

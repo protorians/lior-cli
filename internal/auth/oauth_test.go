@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func TestGeneratePKCE(t *testing.T) {
@@ -47,7 +47,7 @@ func TestRandomStateUnique(t *testing.T) {
 
 func TestAuthorizationURL(t *testing.T) {
 	got, err := AuthorizationURL("https://auth.example.com", "/oauth/authorize",
-		"liorian-cli", "http://127.0.0.1:4242/callback", "openid profile", "challenge-abc", "state-xyz")
+		"lior-cli", "http://127.0.0.1:4242/callback", "openid profile", "challenge-abc", "state-xyz")
 	if err != nil {
 		t.Fatalf("AuthorizationURL: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestAuthorizationURL(t *testing.T) {
 	if q.Get("response_type") != "code" {
 		t.Errorf("response_type = %q", q.Get("response_type"))
 	}
-	if q.Get("client_id") != "liorian-cli" {
+	if q.Get("client_id") != "lior-cli" {
 		t.Errorf("client_id = %q", q.Get("client_id"))
 	}
 	if q.Get("redirect_uri") != "http://127.0.0.1:4242/callback" {
@@ -99,7 +99,7 @@ func TestExchangeAuthorizationCode(t *testing.T) {
 	defer server.Close()
 
 	tok, err := ExchangeAuthorizationCode(t.Context(), pkg.NewClient(server.URL), "/oauth/token",
-		"liorian-cli", "http://127.0.0.1:1/callback", "the-code", "the-verifier")
+		"lior-cli", "http://127.0.0.1:1/callback", "the-code", "the-verifier")
 	if err != nil {
 		t.Fatalf("ExchangeAuthorizationCode: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestExchangeAuthorizationCode(t *testing.T) {
 		t.Errorf("TokenResponse = %+v", tok)
 	}
 	if gotForm.Get("grant_type") != "authorization_code" || gotForm.Get("code") != "the-code" ||
-		gotForm.Get("code_verifier") != "the-verifier" || gotForm.Get("client_id") != "liorian-cli" {
+		gotForm.Get("code_verifier") != "the-verifier" || gotForm.Get("client_id") != "lior-cli" {
 		t.Errorf("form = %v", gotForm)
 	}
 }
@@ -120,7 +120,7 @@ func TestExchangeAuthorizationCodeEnvelope(t *testing.T) {
 	defer server.Close()
 
 	tok, err := ExchangeAuthorizationCode(t.Context(), pkg.NewClient(server.URL), "/oauth/token",
-		"liorian-cli", "http://127.0.0.1:1/callback", "code", "verifier")
+		"lior-cli", "http://127.0.0.1:1/callback", "code", "verifier")
 	if err != nil {
 		t.Fatalf("ExchangeAuthorizationCode (envelope): %v", err)
 	}
@@ -137,7 +137,7 @@ func TestExchangeAuthorizationCodeError(t *testing.T) {
 	defer server.Close()
 
 	_, err := ExchangeAuthorizationCode(t.Context(), pkg.NewClient(server.URL), "/oauth/token",
-		"liorian-cli", "http://127.0.0.1:1/callback", "code", "verifier")
+		"lior-cli", "http://127.0.0.1:1/callback", "code", "verifier")
 	if err == nil {
 		t.Fatal("ExchangeAuthorizationCode doit échouer")
 	}
@@ -157,7 +157,7 @@ func TestExchangeMissingAccessToken(t *testing.T) {
 	defer server.Close()
 
 	if _, err := ExchangeAuthorizationCode(t.Context(), pkg.NewClient(server.URL), "/oauth/token",
-		"liorian-cli", "http://127.0.0.1:1/callback", "code", "verifier"); err == nil {
+		"lior-cli", "http://127.0.0.1:1/callback", "code", "verifier"); err == nil {
 		t.Fatal("une réponse sans access_token doit échouer")
 	}
 }

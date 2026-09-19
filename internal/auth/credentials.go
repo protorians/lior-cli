@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 	"github.com/zalando/go-keyring"
 )
 
 // Keychain keys storing credentials.
 const (
-	ServiceName = "liorian-cli"
-	prefix      = "liorian-cli."
+	ServiceName = "lorian-cli"
+	prefix      = "lorian-cli."
 
 	KeyAccessToken = prefix + "access_token"
 	KeyMFAToken    = prefix + "mfa_token"
@@ -53,7 +53,7 @@ type Store interface {
 	Set(key string, value string) error
 	// Delete removes a single key.
 	Delete(kind string) error
-	// DeleteAll removes every liorian-cli credential.
+	// DeleteAll removes every lorian-cli credential.
 	DeleteAll() error
 }
 
@@ -97,7 +97,7 @@ func NewStore() Store {
 // not touch either the system keychain or the user data directory.
 func NewStoreVolatile() Store {
 	return &fallbackStore{
-		path:   filepath.Join(os.TempDir(), "liorian-cli-test-"+pkg.NewUUID()+".enc"),
+		path:   filepath.Join(os.TempDir(), "lorian-cli-test-"+pkg.NewUUID()+".enc"),
 		secret: mustRandomSecret(),
 	}
 }
@@ -115,7 +115,7 @@ func newFallbackStore(path string) *fallbackStore {
 func defaultFallbackPath() string {
 	dir, err := pkg.DataDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), "liorian-cli-credentials.enc")
+		return filepath.Join(os.TempDir(), "lorian-cli-credentials.enc")
 	}
 	return filepath.Join(dir, "credentials.enc")
 }
@@ -133,7 +133,7 @@ func mustRandomSecret() []byte {
 // (missing Secret Service, no Credential Manager, headless session…) means the
 // CLI must fall back to the encrypted file store.
 func keychainAvailable() bool {
-	_, err := keyring.Get(ServiceName, "__liorian-cli_probe__")
+	_, err := keyring.Get(ServiceName, "__lorian-cli_probe__")
 	return err == nil || isKeyringNotExist(err)
 }
 

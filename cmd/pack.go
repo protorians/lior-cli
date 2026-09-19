@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/module"
-	"github.com/protorians/liorian-cli/internal/pkg"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +14,7 @@ var packCmd = &cobra.Command{
 	Use:   "pack [<module>[@<version>]]",
 	Short: "Build a module archive (.SenMod)",
 	Long: `Builds a module and creates a compressed .SenMod archive
-(moved to .liorian/build/).
+(moved to .lorian/build/).
 
 The version can be given with an '@' separator (e.g. com.example.blog-manager@1.2.0)
 to build a specific version; otherwise the manifest version is used.

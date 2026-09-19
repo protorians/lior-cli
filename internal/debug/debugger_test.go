@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/module"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/tui"
 )
 
 func createTestModule(t *testing.T, root, id string) {

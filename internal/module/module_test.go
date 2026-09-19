@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // setupProject creates a project root with one module via the Creator.

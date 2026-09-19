@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/pkg"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -125,7 +125,7 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
 		"package.json":              `{"name":"liorian-socle","scripts":{"dev":"vite"}}`,
 		"external_modules/.gitkeep": "",
-		"liorian.config.toml":      "app = \"template\"\n",
+		"lorian.config.toml":      "app = \"template\"\n",
 	})
 	bin := installFakeBun(t)
 
@@ -152,7 +152,7 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	if _, err := os.Stat("proj/package.json"); err != nil {
 		t.Errorf("the template must have been cloned: %v", err)
 	}
-	if _, err := os.Stat("proj/liorian.config.json"); err != nil {
+	if _, err := os.Stat("proj/lorian.config.json"); err != nil {
 		t.Errorf("the config file must have been written: %v", err)
 	}
 }
@@ -183,7 +183,7 @@ func TestRunInitInCWDWithExistingContentAndApproval(t *testing.T) {
 	if _, err := os.Stat("package.json"); err != nil {
 		t.Errorf("the template must have been cloned into the cwd: %v", err)
 	}
-	if _, err := os.Stat("liorian.config.json"); err != nil {
+	if _, err := os.Stat("lorian.config.json"); err != nil {
 		t.Errorf("the config file must have been written: %v", err)
 	}
 }

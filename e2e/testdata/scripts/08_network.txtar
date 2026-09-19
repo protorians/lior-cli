@@ -3,7 +3,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
+exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > lorian.config.json'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
 # TC-007 — wrong credentials: explicit failure (exit 2 / ExitAuth).
@@ -19,13 +19,13 @@ env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
 exec $LIORIAN --no-color connect
 stdout '✓ Connected as dev@example.com'
-exists $HOME/.liorian-cli/credentials.enc
+exists $HOME/.lorian-cli/credentials.enc
 
 # TC-008 — disconnect (auto-confirm LIORIAN_CLI_YES): credentials removed.
 env LIORIAN_CLI_YES=1
 exec $LIORIAN --no-color disconnect
 stdout '✓ Disconnected successfully'
-! exec test -e $HOME/.liorian-cli/credentials.enc
+! exec test -e /.lorian-cli/credentials.enc
 
 # Re-connect for TC-011/TC-012.
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com

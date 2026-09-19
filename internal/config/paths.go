@@ -6,19 +6,19 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // Well-known directory and file names within a Liorian project.
 const (
-	ConfigFileName      = "liorian.config.json"
-	LiorianConfigName  = "liorian.config.toml"
+	ConfigFileName     = "lorian.config.json"
+	LorianConfigName   = "lorian.config.toml"
 	ExternalModulesDir  = "external_modules"
 	InternalModulesDir  = "src/modules"
 	PublicAssetsDir     = "public/assets"
 	AppSrcDir           = "src/app"
-	LiorianDir         = ".liorian"
-	LiorianBuildsDir   = ".liorian/build"
+	LorianDir         = ".lorian"
+	LorianBuildsDir   = ".lorian/build"
 	ManifestFileName    = "manifest.json"
 	ModuleEntryFileName = "index.tsx"
 	// ArchiveExt is the extension of built module archives (`<name>-<version>.SenMod`).
@@ -27,7 +27,7 @@ const (
 
 // IsProjectRoot reports whether dir looks like a Liorian project root.
 func IsProjectRoot(dir string) bool {
-	if fileExists(filepath.Join(dir, LiorianConfigName)) {
+	if fileExists(filepath.Join(dir, LorianConfigName)) {
 		return true
 	}
 	if fileExists(filepath.Join(dir, ConfigFileName)) {
@@ -57,7 +57,7 @@ func FindProjectRoot(start string) (string, error) {
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			return "", errors.New(i18n.Tf("config.error.no_project",
-				LiorianConfigName, ExternalModulesDir))
+				LorianConfigName, ExternalModulesDir))
 		}
 		dir = parent
 	}
@@ -88,9 +88,9 @@ func ModuleAppSrcDir(root, module string) string {
 	return filepath.Join(root, AppSrcDir, module)
 }
 
-// BuildDir returns the `.liorian/build/` directory for a project root.
+// BuildDir returns the `.lorian/build/` directory for a project root.
 func BuildDir(root string) string {
-	return filepath.Join(root, LiorianBuildsDir)
+	return filepath.Join(root, LorianBuildsDir)
 }
 
 // ManifestPath returns the path of a module manifest.

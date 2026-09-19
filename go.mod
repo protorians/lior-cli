@@ -1,4 +1,4 @@
-module github.com/protorians/liorian-cli
+module github.com/protorians/lior-cli
 
 go 1.26.0
 

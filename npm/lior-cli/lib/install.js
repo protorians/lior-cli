@@ -9,8 +9,9 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 
-const REPO = "protorians/liorian-cli";
+const REPO = "protorians/lior-cli";
 const BINARY_NAME = "liorian";
+const ARCHIVE_PREFIX = "lior-cli";
 
 function getOsToken() {
   const platform = os.platform();
@@ -72,7 +73,7 @@ function getPlatform() {
 
 function getDownloadUrl(version, platform) {
   const archiveVersion = version.replace(/^v/, "");
-  const archiveName = `${BINARY_NAME}-cli_${archiveVersion}_${platform.triple}.${platform.ext}`;
+  const archiveName = `${ARCHIVE_PREFIX}_${archiveVersion}_${platform.triple}.${platform.ext}`;
   return `https://github.com/${REPO}/releases/download/${version}/${archiveName}`;
 }
 
@@ -111,9 +112,9 @@ async function main() {
   const version = getVersion();
   const platform = getPlatform();
   const binDir = path.join(__dirname, "..", "bin");
-  const tmpDir = path.join(os.tmpdir(), `liorian-install-${Date.now()}`);
+  const tmpDir = path.join(os.tmpdir(), `lorian-install-${Date.now()}`);
 
-  console.log(`Installing @liorian/cli ${version} for ${platform.triple}...`);
+  console.log(`Installing @lior/cli ${version} for ${platform.triple}...`);
 
   try {
     fs.mkdirSync(tmpDir, { recursive: true });
@@ -152,9 +153,9 @@ async function main() {
       fs.chmodSync(targetBinary, 0o755);
     }
 
-    console.log(`@liorian/cli ${version} installed successfully.`);
+    console.log(`@lior/cli ${version} installed successfully.`);
   } catch (err) {
-    console.error(`Failed to install @liorian/cli: ${err.message}`);
+    console.error(`Failed to install @lior/cli: ${err.message}`);
     console.error("");
     console.error("You can install the binary manually from:");
     console.error(`  https://github.com/${REPO}/releases`);

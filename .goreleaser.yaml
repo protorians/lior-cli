@@ -31,7 +31,7 @@ archives:
     formats:
       - tar.gz
     name_template: >-
-      liorian-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      lior-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
       - goos: windows
         formats:
@@ -50,11 +50,11 @@ release:
 
     | Platform | Architecture | Archive | Binary |
     |----------|--------------|---------|--------|
-    | Linux | amd64 | `liorian-cli_{{ .Version }}_linux_amd64.tar.gz` | `liorian_{{ .Version }}_linux_amd64` |
-    | Linux | arm64 | `liorian-cli_{{ .Version }}_linux_arm64.tar.gz` | `liorian_{{ .Version }}_linux_arm64` |
-    | macOS | amd64 (Intel) | `liorian-cli_{{ .Version }}_darwin_amd64.tar.gz` | `liorian_{{ .Version }}_darwin_amd64` |
-    | macOS | arm64 (Apple Silicon) | `liorian-cli_{{ .Version }}_darwin_arm64.tar.gz` | `liorian_{{ .Version }}_darwin_arm64` |
-    | Windows | amd64 | `liorian-cli_{{ .Version }}_windows_amd64.zip` | `liorian_{{ .Version }}_windows_amd64.exe` |
+    | Linux | amd64 | `lior-cli_{{ .Version }}_linux_amd64.tar.gz` | `liorian_{{ .Version }}_linux_amd64` |
+    | Linux | arm64 | `lior-cli_{{ .Version }}_linux_arm64.tar.gz` | `liorian_{{ .Version }}_linux_arm64` |
+    | macOS | amd64 (Intel) | `lior-cli_{{ .Version }}_darwin_amd64.tar.gz` | `liorian_{{ .Version }}_darwin_amd64` |
+    | macOS | arm64 (Apple Silicon) | `lior-cli_{{ .Version }}_darwin_arm64.tar.gz` | `liorian_{{ .Version }}_darwin_arm64` |
+    | Windows | amd64 | `lior-cli_{{ .Version }}_windows_amd64.zip` | `liorian_{{ .Version }}_windows_amd64.exe` |
 
     Checksums for all binaries and archives are in `checksums.txt`.
 
@@ -63,13 +63,13 @@ release:
     ### Go
 
     ```bash
-    go install github.com/protorians/liorian-cli@{{ .Tag }}
+    go install github.com/protorians/lior-cli@{{ .Tag }}
     ```
 
     ### npm / pnpm / yarn / bun
 
     ```bash
-    npm install -g @liorian/cli
+    npm install -g @lior/cli
     ```
 
 checksum:

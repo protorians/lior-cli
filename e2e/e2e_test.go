@@ -1,4 +1,4 @@
-// Package e2e runs the end-to-end (testscript) suite of the Liorian CLI
+// Package e2e runs the end-to-end (testscript) suite of the Lior CLI
 // against a mock liorian-connect API (spec §12: TC-001 → TC-029).
 package e2e
 
@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/liorian-cli/e2e/mockapi"
+	"github.com/protorians/lior-cli/e2e/mockapi"
 	"github.com/rogpeppe/go-internal/testscript"
 )
 

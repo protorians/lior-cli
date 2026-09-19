@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.13.0] - 2026-09-19
+
+### Changed
+- **Nom commercial `Lior` / code de projet `lorian`** — le produit reste commandé `liorian`, mais ses surfaces publiques sont réparties
+  en trois strates : **nom commercial `Lior`** (module Go `github.com/protorians/liorian-cli` → `github.com/protorians/lior-cli`,
+  paquet npm `@liorian/cli` → `@lior/cli`, artefacts de release `liorian-cli_*` → `lior-cli_*`, client OAuth `lior-cli`) ;
+  **code de projet `lorian`** (fichiers `liorian.config.json`/`liorian.config.toml` → `lorian.config.*`, schéma
+  `liorian.config.schema.json` → `lorian.config.schema.json`, dossier projet `.liorian/` → `.lorian/`, vault `~/.liorian-cli` →
+  `~/.lorian-cli`, services keychain `liorian-cli`/`liorian-cli-signing` → `lorian-cli`/`lorian-cli-signing`) ;
+  **commande `liorian`** inchangée (binaire, wrapper npm, aide `Lior CLI`, variables `LIORIAN_*`).
+- **L'écosystème reste `Liorian`** — applications plateforme (`Liorian Socle/Connect/Console/Store/Auth`), domaines
+  `*.liorian.protorians.com`, template `protorians/liorian-socle`, domaine d'audit `mod.liorian.*` et SDK `@liorian/sdk`
+  ne changent pas de nom.
+- **Rupture** — les fichiers de configuration et chemins internes `liorian*` sont renommés `lorian*` ; les scripts et CI
+  doivent être mis à jour. Bump `v0.13.0` (ligne 0.x).
+
 ## [v0.12.0] - 2026-09-18
 
 ### Changed

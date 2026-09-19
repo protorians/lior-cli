@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // ModuleSpec is the set of identity and metadata values used to scaffold a new

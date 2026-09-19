@@ -1,6 +1,6 @@
 {
-  "cmd.root.short": "Liorian CLI — Development tool for Liorian modules",
-  "cmd.root.long": "Liorian CLI is the one development tool to create, maintain\nand publish modules in the Liorian ecosystem.\n\nFull lifecycle: init → create → develop → debug → audit → pack → sign → publish.",
+  "cmd.root.short": "Lior CLI — Development tool for Liorian modules",
+  "cmd.root.long": "Lior CLI is the one development tool to create, maintain\nand publish modules in the Liorian ecosystem.\n\nFull lifecycle: init → create → develop → debug → audit → pack → sign → publish.",
   "cmd.root.example": "  liorian init\n  liorian create module\n  liorian connect\n  liorian pack blog-manager\n  liorian sign blog-manager\n  liorian publish blog-manager\n  liorian audit",
 
   "flag.verbose": "enable verbose logs",
@@ -9,7 +9,7 @@
   "flag.sync_remote": "update the remote module metadata before unlinking",
   "audit.flag.output": "output format (table | json)",
 
-  "update.available": "Update available: v%s → v%s\n  → https://github.com/protorians/liorian-cli/releases/latest",
+  "update.available": "Update available: v%s → v%s\n  → https://github.com/protorians/lior-cli/releases/latest",
 
   "cat.project": "Project",
   "cat.package_manager": "Package manager",
@@ -159,7 +159,7 @@
   "cmd.auth.long": "Authenticates the developer using the OAuth2 authorization-code flow\nwith PKCE (RFC 7636): opens the browser on the liorian-auth authorization\nendpoint, receives the redirect on a local loopback server, exchanges the code\nfor tokens, then stores the session securely (system keychain).\n\nThe OAuth endpoints come from the 'oauth' entry of 'liorian-auth' in\napp.config.json (authorizationEndpoint, tokenEndpoint, revokeEndpoint,\nclientId, scopes).\n\nIn non-interactive (CI) mode, provide the authorization code via the\nLIORIAN_CLI_AUTH_CODE environment variable to skip the browser step.",
 
   "cmd.pack.short": "Build a module archive (.SenMod)",
-  "cmd.pack.long": "Builds a module and creates a compressed .SenMod archive\n(moved to .liorian/build/).\n\nThe version can be given with an '@' separator (e.g. blog-manager@1.2.0)\nto build a specific version; otherwise the manifest version is used.\n\nWithout an argument, a selector lets you choose the module.",
+  "cmd.pack.long": "Builds a module and creates a compressed .SenMod archive\n(moved to .lorian/build/).\n\nThe version can be given with an '@' separator (e.g. blog-manager@1.2.0)\nto build a specific version; otherwise the manifest version is used.\n\nWithout an argument, a selector lets you choose the module.",
   "pack.spinner": "Building archive…",
   "pack.success": "✓ Archive created successfully",
   "pack.error.version": "invalid version %q, expected SemVer (e.g. 1.0.0)",
@@ -167,7 +167,7 @@
   "cmd.sign.short": "Sign .SenMod archives (Ed25519)",
   "cmd.sign.long": "Manages Ed25519 digital signatures for modules: generates keys,\nsigns the .SenMod archives and verifies signatures.\n\nSubcommands:\n  sign keygen            Generate an Ed25519 key pair\n  sign <module>          Sign a module's .SenMod archive\n  sign verify <module>   Verify a module's signature\n\nWithout arguments, shows the SHA-256 fingerprint of the public key.",
   "cmd.sign.keygen.short": "Generate an Ed25519 key pair",
-  "cmd.sign.keygen.long": "Generates an Ed25519 key pair and stores it in the system keychain\n(fallback: encrypted file ~/.liorian-cli/signing.enc).\n\nIf keys already exist, asks for confirmation before overwriting them\n(silent regeneration in non-interactive mode).",
+  "cmd.sign.keygen.long": "Generates an Ed25519 key pair and stores it in the system keychain\n(fallback: encrypted file ~/.lorian-cli/signing.enc).\n\nIf keys already exist, asks for confirmation before overwriting them\n(silent regeneration in non-interactive mode).",
   "cmd.sign.verify.short": "Verify a module's signature",
   "cmd.sign.verify.long": "Verifies the validity of a module's .sig file against its\n.SenMod archive, using the public key stored in the keychain.",
   "sign.header": "Developer signing key:",
@@ -273,7 +273,7 @@
   "debug.cancelled": "operation cancelled by the developer (Ctrl+C)",
 
   "cmd.test.short": "Run the tests of a module or all modules",
-  "cmd.test.long": "Runs the tests of one (or all) module(s) in external_modules/.\n\nValidates the module, resolves a test package with the package manager chosen\nat install (bun/pnpm/yarn/npm), installs it within that manager's scope when\nneeded and streams the suite output in real time. The chosen test package is\npersisted in liorian.config.json. The run exits non-zero when any module's\ntests fail.\nPress Ctrl+C to cancel at any time.\n\nWithout an argument, all modules are tested.",
+  "cmd.test.long": "Runs the tests of one (or all) module(s) in external_modules/.\n\nValidates the module, resolves a test package with the package manager chosen\nat install (bun/pnpm/yarn/npm), installs it within that manager's scope when\nneeded and streams the suite output in real time. The chosen test package is\npersisted in lorian.config.json. The run exits non-zero when any module's\ntests fail.\nPress Ctrl+C to cancel at any time.\n\nWithout an argument, all modules are tested.",
   "test.spinner.single": "Testing: %s",
   "test.spinner.all": "Testing all modules",
   "test.logs_for": "  Logs for %s:",
@@ -316,7 +316,7 @@
   "test.prompt.runner.custom_title": "Package name",
   "test.prompt.runner.install": "Install %s as a dev dependency?",
   "test.flag.timeout": "hard cap for a test run (0 = auto)",
-  "test.flag.runner": "test package used to run the suite (persisted in liorian.config.json)",
+  "test.flag.runner": "test package used to run the suite (persisted in lorian.config.json)",
   "test.cancelled": "operation cancelled by the developer (Ctrl+C)",
 
   "cmd.audit.short": "Audit a module's conformance",

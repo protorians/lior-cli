@@ -2,7 +2,7 @@
 #
 # release-notes.sh <version>
 #
-# Builds the GitHub Release body for liorian-cli:
+# Builds the GitHub Release body for lior-cli:
 #   - download table of every binary + archive produced by GoReleaser
 #   - install instructions
 #   - changelog extracted from CHANGELOG.md (falls back to git log)
@@ -13,7 +13,7 @@ set -euo pipefail
 
 VERSION="${1:?usage: release-notes.sh <version>}"
 TAG="v${VERSION}"
-REPO="${GITHUB_REPOSITORY:-protorians/liorian-cli}"
+REPO="${GITHUB_REPOSITORY:-protorians/lior-cli}"
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
 
 changelog() {
@@ -40,11 +40,11 @@ cat <<EOF
 
 | Platform | Architecture | Archive | Binary |
 |---|---|---|---|
-| Linux | amd64 | [\`liorian-cli_${VERSION}_linux_amd64.tar.gz\`](${BASE}/liorian-cli_${VERSION}_linux_amd64.tar.gz) | [\`liorian_${VERSION}_linux_amd64\`](${BASE}/liorian_${VERSION}_linux_amd64) |
-| Linux | arm64 | [\`liorian-cli_${VERSION}_linux_arm64.tar.gz\`](${BASE}/liorian-cli_${VERSION}_linux_arm64.tar.gz) | [\`liorian_${VERSION}_linux_arm64\`](${BASE}/liorian_${VERSION}_linux_arm64) |
-| macOS | amd64 (Intel) | [\`liorian-cli_${VERSION}_darwin_amd64.tar.gz\`](${BASE}/liorian-cli_${VERSION}_darwin_amd64.tar.gz) | [\`liorian_${VERSION}_darwin_amd64\`](${BASE}/liorian_${VERSION}_darwin_amd64) |
-| macOS | arm64 (Apple Silicon) | [\`liorian-cli_${VERSION}_darwin_arm64.tar.gz\`](${BASE}/liorian-cli_${VERSION}_darwin_arm64.tar.gz) | [\`liorian_${VERSION}_darwin_arm64\`](${BASE}/liorian_${VERSION}_darwin_arm64) |
-| Windows | amd64 | [\`liorian-cli_${VERSION}_windows_amd64.zip\`](${BASE}/liorian-cli_${VERSION}_windows_amd64.zip) | [\`liorian_${VERSION}_windows_amd64.exe\`](${BASE}/liorian_${VERSION}_windows_amd64.exe) |
+| Linux | amd64 | [\`lior-cli_${VERSION}_linux_amd64.tar.gz\`](${BASE}/lior-cli_${VERSION}_linux_amd64.tar.gz) | [\`liorian_${VERSION}_linux_amd64\`](${BASE}/liorian_${VERSION}_linux_amd64) |
+| Linux | arm64 | [\`lior-cli_${VERSION}_linux_arm64.tar.gz\`](${BASE}/lior-cli_${VERSION}_linux_arm64.tar.gz) | [\`liorian_${VERSION}_linux_arm64\`](${BASE}/liorian_${VERSION}_linux_arm64) |
+| macOS | amd64 (Intel) | [\`lior-cli_${VERSION}_darwin_amd64.tar.gz\`](${BASE}/lior-cli_${VERSION}_darwin_amd64.tar.gz) | [\`liorian_${VERSION}_darwin_amd64\`](${BASE}/liorian_${VERSION}_darwin_amd64) |
+| macOS | arm64 (Apple Silicon) | [\`lior-cli_${VERSION}_darwin_arm64.tar.gz\`](${BASE}/lior-cli_${VERSION}_darwin_arm64.tar.gz) | [\`liorian_${VERSION}_darwin_arm64\`](${BASE}/liorian_${VERSION}_darwin_arm64) |
+| Windows | amd64 | [\`lior-cli_${VERSION}_windows_amd64.zip\`](${BASE}/lior-cli_${VERSION}_windows_amd64.zip) | [\`liorian_${VERSION}_windows_amd64.exe\`](${BASE}/liorian_${VERSION}_windows_amd64.exe) |
 
 All archives and binaries are published to the [\`./dist\`](${BASE}) release assets of this tag. Checksums for every artifact are in [\`checksums.txt\`](${BASE}/checksums.txt).
 
@@ -53,13 +53,13 @@ All archives and binaries are published to the [\`./dist\`](${BASE}) release ass
 ### Go
 
 \`\`\`bash
-go install github.com/protorians/liorian-cli@${TAG}
+go install github.com/protorians/lior-cli@${TAG}
 \`\`\`
 
 ### npm / pnpm / yarn / bun
 
 \`\`\`bash
-npm install -g @liorian/cli
+npm install -g @lior/cli
 \`\`\`
 
 ### Binary

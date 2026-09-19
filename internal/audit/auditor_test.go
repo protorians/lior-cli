@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/module"
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // createTestModule sets up a valid module under a project root. The default

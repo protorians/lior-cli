@@ -1,4 +1,4 @@
-# Rapport d'implémentation — Liorian CLI
+# Rapport d'implémentation — Lior CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
 > Dernière mise à jour : 2026-09-18 — version courante du code : `v0.12.0` (branche `alpha`).
@@ -8,7 +8,7 @@
 
 ## 1. Vue d'ensemble
 
-La CLI est un binaire Go (module `github.com/protorians/liorian-cli`, **Go 1.26.0**) qui couvre le
+La CLI est un binaire Go (module `github.com/protorians/lior-cli`, **Go 1.26.0**) qui couvre le
 cycle de vie :
 
 ```
@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `liorian-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`@liorian/cli`) | ✅ en place (releases v0.0.1 → v0.12.0) |
+| CI/CD GoReleaser + package npm (`/cli`) | ✅ en place (releases v0.0.1 → v0.12.0) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -38,7 +38,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Clone shallow de `protorians/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
 - Détection des package managers `bun → pnpm → yarn → npm` (FR-001) + choix interactif.
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
-- Écrit `liorian.config.json` (config projet).
+- Écrit `lorian.config.json` (config projet).
 
 ### `liorian create module [nom]` (FR-004, FR-005)
 - Génère la structure `external_modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
@@ -74,11 +74,11 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
 ### `liorian pack [module]` (FR-010, FR-011)
-- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.liorian/build/<module>-<version>.SenMod`.
+- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.lorian/build/<module>-<version>.SenMod`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
 ### `liorian sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
-- Paires de clés **Ed25519**, stockées dans le keychain (service `liorian-cli-signing`).
+- Paires de clés **Ed25519**, stockées dans le keychain (service `lorian-cli-signing`).
 - Signature binaire 64 octets dans `<archive>.SenMod.sig` ; vérification sur archive + clé publique.
 - Fingerprint SHA-256 de la clé publique (commande `sign` sans argument).
 
@@ -97,7 +97,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - `link` : liste les produits modules (`GET /api/developer-store/modules`), valide l'id
   (`GET /api/developer-store/modules/:id`), écrit l'id distant dans le `manifest.json` local et
   **fusionne les métadonnées distantes absentes** (`name`, `description`, `publisher.*`) — §5.7 étape 6.
-- Liaison persistée dans un état projet `.liorian/links.json` (nom → id distant) : `LinkedModules`
+- Liaison persistée dans un état projet `.lorian/links.json` (nom → id distant) : `LinkedModules`
   ne dépend plus du **format** du token (fini le « UUID ⇒ local » fragile) — pont de migration vers
   l'ancienne heuristique conservé.
 - `unlink` : régénère un token UUID local et purge l'état `links.json` (déliaison locale ; pas d'appel
@@ -142,7 +142,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - **Installation** : un package configuré mais absent est installé en dépendance de développement
   dans le périmètre du gestionnaire (`pkg.DevDependencyArgs`). **Sélection interactive** (code
   principal, état d'installation, package personnalisé) **avant** la trace pas-à-pas.
-- **Persistance** dans `liorian.config.json` (bloc `test` : `packageManager`, `runner`,
+- **Persistance** dans `lorian.config.json` (bloc `test` : `packageManager`, `runner`,
   `modules`) via `TestConfig.RunnerFor`/`SetRunner`.
 - **Streaming** live de la sortie de test (queue de 8 lignes), **plafond** 2 min par défaut
   (dépassement → `ERROR`), **annulation** `Ctrl+C`/`Esc`/`SIGINT` (arbre de process, exit **130**).
@@ -165,7 +165,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 | `auth` | Authentification | `Store`, `Session`, `Connector`, `Authenticator`, `MFAFactor` |
 | `appconfig` | Registre d'applications embarqué (`app.config.json`, TECH-009) | `Applications`, `BaseURL`, `OAuth` |
 | `i18n` | Internationalisation (NFR-007) | `T`, `Tf`, `SetLanguage`, catalogues `en-US`/`fr-FR` |
-| `config` | Config projet `liorian.config.json` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
+| `config` | Config projet `lorian.config.json` + chemins | `Config`, `Default`, `Load/Save`, `FindProjectRoot`, `ManifestPath` |
 | `module` | Logique module | `Manifest`, `Creator`, `Packer`, `Linker`, `Validator` |
 | `signing` | Signature Ed25519 | `KeyStore`, `GenerateKeyPair`, `SignArchive`, `VerifySignature`, `Fingerprint`, `FindArchive` |
 | `audit` | Audit conformité | `Auditor`, `AuditResult` |
@@ -195,7 +195,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >
 > Itération du 2026-09-12 (bis) : `link` fusionne désormais les métadonnées
 > distantes absentes (§5.7) ; `LinkedModules` s'appuie sur un état projet
-> `.liorian/links.json` (plus de dépendance au format du token) ; le schéma
+> `.lorian/links.json` (plus de dépendance au format du token) ; le schéma
 > `widgets`/`routines`/`menu` du manifest est modélisé ; couleurs TUI
 > dérivées de la palette (fin des hex hardcodés hors palette).
 >
@@ -298,11 +298,11 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
   `signing.NewKeyStore()` sondent désormais le keychain OS (`keychainAvailable`,
   lecture d'une clé sentinelle) ; s'il est indisponible, elles basculent
-  réellement sur le vault chiffré `~/.liorian-cli/credentials.enc` /
+  réellement sur le vault chiffré `~/.lorian-cli/credentials.enc` /
   `signing.enc` (spec §7.6, R-002).
-- **Passphrases dures supprimées** : les AES utilisaient `"liorian-cli-fallback-v1"` /
-  `"liorian-cli-signing-v1"`. Désormais le secret est **aléatoire** (32 octets,
-  `pkg.MachineSecret` → `~/.liorian-cli/machine.secret`, 0600) et la clé AES est
+- **Passphrases dures supprimées** : les AES utilisaient `"lior-cli-fallback-v1"` /
+  `"lorian-cli-signing-v1"`. Désormais le secret est **aléatoire** (32 octets,
+  `pkg.MachineSecret` → `~/.lorian-cli/machine.secret`, 0600) et la clé AES est
   **dérivée par PBKDF2-HMAC-SHA256** (210 000 itérations, sel par message,
   `pkg.EncryptVault`/`DecryptVault`). Aucun secret en dur dans le binaire.
 - **Update désactivable en CI** : `LIORIAN_CLI_SKIP_UPDATE` (ou `CI` posée sans
@@ -311,7 +311,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   `/api/mfa/challenge` en panne — l'erreur est rapportée avec le détail de la
   vérification.
 - `NewStoreVolatile` = fallback isolé dans `/tmp` (secret aléatoire, ne pollue
-  plus `~/.liorian-cli` en test) ; `NewKeyStoreVolatile` (mort) supprimé.
+  plus `~/.lorian-cli` en test) ; `NewKeyStoreVolatile` (mort) supprimé.
 - **Rotation automatique du token (SEC-003, 🔧 renforcé au 2026-09-16)** :
   `pkg.Client.Do` retente les requêtes en échec HTTP 401 avec un token
   rafraîchi via `POST /api/auth/sessions/refresh` (`TokenRefreshFunc`, un seul
@@ -349,7 +349,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   de balises JSX (`jsxTagRE`) qui ignore `Array<string>` tout en attrapant
   `</div>`, `<Foo/>`, `<div className=…/>`. Pas de vrai parseur TS/JSX.
 - **`Linker.LinkedModules`** ✅ : les liaisons sont persistées dans
-  `.liorian/links.json` (nom → token distant) ; la distinction local/distant
+  `.lorian/links.json` (nom → token distant) ; la distinction local/distant
   ne repose plus sur le format de chaîne du token (un token distant au format
   UUID est désormais reconnu). Pont de migration vers l'ancienne heuristique
   conservé pour les projets liés avant l'état.
@@ -381,7 +381,7 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 
 ### Release 0.3.0 (Qualité) — ✅ largement faite
 - S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `LIORIAN_CLI_DEBUG`).
-- S-014 config `liorian.config.json` ✅ déjà présente.
+- S-014 config `lorian.config.json` ✅ déjà présente.
 - S-015 auto-update ✅ partiel (notification seule, pas de download ; désactivable en CI).
 - S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (15 packages), **E2E ✅** (13 scénarios
   txtar, TC-001 → TC-029, mock `liorian-connect` in-memory), **CI ✅** (job `e2e`).
@@ -422,7 +422,7 @@ avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (f
       `en-US`/`fr-FR`, tests unitaires + scénario E2E `12_test.txtar` (TC-028/TC-029). **Rehaussé en
       v0.10.0** : gestionnaire de paquets choisi à l'installation + catalogue (vitest/jest/mocha/ava)
       + installation dans le périmètre du gestionnaire + sélection interactive + persistance de la
-      section `test` de `liorian.config.json` (cf. §2.4).
+      section `test` de `lorian.config.json` (cf. §2.4).
 7. **Future spec** : `liorian watch` (hot-reload), `liorian deploy`,
    `liorian marketplace` (§2.4 future scope) — `liorian auth` (OAuth2 PKCE) ✅ fait au
    2026-09-16.

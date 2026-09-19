@@ -9,10 +9,10 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/protorians/liorian-cli/internal/appconfig"
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/pkg"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/appconfig"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -24,8 +24,8 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "liorian",
-	Short: "Liorian CLI — Development tool for Liorian modules",
-	Long: `Liorian CLI is the one development tool to create, maintain
+	Short: "Lior CLI — Development tool for Liorian modules",
+	Long: `Lior CLI is the one development tool to create, maintain
 and publish modules in the Liorian ecosystem.
 
 Full lifecycle: init → create → develop → debug → audit → pack → sign → publish.

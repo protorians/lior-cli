@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // SummaryCard wraps a success headline and its metadata block in a soft,

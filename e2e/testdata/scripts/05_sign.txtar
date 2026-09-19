@@ -1,7 +1,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 exec $LIORIAN --no-color pack com.example.blog-manager
 
@@ -9,7 +9,7 @@ exec $LIORIAN --no-color pack com.example.blog-manager
 exec $LIORIAN --no-color sign keygen
 stdout '✓ Ed25519 key pair generated successfully'
 stdout 'Fingerprint'
-exists $HOME/.liorian-cli/signing.enc
+exists $HOME/.lorian-cli/signing.enc
 
 # FR-024 — `sign` without argument prints the fingerprint.
 exec $LIORIAN --no-color sign
@@ -19,8 +19,8 @@ stdout 'Fingerprint'
 # TC-023 — `sign <module>` signs the archive and produces a 64-byte .sig.
 exec $LIORIAN --no-color sign com.example.blog-manager
 stdout '✓ Archive signed successfully'
-exists .liorian/build/com.example.blog-manager-1.0.0.SenMod.sig
-exec sh -c 'wc -c < .liorian/build/com.example.blog-manager-1.0.0.SenMod.sig'
+exists .lorian/build/com.example.blog-manager-1.0.0.SenMod.sig
+exec sh -c 'wc -c < .lorian/build/com.example.blog-manager-1.0.0.SenMod.sig'
 stdout '^[[:space:]]*64[[:space:]]*$'
 
 # TC-024 — `sign verify` accepts a valid signature.
@@ -30,7 +30,7 @@ stdout '✓ Valid signature'
 # TC-025 — tampered archive: verification fails (exit 12), after re-pack to
 # start from a healthy archive.
 exec $LIORIAN --no-color pack com.example.blog-manager
-exec sh -c 'printf "x" >> .liorian/build/com.example.blog-manager-1.0.0.SenMod'
+exec sh -c 'printf "x" >> .lorian/build/com.example.blog-manager-1.0.0.SenMod'
 ! exec $LIORIAN --no-color sign verify com.example.blog-manager
 stderr 'invalid signature'
 exec sh -c '"$LIORIAN" --no-color sign verify com.example.blog-manager >/dev/null 2>&1; echo $?'

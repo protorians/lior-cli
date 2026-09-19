@@ -5,7 +5,7 @@
 //
 //  1. the `--lang` root flag,
 //  2. the `LIORIAN_CLI_LANG` environment variable,
-//  3. the `"cli".lang` key of `liorian.config.json`,
+//  3. the `"cli".lang` key of `lorian.config.json`,
 //  4. the OS locale (LC_ALL, LC_MESSAGES, LANG).
 //
 // Every catalog key falls back to the en-US catalog, then to the key itself,

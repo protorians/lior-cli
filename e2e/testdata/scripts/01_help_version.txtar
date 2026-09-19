@@ -1,6 +1,6 @@
 # TC-019 — `liorian help` without arguments prints the general help.
 exec $LIORIAN --no-color help
-stdout 'Liorian CLI is the one development tool'
+stdout 'Lior CLI is the one development tool'
 stdout 'Available Commands:'
 stdout '  pack '
 

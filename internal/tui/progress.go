@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // ReportFunc receives download progress updates (bytes done, bytes total).

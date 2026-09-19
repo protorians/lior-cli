@@ -4,7 +4,7 @@ mkdir template
 cd template
 mkdir external_modules
 exec sh -c 'echo keep > external_modules/.gitkeep'
-exec sh -c 'printf "app = \"template\"\n" > liorian.config.toml'
+exec sh -c 'printf "app = \"template\"\n" > lorian.config.toml'
 exec sh -c 'printf "{\"name\":\"liorian-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
 cd $WORK
 
@@ -14,9 +14,9 @@ stdout '✓ Project initialized successfully'
 stdout 'Package manager: bun'
 
 cd demo-app
-exists liorian.config.json
+exists lorian.config.json
 exists external_modules
-exec grep -q 'autoAudit' liorian.config.json
+exec grep -q 'autoAudit' lorian.config.json
 cd $WORK
 
 # TC-002 — no package manager detected: explicit refusal (exit 1), before any

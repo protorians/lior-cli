@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func TestSessionSaveLoadClear(t *testing.T) {

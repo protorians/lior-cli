@@ -4,7 +4,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
+exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > lorian.config.json'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
@@ -18,8 +18,8 @@ exec sh -c 'awk -F\" "/\"token\"/{print \$4}" external_modules/com.example.blog-
 exec sh -c '"$LIORIAN" --no-color link com.example.blog-manager "$(cat remote.token)"'
 stdout '✓ Module linked successfully'
 stdout 'Remote'
-exists .liorian/links.json
-exec grep -q '[0-9a-f]' .liorian/links.json
+exists .lorian/links.json
+exec grep -q '[0-9a-f]' .lorian/links.json
 exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
 
 # TC-014 — simple unlink: new local UUID token, remote link removed.

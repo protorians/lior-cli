@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Config mirrors the optional `liorian.config.json` file at the project root.
+// Config mirrors the optional `lorian.config.json` file at the project root.
 type Config struct {
 	Project ProjectConfig `json:"project"`
 	Publish PublishConfig `json:"publish"`
@@ -18,7 +18,7 @@ type Config struct {
 
 // TestConfig configures `liorian test`: which package manager installs and
 // runs the test packages, and which test package each module uses. The values
-// are persisted in `liorian.config.json` so later runs skip detection and
+// are persisted in `lorian.config.json` so later runs skip detection and
 // selection.
 type TestConfig struct {
 	// PackageManager overrides the package manager used to install/run test

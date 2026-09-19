@@ -1,4 +1,4 @@
-# Liorian CLI
+# Lior CLI
 
 Outil de développement en ligne de commande pour créer, maintenir et publier
 des modules dans l'écosystème Liorian (spécification : `docs/specs/liorian.md`).
@@ -30,7 +30,7 @@ go build -o liorian .
 | `liorian connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `liorian auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |
 | `liorian disconnect` | Invalider le token côté serveur et supprimer les credentials |
-| `liorian pack [module]` | Construire l'archive `.SenMod` dans `.liorian/build/` |
+| `liorian pack [module]` | Construire l'archive `.SenMod` dans `.lorian/build/` |
 | `liorian sign keygen` | Générer une paire de clés Ed25519 pour la signature |
 | `liorian sign [module]` | Signer l'archive `.SenMod` d'un module |
 | `liorian sign verify [module]` | Vérifier la signature d'un module |
@@ -38,13 +38,13 @@ go build -o liorian .
 | `liorian link` / `unlink` | Associer un module local à un module distant du store (token) |
 | `liorian audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
 | `liorian debug [module]` | Valider le module et lancer un build de diagnostic |
-| `liorian test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `liorian.config.json` ; exit `13` en cas d'échec |
+| `liorian test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `lorian.config.json` ; exit `13` en cas d'échec |
 | `liorian -v` / `--version` | Afficher la version |
 | `liorian help` | Aide contextuelle |
 
 ## Configuration
 
-`liorian.config.json` (optionnel, à la racine du projet) :
+`lorian.config.json` (optionnel, à la racine du projet) :
 
 ```json
 {
@@ -90,9 +90,9 @@ go build -o liorian .
 ## Sécurité
 
 - Credentials stockés dans le keychain système, jamais en clair sur disque
-- Repli : fichier chiffré AES-256-GCM (`~/.liorian-cli/credentials.enc`)
-- Clés de signature Ed25519 dans le keychain (service `liorian-cli-signing`),
-  avec fichier chiffré en repli (`~/.liorian-cli/signing.enc`)
+- Repli : fichier chiffré AES-256-GCM (`~/.lorian-cli/credentials.enc`)
+- Clés de signature Ed25519 dans le keychain (service `lorian-cli-signing`),
+  avec fichier chiffré en repli (`~/.lorian-cli/signing.enc`)
 - Archives `.SenMod` : ZIP contenant uniquement `external_modules/<module>/` +
   `public/assets/<module>/` + `src/app/<module>/` — aucun token ni credential
 

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // FileName is the well-known workspace registry file.
@@ -25,7 +25,7 @@ const (
 	StoreAppID = "liorian-store"
 )
 
-// Config mirrors the registry schema (liorian.config.schema.json).
+// Config mirrors the registry schema (lorian.config.schema.json).
 type Config struct {
 	Version      string                 `json:"version"`
 	Applications map[string]Application `json:"applications"`
@@ -155,7 +155,7 @@ const (
 	DefaultOAuthAuthorizationEndpoint = "/oauth/authorize"
 	DefaultOAuthTokenEndpoint         = "/oauth/token"
 	DefaultOAuthRevokeEndpoint        = "/oauth/revoke"
-	DefaultOAuthClientID              = "liorian-cli"
+	DefaultOAuthClientID              = "lior-cli"
 )
 
 // OAuth returns the OAuth2 configuration for an application id, filling any

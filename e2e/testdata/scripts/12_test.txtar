@@ -1,7 +1,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 exec $LIORIAN --no-color create module runner --domain com.test.runner
 exec $LIORIAN --no-color create module matcher --domain com.test.matcher
 exec $LIORIAN --no-color create module failing --domain com.test.failing
@@ -47,10 +47,10 @@ stdout 'Summary'
 stdout 'error'
 
 # The package manager chosen at install and the resolved test package are
-# persisted in liorian.config.json.
-grep '"packageManager": "bun"' liorian.config.json
-grep '"runner": "vitest"' liorian.config.json
-grep '"com.test.failing"' liorian.config.json
+# persisted in lorian.config.json.
+grep '"packageManager": "bun"' lorian.config.json
+grep '"runner": "vitest"' lorian.config.json
+grep '"com.test.failing"' lorian.config.json
 
 # TC-029 — `test` without argument: report of all modules (table); a failing
 # suite makes the whole run exit non-zero.

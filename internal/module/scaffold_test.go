@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // writeScaffoldFixture builds a minimal hello-world-style module mockup plus a

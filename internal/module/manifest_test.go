@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func TestValidateName(t *testing.T) {

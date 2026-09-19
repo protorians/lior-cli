@@ -3,7 +3,7 @@ package main
 import (
 	_ "embed"
 
-	"github.com/protorians/liorian-cli/cmd"
+	"github.com/protorians/lior-cli/cmd"
 )
 
 var (

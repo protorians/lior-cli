@@ -1,4 +1,4 @@
-# Plan de mise à jour / mise à niveau — Liorian CLI
+# Plan de mise à jour / mise à niveau — Lior CLI
 
 > Objectif : aligner le **code** de la CLI `liorian` sur les contrats de référence du workspace
 > (`liorian-workspace/docs`) qui ont évolué, et sur la spec réalignée `docs/specs/liorian.md`.
@@ -193,13 +193,13 @@ E2E publish verts.
 
 > `rapport-implementation.md` (écarts E-01→E-13 clos + itération), `specs/liorian.md`
 > (create/publish/audit/OAuth/versions), `CHANGELOG.md` `v0.7.0`, `README.md`,
-> `app.config.json` + `npm/liorian-cli/package.json` (0.7.0), i18n fr/en
+> `app.config.json` + `npm/lior-cli/package.json` (0.7.0), i18n fr/en
 > (`create.flag.type`/`create.flag.category`, `module.error.type`/`module.error.category`).
 > CI vérifiée localement : `gofmt -l`, `go vet`, `go test ./...`, `go test ./e2e/ -run TestScripts`.
 
 - `docs/rapport-implementation.md` : clore les écarts E-01 → E-12 une fois traités.
 - `docs/specs/liorian.md` : recompiler les sections concernées si un comportement change.
-- `CHANGELOG.md` + `README.md` + `npm/liorian-cli/package.json` (version) + `app.config.json`.
+- `CHANGELOG.md` + `README.md` + `npm/lior-cli/package.json` (version) + `app.config.json`.
 - i18n : nouvelles clés `create.flag.category`, `create.flag.type`, messages d'audit — `en-US.json` **et** `fr-FR.json`.
 - CI : `go vet ./...`, `gofmt -l`, `go test ./...`, `go test ./e2e/ -run TestScripts`.
 

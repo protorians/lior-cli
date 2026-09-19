@@ -7,14 +7,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/audit"
-	"github.com/protorians/liorian-cli/internal/auth"
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/module"
-	"github.com/protorians/liorian-cli/internal/pkg"
-	"github.com/protorians/liorian-cli/internal/store"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/audit"
+	"github.com/protorians/lior-cli/internal/auth"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/store"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -68,7 +68,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto-audit before publishing (spec §5.6) — configurable via
-	// `"publish".autoAudit` in `liorian.config.json` (default: true).
+	// `"publish".autoAudit` in `lorian.config.json` (default: true).
 	cfg, err := config.Load(config.ConfigPath(root))
 	if err != nil {
 		debugf("reading configuration: %v", err)

@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // Embedded reference mockups shipped inside the CLI so `liorian create

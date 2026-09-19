@@ -1,7 +1,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 
 # TC-003 — invalid identifier: rejected (exit 1) with an explicit message.
 ! exec $LIORIAN --no-color create module Foo --domain com.example.foo

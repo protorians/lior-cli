@@ -4,8 +4,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +54,7 @@ func i18nFlag(cmd *cobra.Command, name, key string) {
 //
 //  1. the `--lang` flag,
 //  2. the `LIORIAN_CLI_LANG` environment variable,
-//  3. the `"cli".lang` key of `liorian.config.json`,
+//  3. the `"cli".lang` key of `lorian.config.json`,
 //  4. the OS locale (LC_ALL / LC_MESSAGES / LANG).
 //
 // It applies the selection and returns the effective catalog code.

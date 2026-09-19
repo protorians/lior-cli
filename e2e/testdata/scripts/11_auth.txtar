@@ -16,4 +16,4 @@ env LIORIAN_CLI_AUTH_CODE=the-code
 exec $LIORIAN --no-color auth
 stdout '✓ Authenticated via OAuth2'
 stdout 'Token type : Bearer'
-exists $HOME/.liorian-cli/credentials.enc
+exists $HOME/.lorian-cli/credentials.enc

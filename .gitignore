@@ -1,11 +1,11 @@
 # Build artifacts
 /liorian
 /dist/
-npm/liorian-cli/bin/liorian
-npm/liorian-cli/bin/liorian.exe
+npm/lior-cli/bin/liorian
+npm/lior-cli/bin/liorian.exe
 
 # Local build outputs
-.liorian/
+.lorian/
 
 # Go
 *.test

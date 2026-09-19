@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func TestIsVersionConflict(t *testing.T) {

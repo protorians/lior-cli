@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/auth"
-	"github.com/protorians/liorian-cli/internal/module"
-	"github.com/protorians/liorian-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/auth"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // Developer store API paths (Raiton envelope, `/api` prefix).

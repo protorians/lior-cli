@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/liorian-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // GitHubRelease is the minimal representation of a GitHub release for version
@@ -21,14 +21,14 @@ type GitHubRelease struct {
 }
 
 // UpdateCheckURL is the GitHub API endpoint for the latest release.
-const UpdateCheckURL = "https://api.github.com/repos/protorians/liorian-cli/releases/latest"
+const UpdateCheckURL = "https://api.github.com/repos/protorians/lior-cli/releases/latest"
 
 // CacheDuration controls how often the update check runs (once per day).
 const CacheDuration = 24 * time.Hour
 
 // cachePath returns the path to the update check cache file.
 func cachePath() string {
-	dir := filepath.Join(os.TempDir(), "liorian-cli")
+	dir := filepath.Join(os.TempDir(), "lorian-cli")
 	_ = os.MkdirAll(dir, 0o755)
 	return filepath.Join(dir, ".update-check")
 }

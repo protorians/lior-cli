@@ -24,4 +24,4 @@ exec $LIORIAN --no-color init .
 stdout 'Project initialized successfully'
 ! exists existing.txt
 exists package.json
-exists liorian.config.json
+exists lorian.config.json

@@ -1,4 +1,4 @@
-# Liorian CLI (`liorian`)
+# Lior CLI (`liorian`)
 
 > **Statut : IMPLÉMENTÉ (binaire `liorian`, spec alignée sur le code)**
 >
@@ -8,7 +8,7 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/liorian-cli` (branche `alpha`) ; dernière release documentée 0.8.1 ;
+> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.8.1 ;
 >   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
 >
 > **Documents de référence (workspace `liorian-workspace/docs`)** : la présente spec s'aligne sur
@@ -24,7 +24,7 @@
 | Propriété | Valeur |
 |-----------|--------|
 | Identifiant | `liorian` |
-| Nom | Liorian CLI |
+| Nom | Lior CLI |
 | Rôle | Outil CLI pour le cycle de vie complet des modules Liorian |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
@@ -38,7 +38,7 @@
 
 ### 1.1 Objectif
 
-Liorian CLI est l'outil de développement unique pour tout développeur souhaitant créer, maintenir
+Lior CLI est l'outil de développement unique pour tout développeur souhaitant créer, maintenir
 et publier des modules dans l'écosystème Liorian. Elle couvre le cycle de vie complet :
 
 ```
@@ -112,10 +112,10 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-008 | `liorian connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
 | FR-009 | `liorian disconnect` supprime toutes les credentials stockées |
 | FR-010 | `liorian pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.SenMod` |
-| FR-011 | `liorian pack` déplace l'archive vers `.liorian/build/` |
+| FR-011 | `liorian pack` déplace l'archive vers `.lorian/build/` |
 | FR-012 | `liorian publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
 | FR-013 | `liorian publish` demande les métadonnées du module si non définies |
-| FR-014 | `liorian link` lie un module local à un module distant (token produit, mode CI `link <module> <token>`) et persiste l'état dans `.liorian/links.json` |
+| FR-014 | `liorian link` lie un module local à un module distant (token produit, mode CI `link <module> <token>`) et persiste l'état dans `.lorian/links.json` |
 | FR-015 | `liorian unlink` délie un module local de `liorian-connect` (option `--sync-remote` pour synchroniser les métadonnées locales) |
 | FR-016 | `liorian debug` lance le debug d'un module ou de tous les modules |
 | FR-017 | `liorian audit` vérifie la conformité Clean Architecture, `manifest.json` et `index.tsx` |
@@ -126,7 +126,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-022 | `liorian sign <module>` signe l'archive `.SenMod` du module et produit un fichier `.sig` |
 | FR-023 | `liorian sign verify <module>` vérifie la validité de la signature `.sig` d'un module |
 | FR-024 | `liorian sign` affiche le fingerprint SHA-256 de la clé publique du développeur |
-| FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `LIORIAN_CLI_LANG` → `cli.lang` de `liorian.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
+| FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `LIORIAN_CLI_LANG` → `cli.lang` de `lorian.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
 | FR-026 | `liorian auth` authentifie le développeur via le flux OAuth2 **code d'autorisation + PKCE** (navigateur + serveur local en boucle), complément du `liorian connect` (email/mot de passe) |
 | FR-027 | `liorian auth` stocke la session OAuth (`access_token`, `refresh_token`, expiration) dans le keychain (repli vault chiffré) et la partage avec les commandes authentifiées |
 
@@ -166,7 +166,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | TECH-004 | Bubbles pour les composants TUI réutilisables — priorité stricte aux composants natifs bubbles avant tout composant custom (voir §9.1) |
 | TECH-005 | GoReleaser pour la compilation multi-plateforme et le packaging |
 | TECH-006 | Architecture en couches : commands → services → infrastructure |
-| TECH-007 | Configuration via fichier `liorian.config.json` optionnel dans le projet |
+| TECH-007 | Configuration via fichier `lorian.config.json` optionnel dans le projet |
 | TECH-008 | Communication avec `liorian-connect` via REST API HTTPS |
 | TECH-009 | Registre d'applications `app.config.json` embarqué dans le binaire (`baseUrl`/`timeout` par application API), surchargeable par un `app.config.json` local et `LIORIAN_AUTH_API` |
 
@@ -177,7 +177,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 ### 4.1 Architecture en couches
 
 ```
-liorian-cli/
+lior-cli/
 ├── main.go                        # Point d'entrée (variables version/commit/date + //go:embed app.config.json)
 ├── cmd/                           # Commandes CLI (couche présentation, Cobra)
 │   ├── root.go                    # Commande racine (flags --verbose, --no-color, --lang, update check)
@@ -196,7 +196,7 @@ liorian-cli/
 │   └── localize.go                # Helpers i18n (MessageKey, résolution langue)
 ├── internal/
 │   ├── config/                    # Configuration projet & CLI
-│   │   ├── config.go              # Lecture/écriture liorian.config.json
+│   │   ├── config.go              # Lecture/écriture lorian.config.json
 │   │   └── paths.go               # Résolution des chemins projet
 │   ├── appconfig/                 # Registre d'applications embarqué (app.config.json, TECH-009)
 │   │   └── appconfig.go           # BaseURL/timeout par API, surcharge locale/env
@@ -215,7 +215,7 @@ liorian-cli/
 │   │   ├── mockups/               # hello-world/ + page.tsx (mockups embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
 │   │   ├── packer.go              # Compression .SenMod (limite 50 MB)
-│   │   ├── linker.go              # Liaison local ↔ distant + état .liorian/links.json
+│   │   ├── linker.go              # Liaison local ↔ distant + état .lorian/links.json
 │   │   ├── validator.go           # Validation module
 │   │   └── module_test.go         # Tests unitaires
 │   ├── signing/                   # Signature numérique Ed25519
@@ -277,7 +277,7 @@ liorian-cli/
 | `archive/zip` | Compression .SenMod (stdlib) | — |
 
 > Le parsing TOML (`BurntSushi/toml`) a été retiré : la configuration est uniquement JSON
-> (`liorian.config.json`). `liorian.config.toml` ne sert plus que de marqueur de projet.
+> (`lorian.config.json`). `lorian.config.toml` ne sert plus que de marqueur de projet.
 
 ### 4.3 Pipeline d'exécution
 
@@ -332,7 +332,7 @@ une URL ZIP directe ou un répertoire local (tests/miroirs).
 6. **Télécharger la release** avec barre de progression `RunWithProgress` (extraction dans la
    destination ; en cas de fusion, téléchargement dans un dossier temporaire puis copie)
 7. **Installer les dépendances** avec le gestionnaire sélectionné (échec → warning non bloquant)
-8. **Écrire `liorian.config.json`** (racine `project.name` + `project.packageManager`)
+8. **Écrire `lorian.config.json`** (racine `project.name` + `project.packageManager`)
 9. **Afficher le résumé** : projet initialisé, gestionnaire utilisé, prochaines étapes
 
 #### Contraintes
@@ -375,8 +375,8 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
 
 #### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Liorian (`liorian.config.json`,
-   `liorian.config.toml` ou présence de `external_modules/`)
+1. **Vérifier le contexte** : être à la racine d'un projet Liorian (`lorian.config.json`,
+   `lorian.config.toml` ou présence de `external_modules/`)
 2. **Demander l'identité** du module (chaque prompt a un flag équivalent) :
    - **domaine** reverse-DNS (`--domain`, ex. `com.organization.domain`) — validation `ValidateDomain`,
      il nomme le dossier `external_modules/<domain>/` et le champ `manifest.domain`
@@ -621,13 +621,13 @@ manière sécurisée.
 
 | Donnée | Emplacement | Chiffrement |
 |--------|-------------|-------------|
-| `access_token` | Keychain (`liorian-cli.access_token`) | Oui (keychain natif) |
-| `mfa_token` | Keychain (`liorian-cli.mfa_token`) | Oui (keychain natif) |
-| `device` | Keychain (`liorian-cli.device`) | Oui (keychain natif) |
-| `expires_at` | Keychain (`liorian-cli.expires_at`) | Non (timestamp) |
-| `user.email` | Keychain (`liorian-cli.user_email`) | Non |
-| `user.id` | Keychain (`liorian-cli.user_id`) | Non |
-| `mfa_secret` | Keychain (`liorian-cli.mfa_secret`) | Oui (keychain natif) |
+| `access_token` | Keychain (`lorian-cli.access_token`) | Oui (keychain natif) |
+| `mfa_token` | Keychain (`lorian-cli.mfa_token`) | Oui (keychain natif) |
+| `device` | Keychain (`lorian-cli.device`) | Oui (keychain natif) |
+| `expires_at` | Keychain (`lorian-cli.expires_at`) | Non (timestamp) |
+| `user.email` | Keychain (`lorian-cli.user_email`) | Non |
+| `user.id` | Keychain (`lorian-cli.user_id`) | Non |
+| `mfa_secret` | Keychain (`lorian-cli.mfa_secret`) | Oui (keychain natif) |
 
 #### Sécurité
 
@@ -670,14 +670,14 @@ Supprimer toutes les credentials stockées et déconnecter le développeur.
    - Si non connecté → message informatif, rien à faire
 2. **Demander confirmation** ( Bubbletea confirm )
 3. **Supprimer** toutes les entrées du keychain :
-   - `liorian-cli.access_token`
-   - `liorian-cli.mfa_token`
-   - `liorian-cli.device`
-   - `liorian-cli.expires_at`
-   - `liorian-cli.user_email`
-   - `liorian-cli.user_id`
-   - `liorian-cli.mfa_secret`
-   - `liorian-cli.oauth_refresh_token`
+   - `lorian-cli.access_token`
+   - `lorian-cli.mfa_token`
+   - `lorian-cli.device`
+   - `lorian-cli.expires_at`
+   - `lorian-cli.user_email`
+   - `lorian-cli.user_id`
+   - `lorian-cli.mfa_secret`
+   - `lorian-cli.oauth_refresh_token`
 4. **Invalider le token** côté serveur (`POST /api/auth/logout`, best-effort)
 5. **Afficher confirmation**
 
@@ -708,12 +708,12 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
    - Source module : `external_modules/<module>/`
    - Source page : `src/app/<module.uri>/` (le `uri` du manifeste, sans `/` initial)
    - Source assets : `public/assets/<module>/` (si existe)
-   - Destination : `.liorian/build/`
+   - Destination : `.lorian/build/`
 5. **Créer l'archive ZIP** :
    - Nom : `<module>-<version>.SenMod` (le `.SenMod` est un ZIP renommé)
    - Contenu : dossiers `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>` (si existe)
    - Préfixe dans l'archive : `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>`
-6. **Déplacer** l'archive vers `.liorian/build/`
+6. **Déplacer** l'archive vers `.lorian/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
 #### Structure de l'archive `.SenMod`
@@ -735,7 +735,7 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 
 #### Contraintes
 
-- Le dossier `.liorian/build/` est créé automatiquement s'il n'existe pas
+- Le dossier `.lorian/build/` est créé automatiquement s'il n'existe pas
 - Si une archive du même nom existe → demander confirmation (écraser)
 - Le `manifest.json` doit être valide avant le pack
 - La taille maximale de l'archive est de 50 MB (limite store)
@@ -746,11 +746,11 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 ? Sélectionner le module : blog-manager
   ⠋ Validation du manifest.json...
   ⠋ Construction de l'archive...
-  ⠋ Déplacement vers .liorian/build/
+  ⠋ Déplacement vers .lorian/build/
 
   ✓ Archive créée avec succès
     Module : blog-manager v0.1.0
-    Fichier : .liorian/build/blog-manager-0.1.0.SenMod
+    Fichier : .lorian/build/blog-manager-0.1.0.SenMod
     Taille : 12.4 KB
 ```
 
@@ -840,7 +840,7 @@ Lier un module créé dans `liorian-connect` avec le module en local, via son to
 5. **Valider le token** via `GET /api/developer-store/modules/<id>` (existe + appartient au développeur)
 6. **Mettre à jour le `manifest.json` local** : `token` remplacé par le token distant, métadonnées
    distantes fusionnées dans les champs absents (`name`, `description`, `publisher.*`)
-7. **Persister l'état** dans `.liorian/links.json` (`{"modules": {"<module>": "<token>"}}`) —
+7. **Persister l'état** dans `.lorian/links.json` (`{"modules": {"<module>": "<token>"}}`) —
    source de vérité pour `unlink`/`LinkedModules`
 8. **Afficher le résumé** : module lié (local ↔ distant)
 
@@ -869,7 +869,7 @@ Délier un module local de son correspondant dans `liorian-connect`.
 #### Comportement
 
 1. **Vérifier le contexte projet**
-2. **Lister les modules localement liés** via `.liorian/links.json` (source de vérité) + les
+2. **Lister les modules localement liés** via `.lorian/links.json` (source de vérité) + les
    manifests portant un token non-UUID (migration)
 3. **Sélectionner le module à délier** : argument positionnel ou sélecteur Bubbletea
 4. **Afficher le lien actuel** (token + version distante)
@@ -877,7 +877,7 @@ Délier un module local de son correspondant dans `liorian-connect`.
    distant (`PUT /api/developer-store/modules/:id`, best-effort)
 6. **Demander confirmation** (Bubbletea confirm ; non-interactif → exécution directe)
 7. **Délier** : régénère un **nouveau token UUID local** dans `manifest.json` et retire l'entrée de
-   `.liorian/links.json`
+   `.lorian/links.json`
 8. **Afficher confirmation**
 
 #### Sortie TUI
@@ -1114,7 +1114,7 @@ Afficher l'aide contextuelle de la CLI.
 │ ⬢ liorian   │   ← wordmark (badge brand, dégrade en texte sous --no-color)
 └───────────────┘
 
-Liorian CLI — Development tool for Liorian modules
+Lior CLI — Development tool for Liorian modules
 
 Usage:
   liorian [command]
@@ -1205,9 +1205,9 @@ avant publication.
    - Si oui → afficher le fingerprint de la clé publique et demander régénération
 2. **Générer une paire de clés Ed25519** (`crypto/ed25519`)
 3. **Stocker** la clé privée et la clé publique dans le keychain système
-   - Clé privée : `liorian-cli-signing.signing_private_key`
-   - Clé publique : `liorian-cli-signing.signing_public_key`
-   - Fallback : fichier chiffré `~/.liorian-cli/signing.enc` (AES-256-GCM)
+   - Clé privée : `lorian-cli-signing.signing_private_key`
+   - Clé publique : `lorian-cli-signing.signing_public_key`
+   - Fallback : fichier chiffré `~/.lorian-cli/signing.enc` (AES-256-GCM)
 4. **Afficher** le fingerprint SHA-256 de la clé publique (hex 64 caractères)
 
 ###### Contraintes
@@ -1234,7 +1234,7 @@ avant publication.
 1. **Vérifier le contexte** : être à la racine d'un projet Liorian
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.SenMod` existe** dans `.liorian/build/`
+4. **Vérifier que l'archive `.SenMod` existe** dans `.lorian/build/`
    - Si absente → erreur avec suggestion d'exécuter `liorian pack <module>`
 5. **Charger la clé privée** depuis le keychain
    - Si absente → erreur avec suggestion d'exécuter `liorian sign keygen`
@@ -1260,8 +1260,8 @@ avant publication.
 
   ✓ Archive signée avec succès
     Module   : blog-manager v0.1.0
-    Archive  : .liorian/build/blog-manager-0.1.0.SenMod
-    Signature : .liorian/build/blog-manager-0.1.0.SenMod.sig
+    Archive  : .lorian/build/blog-manager-0.1.0.SenMod
+    Signature : .lorian/build/blog-manager-0.1.0.SenMod.sig
     Signataire : a1b2c3d4... (fingerprint SHA-256)
 ```
 
@@ -1296,7 +1296,7 @@ avant publication.
 
   ✓ Signature valide
     Module    : blog-manager v0.1.0
-    Archive   : .liorian/build/blog-manager-0.1.0.SenMod
+    Archive   : .lorian/build/blog-manager-0.1.0.SenMod
     Signataire : a1b2c3d4...
 ```
 
@@ -1308,7 +1308,7 @@ avant publication.
 
   ✗ Signature invalide
     Module   : blog-manager v0.1.0
-    Archive  : .liorian/build/blog-manager-0.1.0.SenMod
+    Archive  : .lorian/build/blog-manager-0.1.0.SenMod
     → L'archive a pu être modifiée ou la clé de vérification est incorrecte.
 ```
 
@@ -1331,7 +1331,7 @@ sécurisée.
 2. **Résoudre la configuration OAuth** depuis l'entrée `oauth` de `liorian-auth` dans
    `app.config.json` : `authorizationEndpoint`, `tokenEndpoint`, `revokeEndpoint`,
    `clientId`, `scopes` (défauts : `/oauth/authorize`, `/oauth/token`, `/oauth/revoke`,
-   client `liorian-cli`, scopes `openid profile email`)
+   client `lior-cli`, scopes `openid profile email`)
 3. **Générer le PKCE** : `code_verifier` (43–128 caractères base64url) + `code_challenge`
    S256, et un `state` aléatoire (anti-CSRF)
 4. **Ouvrir le navigateur** sur l'URL d'autorisation :
@@ -1403,7 +1403,7 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
    « détecté »). Aucun → statut `WARNING` (étape en avertissement).
 4. **Résoudre le package de test** (étape rapportée), par ordre de priorité :
    - Flag `--runner`, puis `test.modules.<module>.runner` / `test.runner` du
-     `liorian.config.json` ; un package absent est **installé en dépendance de développement**
+     `lorian.config.json` ; un package absent est **installé en dépendance de développement**
      via le gestionnaire (périmètre du gestionnaire : `bun add -d`, `pnpm/yarn add -D`,
      `npm install -D`). Les sentinelles `script` (script `package.json`) et `builtin` (ex.
      `bun test`) sont acceptées.
@@ -1423,7 +1423,7 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
      `NOTICE`, `test.no_tests`) même lorsqu'un script ou un runner est configuré : la commande n'est
      **pas** lancée, ce qui évite l'échec « No test files found »
 5. **Persister** le package de test résolu (et le gestionnaire utilisé) dans la section `test` de
-   `liorian.config.json`, pour que les exécutions suivantes n'aient plus à détecter/choisir.
+   `lorian.config.json`, pour que les exécutions suivantes n'aient plus à détecter/choisir.
 6. **Exécuter la commande** sous une étape dédiée `RUNNING` qui se met à jour **en place** : elle
    affiche le sous-texte actif et diffuse la queue de sortie (`stdout`/`stderr`, 8 dernières
    lignes) en temps réel, puis bascule vers un statut terminal :
@@ -1445,7 +1445,7 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
 | Flag | Défaut | Description |
 |------|--------|-------------|
 | `--timeout` | `0` (auto) | Plafond d'exécution d'une suite de tests (2 min par défaut) |
-| `--runner` | `""` | Package de test imposé (persisté dans `liorian.config.json`) |
+| `--runner` | `""` | Package de test imposé (persisté dans `lorian.config.json`) |
 
 #### Vocabulaire d'étapes
 
@@ -1486,7 +1486,7 @@ avec mise à jour en place des étapes portant un identifiant.
 
 ## 6. Modèle de données local
 
-### 6.1 Fichier `liorian.config.json` (optionnel)
+### 6.1 Fichier `lorian.config.json` (optionnel)
 
 Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
 
@@ -1520,8 +1520,8 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
 ```
 
 > La configuration est **JSON uniquement** (le parser TOML a été retiré en 0.0.9). Le fichier
-> historique `liorian.config.toml` ne sert plus que de marqueur de projet (racine) pour
-> `create`/`link`/etc., et `liorian.config.json` est écrit par `liorian init`.
+> historique `lorian.config.toml` ne sert plus que de marqueur de projet (racine) pour
+> `create`/`link`/etc., et `lorian.config.json` est écrit par `liorian init`.
 > `cli.lang` force la langue d'interface (NFR-007, FR-025) ; un champ vide garde l'auto-détection
 > (`LIORIAN_CLI_LANG` / locale OS).
 >
@@ -1552,7 +1552,7 @@ C'est la source de vérité dont découlent la déclaration React (`index.tsx`,
 ### 6.3 Keychain — Hiérarchie des clés
 
 ```
-liorian-cli/
+lorian-cli/
 ├── access_token      # Token Bearer JWT (session à jeton unique)
 ├── mfa_token         # Token MFA court (après vérification TOTP/recovery)
 ├── device            # ID du device (session connectée)
@@ -1562,7 +1562,7 @@ liorian-cli/
 ├── mfa_secret        # Secret TOTP (si enrollment local)
 └── oauth_refresh_token  # Refresh token OAuth2 (flux `liorian auth`)
 
-liorian-cli-signing/
+lorian-cli-signing/
 ├── signing_public_key   # Clé publique Ed25519 (fingerprint du développeur)
 └── signing_private_key  # Clé privée Ed25519 (signature des archives .SenMod)
 ```
@@ -1578,15 +1578,15 @@ liorian-cli-signing/
 | macOS Keychain | macOS | `security` CLI ou `go-keyring` |
 | Secret Service | Linux | D-Bus + `libsecret` via `go-keyring` |
 | Credential Manager | Windows | `cmdkey` ou `Credential Manager` via `go-keyring` |
-| Fichier chiffré (fallback) | Sans keychain | Vault AES-256-GCM `~/.liorian-cli/credentials.enc` |
+| Fichier chiffré (fallback) | Sans keychain | Vault AES-256-GCM `~/.lorian-cli/credentials.enc` |
 
 - Le backend par défaut est le keychain système ; si le keychain est injoignable (probe de lecture),
   la CLI bascule **transparentement** sur un vault fichier chiffré AES-256-GCM
   (`credentials.enc` pour l'auth, `signing.enc` pour les clés).
 - La clé AES du vault est dérivée en **PBKDF2** du secret machine par utilisateur
-  (`~/.liorian-cli/machine.secret`) — jamais de passphrase codée en dur.
+  (`~/.lorian-cli/machine.secret`) — jamais de passphrase codée en dur.
 - `LIORIAN_CLI_STORE=keychain|file` force le backend (CI/headless) ; `NewStoreVolatile` isole les tests.
-- Service keychain : `liorian-cli` (credentials), `liorian-cli-signing` (clés de signature).
+- Service keychain : `lorian-cli` (credentials), `lorian-cli-signing` (clés de signature).
 
 ### 7.2 Chiffrement des archives
 
@@ -1617,9 +1617,9 @@ liorian-cli-signing/
 
 ### 7.6 Signature numérique
 
-- Les clés de signature sont stockées dans le keychain OS (service `liorian-cli-signing`)
+- Les clés de signature sont stockées dans le keychain OS (service `lorian-cli-signing`)
 - La clé privée n'est **jamais** affichée à l'écran ni exportée
-- Fallback : fichier chiffré `~/.liorian-cli/signing.enc` (AES-256-GCM, clé PBKDF2 du secret machine)
+- Fallback : fichier chiffré `~/.lorian-cli/signing.enc` (AES-256-GCM, clé PBKDF2 du secret machine)
   quand le keychain n'est pas disponible
 - L'algorithme utilisé est **Ed25519** (signatures compactes de 64 octets, clés de 32 octets)
 - Les fichiers `.sig` sont des binaires contenant uniquement la signature Ed25519
@@ -1836,7 +1836,7 @@ archives:
   - id: packages
     formats:
       - tar.gz
-    name_template: liorian-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    name_template: lior-cli_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
       - goos: windows
         formats:
@@ -1864,18 +1864,18 @@ changelog:
 
 ```bash
 # Go install (releases GitHub)
-go install github.com/protorians/liorian-cli@latest
+go install github.com/protorians/lior-cli@latest
 
 # npm / npx (npmjs)
-npm install -g @liorian/cli
+npm install -g @lior/cli
 # ou
-npx @liorian/cli
+npx @lior/cli
 
 # macOS / Linux
 curl -sSL https://get.liorian.dev/cli | sh
 
 # Windows (PowerShell)
-iwr -useb https://get.liorian.dev/cli.ps1 | iex
+iwr -useb https://get.liorian.dev@lior/cli.ps1 | iex
 
 # Homebrew (à créer)
 brew install protorians/liorian/liorian-cli
@@ -2034,7 +2034,7 @@ Product: liorian-cli v1.0.0
     │
     ├── Epic E-006 : Expérience développeur
     │   ├── Story S-013 : Mode verbose / logs
-    │   ├── Story S-014 : Configuration `liorian.config.json`
+    │   ├── Story S-014 : Configuration `lorian.config.json`
     │   └── Story S-015 : Auto-update detection
     │
     └── Epic E-007 : Tests & CI

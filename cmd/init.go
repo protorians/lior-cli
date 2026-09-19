@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/liorian-cli/internal/config"
-	"github.com/protorians/liorian-cli/internal/i18n"
-	"github.com/protorians/liorian-cli/internal/pkg"
-	"github.com/protorians/liorian-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -204,7 +204,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		warn(i18n.Tf("init.warn.install", err.Error()))
 	}
 
-	// Step 6 — write liorian.config.json
+	// Step 6 — write lorian.config.json
 	cfg := config.Default()
 	cfg.Project.Name = projectName
 	cfg.Project.PackageManager = pmName
@@ -352,7 +352,7 @@ func mergeTemplateInto(repo, channel, dest string, report func(done, total int64
 	if err != nil {
 		return fmt.Errorf("failed to resolve destination %s: %w", dest, err)
 	}
-	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".liorian-init-*")
+	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".lorian-init-*")
 	if err != nil {
 		return fmt.Errorf("failed to create a temporary directory: %w", err)
 	}

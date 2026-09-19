@@ -1,7 +1,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 exec sh -c 'mkdir -p public/assets/com.example.blog-manager'
 exec sh -c 'echo "logo" > public/assets/com.example.blog-manager/logo.txt'
@@ -12,12 +12,12 @@ exec sh -c 'echo "page" > src/app/blog-manager/page.tsx'
 exec $LIORIAN --no-color pack com.example.blog-manager
 stdout '✓ Archive created successfully'
 stdout 'Module : com.example.blog-manager v1.0.0'
-exists .liorian/build/com.example.blog-manager-1.0.0.SenMod
+exists .lorian/build/com.example.blog-manager-1.0.0.SenMod
 
 # TC-010 — the archive contains the module manifest, app sources and assets.
-exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "external_modules/com.example.blog-manager/manifest.json"'
-exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "src/app/blog-manager/page.tsx"'
-exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "public/assets/com.example.blog-manager/logo.txt"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "external_modules/com.example.blog-manager/manifest.json"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "src/app/blog-manager/page.tsx"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "public/assets/com.example.blog-manager/logo.txt"'
 
 # Missing module: exit 3 (ExitModuleNotFound).
 ! exec $LIORIAN --no-color pack com.example.missing
@@ -29,8 +29,8 @@ stdout '^3$'
 exec $LIORIAN --no-color pack com.example.blog-manager@2.1.0
 stdout '✓ Archive created successfully'
 stdout 'Module : com.example.blog-manager v2.1.0'
-exists .liorian/build/com.example.blog-manager-2.1.0.SenMod
-exec sh -c 'test -f .liorian/build/com.example.blog-manager-2.1.0.SenMod'
+exists .lorian/build/com.example.blog-manager-2.1.0.SenMod
+exec sh -c 'test -f .lorian/build/com.example.blog-manager-2.1.0.SenMod'
 
 # Invalid version: rejected before building.
 ! exec $LIORIAN --no-color pack com.example.blog-manager@not-a-version

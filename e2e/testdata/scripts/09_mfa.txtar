@@ -1,7 +1,7 @@
 mkdir project
 cd project
 mkdir external_modules
-exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 
 # TC-006 — connect with MFA TOTP: LIORIAN_CLI_MFA_CODE read from the environment.
 env LIORIAN_CLI_CONNECT_EMAIL=mfa@example.com
@@ -9,7 +9,7 @@ env LIORIAN_CLI_CONNECT_PASSWORD=secret
 env LIORIAN_CLI_MFA_CODE=123456
 exec $LIORIAN --no-color connect
 stdout '✓ Connected as mfa@example.com'
-exists $HOME/.liorian-cli/credentials.enc
+exists $HOME/.lorian-cli/credentials.enc
 
 # Wrong MFA code: the TOTP then recovery challenges fail → refusal.
 env LIORIAN_CLI_CONNECT_EMAIL=mfa@example.com
