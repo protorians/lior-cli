@@ -78,11 +78,7 @@ func (m progressTask[T]) View() string {
 		}
 		return s.Success.Render("✓ ") + m.label + "\n"
 	}
-	return fmt.Sprintf("%s %s%3.0f%%\n",
-		s.Accent.Render(m.label),
-		m.progress.View(),
-		m.pct*100,
-	)
+	return s.ProgressLine(m.label, m.progress.View(), m.pct) + "\n"
 }
 
 // RunWithProgress displays an animated progress bar while fn runs in the
@@ -110,14 +106,13 @@ func RunWithProgress[T any](label string, fn func(report ReportFunc) (T, error))
 		resCh <- resultMsg[T]{value: v, err: err}
 	}()
 
+	s := NewStyles()
 	m := progressTask[T]{
-		progress: progress.New(progress.WithSolidFill("#c1a875")),
+		progress: s.ProgressBar(s.progressWidth()),
 		label:    label,
 		progCh:   progCh,
 		resCh:    resCh,
 	}
-	m.progress.EmptyColor = "#725b2a"
-	m.progress.Width = 40
 
 	p := tea.NewProgram(m)
 	final, err := p.Run()

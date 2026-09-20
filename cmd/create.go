@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -20,9 +21,10 @@ hello-world mockup, renamed with the given identifier (manifest.json,
 index.tsx, package.json, application/, domain/, infrastructure/,
 presentation/).
 
-Interactive creation asks for the module domain (reverse-DNS form like
-com.organization.domain), the identifier (kebab-case like hello-world),
-the application name, and optional version / icon / page url / description.
+Interactive creation asks for the module identifier (reverse-DNS form like
+com.organization.domain) — the kebab-case identifier is deduced by replacing
+the dots with hyphens — then the application name, and optional version /
+icon / page url / description.
 The optional page url drives both the scaffolded src/app/{url}/ page and
 the manifest.json uri of the deployed module (default: the identifier).
 
@@ -181,48 +183,63 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// collectCreateSpec completes the module spec with the interactive prompts
-// (domain and identifier first) and validates the final values.
+// collectCreateSpec completes the module spec with the interactive prompts and
+// validates each answer before moving on to the next step.
+//
+// The identifier and the domain carry the same information: the reverse-DNS
+// identifier (com.organization.domain) is asked once and the kebab-case module
+// identifier is deduced by replacing the dots with hyphens.
 func collectCreateSpec(spec *module.ModuleSpec) error {
-	if tui.IsInteractive() {
-		// The domain and the identifier are asked first.
-		if spec.Domain == "" {
-			d, err := tui.AskText(i18n.T("create.prompt.domain"), "com.organization.domain")
-			if err != nil {
-				return err
-			}
-			spec.Domain = strings.TrimSpace(d)
+	interactive := tui.IsInteractive()
+	if interactive && spec.Domain == "" {
+		d, err := askValidated(i18n.T("create.prompt.domain"), "com.organization.domain",
+			func(v string) error {
+				if v == "" {
+					return errors.New(i18n.T("create.error.no_domain"))
+				}
+				if err := module.ValidateDomain(v); err != nil {
+					return err
+				}
+				return module.ValidateName(strings.ReplaceAll(v, ".", "-"))
+			})
+		if err != nil {
+			return err
 		}
-		if spec.ID == "" {
-			id, err := tui.AskText(i18n.T("create.prompt.id"), "")
-			if err != nil {
-				return err
-			}
-			spec.ID = strings.TrimSpace(id)
-		}
+		spec.Domain = d
+	}
+	// The identifier is deduced from the domain when it was not given
+	// explicitly: com.organization.domain -> com-organization-domain.
+	if spec.ID == "" {
+		spec.ID = strings.ReplaceAll(spec.Domain, ".", "-")
+	}
+	if interactive {
 		if spec.AppName == "" {
-			n, err := tui.AskText(i18n.T("create.prompt.app_name"), module.DisplayName(spec.ID))
+			def := module.DisplayName(lastDomainLabel(spec.Domain))
+			n, err := tui.AskText(i18n.T("create.prompt.app_name"), def)
 			if err != nil {
 				return err
 			}
 			spec.AppName = strings.TrimSpace(n)
+			if spec.AppName == "" {
+				spec.AppName = def
+			}
 		}
 		if spec.Version == "" {
-			v, err := tui.AskText(i18n.T("create.prompt.version"), "0.0.0")
+			v, err := askValidated(i18n.T("create.prompt.version"), "0.0.0", module.ValidateVersion)
 			if err != nil {
 				return err
 			}
-			spec.Version = strings.TrimSpace(v)
+			spec.Version = v
 		}
 		if spec.Icon == "" {
-			icon, err := tui.AskText(i18n.T("create.prompt.icon"), "PuzzleIcon")
+			icon, err := askValidated(i18n.T("create.prompt.icon"), "PuzzleIcon", module.ValidateIcon)
 			if err != nil {
 				return err
 			}
-			spec.Icon = strings.TrimSpace(icon)
+			spec.Icon = icon
 		}
 		if spec.URL == "" {
-			u, err := tui.AskText(i18n.T("create.prompt.url"), spec.ID)
+			u, err := tui.AskText(i18n.T("create.prompt.url"), moduleURLPlaceholder(spec.Domain))
 			if err != nil {
 				return err
 			}
@@ -259,4 +276,45 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
 	}
 	return nil
+}
+
+// askValidated prompts for a single value and re-asks until it validates, so
+// an incorrect answer never lets the wizard move on to the next step.
+func askValidated(title, placeholder string, validate func(string) error) (string, error) {
+	for {
+		value, err := tui.AskText(title, placeholder)
+		if err != nil {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
+		if validate == nil {
+			return value, nil
+		}
+		if err := validate(value); err != nil {
+			s := tui.NewStyles()
+			fmt.Fprintln(os.Stderr, s.Error.Render("✗ "+err.Error()))
+			continue
+		}
+		return value, nil
+	}
+}
+
+// lastDomainLabel returns the last dot-separated label of a reverse-DNS
+// identifier (com.organization.blog-manager -> blog-manager).
+func lastDomainLabel(domain string) string {
+	if i := strings.LastIndex(domain, "."); i >= 0 {
+		return domain[i+1:]
+	}
+	return domain
+}
+
+// moduleURLPlaceholder derives the suggested page URL from a reverse-DNS module
+// identifier, dropping the TLD segment and turning the remaining labels into
+// path segments (com.org.test -> /org/test).
+func moduleURLPlaceholder(domain string) string {
+	domain = strings.TrimSpace(domain)
+	if i := strings.Index(domain, "."); i >= 0 {
+		return "/" + strings.ReplaceAll(domain[i+1:], ".", "/")
+	}
+	return "/" + domain
 }

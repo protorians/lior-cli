@@ -6,56 +6,35 @@ All notable changes to this project will be documented in this file.
 ## [v0.17.0] - 2026-09-20
 
 ### Added
-- **Préférences CLI persistées (spec §5.11)** — `--lang`, `--no-color` et `--verbose`
-  mémorisent désormais leur choix dans `lorian.config.json` (`cli.lang`, `cli.noColor`,
-  `debug.verbose`) à chaque exécution dans un projet Liorian : le choix est appliqué à tous
-  les lancements suivants sans repasser les flags.
-- **Nouvelle clé `cli.noColor`** — désactive les couleurs de sortie au niveau projet. La
-  priorité reste `flag --no-color[=true|false]` → env → config : le flag écarte la config
-  (lu dès l'aide/version, avant même l'analyse Cobra) et `--no-color=false` permet d'effacer
-  une valeur persistée.
+- **Assistant de création `create module` durci (spec §5.2)** — le parcours interactif est
+  désormais validé étape par étape :
+  - Les deux premières questions (domaine puis identifiant) sont fusionnées en une seule :
+    la saisie de l'identifiant reverse-DNS (`com.organization.domain`) suffit et l'identifiant
+    kebab-case est déduit en remplaçant les points par des tirets (`com.example.blog-manager` →
+    `com-example-blog-manager`).
+  - Chaque réponse est validée à la volée (`ValidateDomain`, `ValidateName`, `ValidateVersion`,
+    `ValidateIcon`) et re-posée tant qu'elle est invalide : une erreur de saisie ne permet plus
+    de passer à l'étape suivante.
+  - Les suggestions sont dérivées de l'identifiant : nom d'application par défaut (dernier label
+    du domaine) et URL de page proposée (`com.org.test` → `/org/test`).
+- **`Tab` to fill** — dans les saisies textuelles interactives, la touche `Tab` accepte le
+  placeholder comme réponse (hors champs secrets) : accepter la suggestion en une seule frappe
+  au lieu de la retaper. Un indice `[tab : remplir]` est affiché sur les champs concernés.
+- **Barres de progression thématiques** — nouveau helper `Styles.ProgressBar` /
+  `Styles.ProgressLine` (remplissage accent sur piste douce, pourcentage rendu une seule fois,
+  largeur adaptée au terminal et bornée entre 20 et 50), désormais utilisé par `RunWithProgress` :
+  le look de la progression est unifié sur l'ensemble du CLI.
 
 ### Changed
-- **Lecture des préférences centralisée** — extraction des réglages CLI (`lang`, `noColor`)
-  dans `cmd.cliSettings()`, et analyse brute de `--no-color` avant le premier affichage
-  Cobra (aide/version) pour que la config persistée s'applique dès le démarrage.
+- **Menus de sélection ajustés au terminal** — la question reste toujours visible en tête
+  d'écran : la liste reserve la hauteur du titre et de la barre de navigation, son en-tête et sa
+  pagination génériques sont masqués, et aucune option n'est plus rognée sur les petits
+  terminaux. Les questions des invites (saisie, sélection, confirmation) partagent le même style.
+- **Version bump** — `app.config.json` et le wrapper npm passent sur `0.17.0`.
 
-### Docs
-- Synchro de la spec §5.11 (`lorian.config.json`) avec la clé `cli.noColor` et la
-  persistance des flags.
-
-## [v0.16.1] - 2026-09-20
-
-### Fixed
-- **Distribution Homebrew (spec §10.2)** — la formula est renommée `Formula/lior-cli.rb` →
-  `Formula/liorian.rb` (nom de la formula aligné sur le binaire installé `liorian`) : la
-  commande d'installation devient `brew install protorians/lior-cli/liorian` (référence de
-  tap en 3 segments). `README.md`, spec §10.2, notes de release GoReleaser et
-  `scripts/release-notes.sh` alignés ; la formula `lior-cli.rb` est supprimée.
-
-## [v0.16.0] - 2026-09-20
-
-### Fixed
-- **Auto-update (S-015 / NFR-006) — la notification n'apparaissait jamais** : la comparaison de
-  version dans `pkg.CheckForUpdate` était inversée (`isNewer` faisait retomber sur une chaîne
-  vide, donc aucune mise à jour n'était jamais signalée). Correctif et couverture de bout en bout.
-
-### Added
-- **Auto-update documenté et testé (S-015 / NFR-006)** — notification seule, **pas de mise à jour
-  forcée ni de téléchargement automatique** de la nouvelle version :
-  - endpoint du check surchargeable via `LIORIAN_CLI_UPDATE_URL` (tests hermétiques, miroirs,
-    serveur de releases auto-hébergé) en plus du défaut GitHub releases (cache 24 h) ;
-  - désactivation inchangée : `LIORIAN_CLI_SKIP_UPDATE` (ou `CI` sans opt-in `LIORIAN_CLI_UPDATE`) ;
-  - tests unitaires `internal/pkg/update` exercent désormais `CheckForUpdate` de bout en bout
-    (mock HTTP : notification, à jour, erreur silencieuse, cache, skip) et **garantissent un unique
-    GET / aucune requête de téléchargement** ;
-  - test E2E `e2e/update_test.go` (`TestUpdateNotification`) : binaire versionné, notification
-    `Update available: v0.14.0 → v99.0.0` + lien releases, exactement une requête GET.
-- **Distribution Homebrew (spec §10.2)** — formula `Formula/lior-cli.rb` (tap = dépôt
-  `protorians/lior-cli`) avec archives darwin/linux amd64/arm64, shas et `brew test` :
-  "brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git" puis
-  `brew install protorians/lior-cli/lior-cli` (la forme à 2 segments `brew install
-  protorians/lior-cli` n'existe pas dans Homebrew : référence de tap en 3 segments).
+### Technical Details
+- Réorganisation de `collectCreateSpec` (validation par étape, extraction de `askValidated`),
+  extraction de `newSelectModel`, et suppression du style `DimTitle` au profit de `Question`.
 
 ## [v0.15.0] - 2026-09-21
 

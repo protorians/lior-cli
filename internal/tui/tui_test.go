@@ -3,11 +3,11 @@ package tui
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -38,6 +38,37 @@ func TestInputModelAcceptsTypedChars(t *testing.T) {
 	}
 	if got := m.input.Value(); got != "blog" {
 		t.Errorf("value = %q, want %q (the field must accept typed input)", got, "blog")
+	}
+}
+
+func TestInputModelTabFillsPlaceholder(t *testing.T) {
+	m := inputModel{title: "URL", input: textinput.New()}
+	m.input.Placeholder = "/org/test"
+
+	m = sendKeyMsg(t, m, tea.KeyMsg{Type: tea.KeyTab}).(inputModel)
+	if got := m.input.Value(); got != "/org/test" {
+		t.Errorf("tab must fill the placeholder, value = %q, want %q", got, "/org/test")
+	}
+}
+
+func TestInputModelTabKeepsTypedValue(t *testing.T) {
+	m := inputModel{title: "URL", input: textinput.New()}
+	m.input.Placeholder = "/org/test"
+	m.input.SetValue("/custom")
+
+	m = sendKeyMsg(t, m, tea.KeyMsg{Type: tea.KeyTab}).(inputModel)
+	if got := m.input.Value(); got != "/custom" {
+		t.Errorf("tab must not overwrite a typed value, value = %q, want %q", got, "/custom")
+	}
+}
+
+func TestInputModelTabIgnoresSecretPlaceholder(t *testing.T) {
+	m := inputModel{title: "Token", input: textinput.New(), secret: true}
+	m.input.Placeholder = "••••••••"
+
+	m = sendKeyMsg(t, m, tea.KeyMsg{Type: tea.KeyTab}).(inputModel)
+	if got := m.input.Value(); got != "" {
+		t.Errorf("tab must not fill a secret placeholder, value = %q, want empty", got)
 	}
 }
 
@@ -126,6 +157,37 @@ func TestSelectModelDownThenEnter(t *testing.T) {
 	fm := next.(selectModel)
 	if fm.result != "beta" {
 		t.Errorf("result = %q, want beta after ↓", fm.result)
+	}
+}
+
+func TestSelectViewShowsQuestionAsTitle(t *testing.T) {
+	m := newSelectModel("Choisir un gestionnaire de paquets", []string{"bun", "pnpm", "yarn"})
+	view := m.View()
+	if !strings.Contains(view, "Choisir un gestionnaire de paquets") {
+		t.Errorf("the question must be shown as the screen title, got: %q", view)
+	}
+	if strings.Contains(view, "List") {
+		t.Errorf("the bubbles list must not add its generic title, got: %q", view)
+	}
+}
+
+func TestSelectViewFitsTerminal(t *testing.T) {
+	items := make([]string, 20)
+	for i := range items {
+		items[i] = "module-" + strconv.Itoa(i)
+	}
+	m := newSelectModel("Sélectionnez le module", items)
+
+	const height = 12
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: height})
+	view := next.(selectModel).View()
+	// Count lines the way bubbletea does: a trailing newline is a real line.
+	lines := strings.Count(view, "\n") + 1
+	if lines > height {
+		t.Errorf("the select screen must fit the terminal: %d lines for height %d", lines, height)
+	}
+	if first := strings.SplitN(view, "\n", 2)[0]; !strings.Contains(first, "Sélectionnez le module") {
+		t.Errorf("the question must stay visible on the first line, got: %q", first)
 	}
 }
 
@@ -307,8 +369,7 @@ func TestStatusMarks(t *testing.T) {
 }
 
 func TestProgressTaskView(t *testing.T) {
-	pg := progress.New(progress.WithSolidFill("#c1a875"))
-	pg.Width = 10
+	pg := NewStyles().ProgressBar(10)
 	m := progressTask[int]{
 		progress: pg,
 		label:    "Downloading template",
@@ -318,10 +379,34 @@ func TestProgressTaskView(t *testing.T) {
 	if !strings.Contains(view, "50%") {
 		t.Errorf("mid-progress view must show 50%%, got: %q", view)
 	}
+	if n := strings.Count(view, "%"); n != 1 {
+		t.Errorf("the percentage must be rendered once, got %d in: %q", n, view)
+	}
 
 	m.done = true
 	m.err = errors.New("boom")
 	if v := m.View(); !strings.Contains(v, "✗") {
 		t.Errorf("error view must show ✗, got: %q", v)
+	}
+}
+
+func TestProgressLineRendersLabelAndPercentOnce(t *testing.T) {
+	s := NewStyles()
+	line := s.ProgressLine("Downloading", "████░░░░", 0.5)
+	if !strings.Contains(line, "Downloading") {
+		t.Errorf("line must contain the label, got: %q", line)
+	}
+	if n := strings.Count(line, "%"); n != 1 {
+		t.Errorf("percentage must appear exactly once, got %d in: %q", n, line)
+	}
+}
+
+func TestProgressBarClampsWidth(t *testing.T) {
+	s := NewStyles()
+	if w := s.ProgressBar(0).Width; w != progressBarMinWidth {
+		t.Errorf("zero width must fall back to the minimum, got %d", w)
+	}
+	if w := s.ProgressBar(12).Width; w != 12 {
+		t.Errorf("explicit width must be honoured, got %d", w)
 	}
 }

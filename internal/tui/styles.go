@@ -80,6 +80,7 @@ type Styles struct {
 	Title        lipgloss.Style
 	Header       lipgloss.Style
 	SubHeader    lipgloss.Style
+	Question     lipgloss.Style
 	Key          lipgloss.Style
 	Value        lipgloss.Style
 	Hint         lipgloss.Style
@@ -93,7 +94,6 @@ type Styles struct {
 	TableRow     lipgloss.Style
 	Focus        lipgloss.Style
 	ErrorBar     lipgloss.Style
-	DimTitle     lipgloss.Style
 }
 
 // NewStyles builds the style set for the current terminal background.
@@ -129,6 +129,9 @@ func NewStyles() *Styles {
 		Title:     lipgloss.NewStyle().Bold(true).Foreground(accent).MarginBottom(1),
 		Header:    lipgloss.NewStyle().Bold(true).Foreground(accent),
 		SubHeader: lipgloss.NewStyle().Bold(true).Foreground(accent),
+		// Question is left unstyled on purpose: prompt questions inherit the
+		// terminal's default foreground color, matching the surrounding text.
+		Question: lipgloss.NewStyle(),
 		Key:       lipgloss.NewStyle().Foreground(lipgloss.Color(p.muted)),
 		Value:     lipgloss.NewStyle().Foreground(lipgloss.Color(p.text)),
 		Hint:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.muted)).Faint(true),
@@ -152,7 +155,6 @@ func NewStyles() *Styles {
 			Background(lipgloss.Color(p.error)).
 			Foreground(lipgloss.Color(p.soft)).
 			Padding(0, 1),
-		DimTitle: lipgloss.NewStyle().Foreground(lipgloss.Color(p.gray)),
 	}
 }
 

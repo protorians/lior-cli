@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
 	"github.com/protorians/lior-cli/internal/pkg"
 	"github.com/spf13/cobra"
 )
@@ -108,6 +109,36 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 
 	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "package.json")) {
 		t.Error("an unusable --mockup must fall back to the embedded mockup (package.json missing)")
+	}
+}
+
+// TestCollectCreateSpecDerivesIdentifierFromDomain verifies that the module
+// identifier is deduced from the reverse-DNS domain by replacing the dots with
+// hyphens when it is not supplied explicitly.
+func TestCollectCreateSpecDerivesIdentifierFromDomain(t *testing.T) {
+	spec := module.ModuleSpec{Domain: "com.example.blog-manager"}
+	if err := collectCreateSpec(&spec); err != nil {
+		t.Fatalf("collectCreateSpec: %v", err)
+	}
+	if spec.ID != "com-example-blog-manager" {
+		t.Errorf("ID = %q, want %q", spec.ID, "com-example-blog-manager")
+	}
+}
+
+// TestModuleURLPlaceholderDerivesURIFromDomain verifies that the interactive
+// URL suggestion is a URI derived from the reverse-DNS identifier, dropping the
+// TLD segment (com.org.test -> /org/test).
+func TestModuleURLPlaceholderDerivesURIFromDomain(t *testing.T) {
+	cases := map[string]string{
+		"com.org.test":            "/org/test",
+		"com.organization.domain": "/organization/domain",
+		"mod.liorian.hello-world": "/liorian/hello-world",
+		"hello-world":             "/hello-world",
+	}
+	for domain, want := range cases {
+		if got := moduleURLPlaceholder(domain); got != want {
+			t.Errorf("moduleURLPlaceholder(%q) = %q, want %q", domain, got, want)
+		}
 	}
 }
 

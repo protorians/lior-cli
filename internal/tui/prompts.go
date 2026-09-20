@@ -41,6 +41,15 @@ func (m inputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.cancel = true
 			return m, tea.Quit
+		case "tab":
+			// Tab accepts the placeholder as the answer: a developer who agrees
+			// with the suggestion fills the field in one keystroke instead of
+			// retyping it.
+			if !m.secret && m.input.Value() == "" && m.input.Placeholder != "" {
+				m.input.SetValue(m.input.Placeholder)
+				m.input.CursorEnd()
+			}
+			return m, nil
 		}
 	}
 	var cmd tea.Cmd
@@ -54,7 +63,11 @@ func (m inputModel) View() string {
 		m.input.EchoCharacter = '•'
 	}
 	s := NewStyles()
-	return s.questionMark() + " " + s.SubHeader.Render(m.title) + " : " + m.input.View() + "\n"
+	line := s.questionMark() + " " + s.Question.Render(m.title) + " : " + m.input.View()
+	if !m.secret && m.input.Placeholder != "" {
+		line += " " + s.Hint.Render("["+i18n.T("tui.input.tab")+"]")
+	}
+	return line + "\n"
 }
 
 // askInput runs an interactive text input prompt.
@@ -148,7 +161,10 @@ func (m selectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height)
+		// The list is rendered between the question title and the nav bar;
+		// reserve those lines so the options never overflow the terminal and
+		// get clipped away.
+		m.list.SetSize(msg.Width, msg.Height-selectChromeHeight(m.title))
 	}
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
@@ -161,7 +177,7 @@ func (m selectModel) View() string {
 	if m.title != "" {
 		b.WriteString(s.questionMark())
 		b.WriteString(" ")
-		b.WriteString(s.DimTitle.Render(m.title))
+		b.WriteString(s.Question.Render(m.title))
 		b.WriteString("\n\n")
 	}
 	b.WriteString(m.list.View())
@@ -171,16 +187,10 @@ func (m selectModel) View() string {
 	return b.String()
 }
 
-// Select presents a menu of options and returns the selected label.
-// An empty item list is an error.
-func Select(title string, items []string) (string, error) {
-	if !IsInteractive() {
-		return "", RequireInteractive(i18n.T("tui.selection"))
-	}
-	if len(items) == 0 {
-		return "", errors.New(i18n.T("tui.error.no_options"))
-	}
-
+// newSelectModel builds the themed list model behind Select. The question is
+// rendered as the screen title by selectModel.View, so the bubbles list is
+// stripped of its generic "List" heading and pagination row.
+func newSelectModel(title string, items []string) selectModel {
 	raw := make([]list.Item, 0, len(items))
 	for _, label := range items {
 		raw = append(raw, selectItem{label: label})
@@ -213,8 +223,22 @@ func Select(title string, items []string) (string, error) {
 	l.SetShowHelp(false)
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(false)
+	l.SetShowTitle(false)
+	l.SetShowPagination(false)
+	return selectModel{title: title, list: l}
+}
 
-	m := selectModel{title: title, list: l}
+// Select presents a menu of options and returns the selected label.
+// An empty item list is an error.
+func Select(title string, items []string) (string, error) {
+	if !IsInteractive() {
+		return "", RequireInteractive(i18n.T("tui.selection"))
+	}
+	if len(items) == 0 {
+		return "", errors.New(i18n.T("tui.error.no_options"))
+	}
+
+	m := newSelectModel(title, items)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
@@ -273,7 +297,7 @@ func (m confirmModel) View() string {
 	no := i18n.T("tui.confirm.no")
 	hints := "(" + s.Info.Render(strings.ToLower(yes)) + "/" +
 		s.Info.Render(strings.ToLower(no)) + ")"
-	return s.questionMark() + " " + s.SubHeader.Render(m.title) + " " + s.Hint.Render(hints) +
+	return s.questionMark() + " " + s.Question.Render(m.title) + " " + s.Hint.Render(hints) +
 		" [" + s.Focus.Render(dflt) + "] :\n"
 }
 
@@ -316,6 +340,19 @@ func Confirm(title string, defYes bool) (bool, error) {
 		return false, errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return fm.result, nil
+}
+
+// selectChromeHeight is the number of lines selectModel.View renders around
+// the list itself: the question title (plus its blank separator), the nav bar
+// and the trailing newline that closes the view. Bubbletea drops the top
+// lines of a view taller than the terminal, so the list viewport must leave
+// room for this chrome or the question scrolls off the screen.
+func selectChromeHeight(title string) int {
+	h := 2 // nav bar + trailing newline
+	if title != "" {
+		h += 2 // question line + blank separator
+	}
+	return h
 }
 
 func min(a, b int) int {
