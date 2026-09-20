@@ -3,6 +3,39 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.17.0] - 2026-09-20
+
+### Added
+- **Assistant de création `create module` durci (spec §5.2)** — le parcours interactif est
+  désormais validé étape par étape :
+  - Les deux premières questions (domaine puis identifiant) sont fusionnées en une seule :
+    la saisie de l'identifiant reverse-DNS (`com.organization.domain`) suffit et l'identifiant
+    kebab-case est déduit en remplaçant les points par des tirets (`com.example.blog-manager` →
+    `com-example-blog-manager`).
+  - Chaque réponse est validée à la volée (`ValidateDomain`, `ValidateName`, `ValidateVersion`,
+    `ValidateIcon`) et re-posée tant qu'elle est invalide : une erreur de saisie ne permet plus
+    de passer à l'étape suivante.
+  - Les suggestions sont dérivées de l'identifiant : nom d'application par défaut (dernier label
+    du domaine) et URL de page proposée (`com.org.test` → `/org/test`).
+- **`Tab` to fill** — dans les saisies textuelles interactives, la touche `Tab` accepte le
+  placeholder comme réponse (hors champs secrets) : accepter la suggestion en une seule frappe
+  au lieu de la retaper. Un indice `[tab : remplir]` est affiché sur les champs concernés.
+- **Barres de progression thématiques** — nouveau helper `Styles.ProgressBar` /
+  `Styles.ProgressLine` (remplissage accent sur piste douce, pourcentage rendu une seule fois,
+  largeur adaptée au terminal et bornée entre 20 et 50), désormais utilisé par `RunWithProgress` :
+  le look de la progression est unifié sur l'ensemble du CLI.
+
+### Changed
+- **Menus de sélection ajustés au terminal** — la question reste toujours visible en tête
+  d'écran : la liste reserve la hauteur du titre et de la barre de navigation, son en-tête et sa
+  pagination génériques sont masqués, et aucune option n'est plus rognée sur les petits
+  terminaux. Les questions des invites (saisie, sélection, confirmation) partagent le même style.
+- **Version bump** — `app.config.json` et le wrapper npm passent sur `0.17.0`.
+
+### Technical Details
+- Réorganisation de `collectCreateSpec` (validation par étape, extraction de `askValidated`),
+  extraction de `newSelectModel`, et suppression du style `DimTitle` au profit de `Question`.
+
 ## [v0.15.0] - 2026-09-21
 
 ### Added

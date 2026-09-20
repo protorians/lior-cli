@@ -1,6 +1,6 @@
 {
   "name": "@lior/cli",
-  "version": "0.15.0",
+  "version": "0.17.0",
   "description": "Lior CLI - Create, maintain, and publish modules in the Liorian ecosystem",
   "license": "MIT",
   "repository": {
