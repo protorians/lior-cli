@@ -27,7 +27,7 @@ go build -o liorian .
 
 ```bash
 brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-brew install protorians/lior-cli/lior-cli
+brew install protorians/lior-cli/liorian
 ```
 
 > Homebrew exige une référence `user/repo/formula` (3 segments) : la forme

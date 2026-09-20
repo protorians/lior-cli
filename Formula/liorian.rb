@@ -1,17 +1,18 @@
-# formula lior-cli — tap « protorians/lior-cli » (ce dépôt).
+# formula liorian — tap « protorians/lior-cli » (ce dépôt).
 #
 # Installation :
 #   brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-#   brew install protorians/lior-cli/lior-cli
+#   brew install protorians/lior-cli/liorian
 #
 # Homebrew exige une référence à 3 segments (`user/repo/formula`) ; la forme
 # `brew install protorians/lior-cli` (2 segments) n'est pas valide dans Homebrew.
+# La formula porte le nom du binaire installé (`liorian`).
 #
 # Mise à jour (par release) : remplacer les `url`/`sha256` par plateforme depuis
 # les assets GitHub (« lior-cli_<version>_<os>_<arch>.tar.gz ») et le
 # `checksums.txt` de la release (Homebrew déduit `version` de l'URL). La date
 # est la dernière release documentée.
-class LiorCli < Formula
+class Liorian < Formula
   desc "Outil de dev pour creer, maintenir et publier des modules Liorian"
   homepage "https://github.com/protorians/lior-cli"
 
@@ -48,6 +49,6 @@ class LiorCli < Formula
   end
 
   test do
-    system "#{bin}/liorian", "--version"
+    system bin/"liorian", "--version"
   end
 end

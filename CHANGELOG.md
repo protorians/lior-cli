@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.16.1] - 2026-09-20
+
+### Fixed
+- **Distribution Homebrew (spec §10.2)** — la formula est renommée `Formula/lior-cli.rb` →
+  `Formula/liorian.rb` (nom de la formula aligné sur le binaire installé `liorian`) : la
+  commande d'installation devient `brew install protorians/lior-cli/liorian` (référence de
+  tap en 3 segments). `README.md`, spec §10.2, notes de release GoReleaser et
+  `scripts/release-notes.sh` alignés ; la formula `lior-cli.rb` est supprimée.
+
 ## [v0.16.0] - 2026-09-20
 
 ### Fixed

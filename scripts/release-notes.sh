@@ -66,7 +66,7 @@ npm install -g @lior/cli
 
 \`\`\`bash
 brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-brew install protorians/lior-cli/lior-cli
+brew install protorians/lior-cli/liorian
 \`\`\`
 
 ### Binary
