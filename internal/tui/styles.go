@@ -132,11 +132,11 @@ func NewStyles() *Styles {
 		// Question is left unstyled on purpose: prompt questions inherit the
 		// terminal's default foreground color, matching the surrounding text.
 		Question: lipgloss.NewStyle(),
-		Key:       lipgloss.NewStyle().Foreground(lipgloss.Color(p.muted)),
-		Value:     lipgloss.NewStyle().Foreground(lipgloss.Color(p.text)),
-		Hint:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.muted)).Faint(true),
-		Bullet:    lipgloss.NewStyle().Foreground(accent),
-		Item:      lipgloss.NewStyle().PaddingLeft(2),
+		Key:      lipgloss.NewStyle().Foreground(lipgloss.Color(p.muted)),
+		Value:    lipgloss.NewStyle().Foreground(lipgloss.Color(p.text)),
+		Hint:     lipgloss.NewStyle().Foreground(lipgloss.Color(p.muted)).Faint(true),
+		Bullet:   lipgloss.NewStyle().Foreground(accent),
+		Item:     lipgloss.NewStyle().PaddingLeft(2),
 		SelectedItem: lipgloss.NewStyle().
 			PaddingLeft(2).
 			Foreground(accent).
