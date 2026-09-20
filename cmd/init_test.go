@@ -125,7 +125,7 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
 		"package.json":              `{"name":"liorian-socle","scripts":{"dev":"vite"}}`,
 		"external_modules/.gitkeep": "",
-		"lorian.config.toml":      "app = \"template\"\n",
+		"lorian.config.toml":        "app = \"template\"\n",
 	})
 	bin := installFakeBun(t)
 

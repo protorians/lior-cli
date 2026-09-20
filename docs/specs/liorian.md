@@ -8,8 +8,8 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.8.1 ;
->   l'écart constaté entre la spec et le code est documenté dans `docs/rapport-implementation.md`
+> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.14.0 ;
+>   les écarts constatés entre la spec et le code sont documentés dans `docs/rapport-implementation.md`
 >
 > **Documents de référence (workspace `liorian-workspace/docs`)** : la présente spec s'aligne sur
 > les contrats du workspace, en particulier le manifest de module
@@ -28,7 +28,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Liorian |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.12.0) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.14.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `liorian.md` |
 

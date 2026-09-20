@@ -31,6 +31,13 @@ func init() {
 }
 
 func runConnect(cmd *cobra.Command) error {
+	return doConnect()
+}
+
+// doConnect runs the connect flow: existing-session check, credentials input
+// (interactive or CI env vars), sign-in, MFA and secure storage. It is reused
+// by `publish` for the spec §5.6 step 1 auto-authenticate behaviour.
+func doConnect() error {
 	ctx := context.Background()
 	store := auth.NewStore()
 

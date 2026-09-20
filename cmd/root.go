@@ -5,11 +5,13 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 	"github.com/protorians/lior-cli/internal/appconfig"
+	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/pkg"
 	"github.com/protorians/lior-cli/internal/tui"
@@ -84,6 +86,7 @@ func init() {
 		debugCmd,
 		auditCmd,
 		testCmd,
+		marketplaceCmd,
 	)
 }
 
@@ -190,10 +193,41 @@ func printCmdError(err error) {
 	fmt.Fprintln(os.Stderr, s.ErrorPanel(s.Error.Render("✗ Error: "+err.Error())))
 }
 
-// debugf logs a verbose line to stderr when --verbose (or the debug env var)
-// is enabled (spec NFR-005).
+// debugConfigFlags caches whether the project's lorian.config.json `debug`
+// section opts into verbose logging (spec §6.1, NFR-005): `debug.verbose:
+// true` or `debug.logLevel: "debug"`. Resolved once per process from the
+// current project root.
+var (
+	debugConfigOnce    sync.Once
+	debugConfigVerbose bool
+)
+
+// debugConfigVerboseEnabled reports whether the project configuration requests
+// verbose logs. It never fails: without a project or a config, it returns
+// false (the `--verbose` flag and LIORIAN_CLI_DEBUG remain the main switches).
+func debugConfigVerboseEnabled() bool {
+	debugConfigOnce.Do(func() {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return
+		}
+		root, err := config.FindProjectRoot(cwd)
+		if err != nil {
+			return
+		}
+		cfg, err := config.Load(config.ConfigPath(root))
+		if err != nil {
+			return
+		}
+		debugConfigVerbose = cfg.Debug.Verbose || strings.EqualFold(cfg.Debug.LogLevel, "debug")
+	})
+	return debugConfigVerbose
+}
+
+// debugf logs a verbose line to stderr when --verbose (or the debug env var,
+// or the project's `debug` config) is enabled (spec NFR-005).
 func debugf(format string, args ...any) {
-	if !flagVerbose && os.Getenv("LIORIAN_CLI_DEBUG") == "" {
+	if !flagVerbose && os.Getenv("LIORIAN_CLI_DEBUG") == "" && !debugConfigVerboseEnabled() {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "[liorian] "+format+"\n", args...)

@@ -27,15 +27,13 @@ exec $LIORIAN --no-color disconnect
 stdout '✓ Disconnected successfully'
 ! exec test -e /.lorian-cli/credentials.enc
 
-# Re-connect for TC-011/TC-012.
+# TC-011 — publish while disconnected: the command auto-runs `liorian connect`
+# first (spec §5.6 step 1), then publishes. The env-driven sign-in below feeds
+# the auto-connect flow against the mock API.
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
-exec $LIORIAN --no-color connect
-stdout '✓ Connected as dev@example.com'
-
-# TC-011 — publish: product created + version + artifact; remote token synced
-# into the manifest.
 exec $LIORIAN --no-color publish com.example.blog-manager
+stdout '✓ Connected as dev@example.com'
 stdout '✓ Published successfully'
 stdout 'URL : https://store.liorian.dev/modules/blog-manager'
 exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json

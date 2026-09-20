@@ -3,6 +3,63 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.15.0] - 2026-09-21
+
+### Added
+- **`marketplace search` / `marketplace install` (spec §2.4, §5.8, FR-001 storefront)** — le
+  catalogue public est enfin consultable et installable en ligne de commande :
+  - `liorian marketplace search [query]` interroge le storefront (`/api/catalog/*`), avec filtres
+    `--category`, `--publisher`, `--module` et pagination (`--limit`/`--offset`), et affiche un
+    tableau TUI (Module / Version / Catégorie / Éditeur). Une recherche sans correspondance est
+    un résultat vide neutre, pas une erreur.
+  - `liorian marketplace install <slug>` télécharge l'archive `.SenMod`, vérifie son **checksum
+    SHA-256** (refuse la corruption, avec hint « retry the installation ») et sa **signature
+    Ed25519** quand le catalogue en fournit une (`✓ Signature verified`), puis extrait le module
+    de façon sûre dans `external_modules/`. Refuse les modules inconnus (exit 3), les doublons
+    (`already installed`, exit 3, avec proposition `--force`/`--replace`), et rejette les
+    archives non conformes (chemins `..`, absolus, incomplets).
+  - Nouveau draft `internal/catalog` : client du storefront + moteur d'installation réutilisable
+    (`catalog.CatalogModule`, `Installer`), avec gestion des erreurs i18n et des codes de sortie.
+- **Garde-fou checksum e2e** — le harnais mock API seed désormais un catalogue déterministe
+  (module signé Ed25519, module non signé, module « corrompu » dont le checksum catalogue ne
+  correspond pas à l'artefact) pour couvrir le flux de refus sans casser les autres scénarios.
+- **Scénario E2E `13_marketplace.txtar`** — recherche (résultats, filtres, résultat vide),
+  installation signée et non signée, refus de doublon, `--force`, checksum invalide refusé,
+  module inconnu (exit 3), et installation hors workspace refusée.
+
+### Changed
+- **Version bump** — `app.config.json` et le wrapper npm passent sur `0.15.0` (release
+  anti-chronologique ; les travaux documentés en `v0.14.0` ci-dessous restent l'historique de la
+  branche).
+
+### Docs
+- `docs/rapport-implementation.md` et `docs/specs/liorian.md` alignés (version courante du code
+  `v0.15.0`, `marketplace` documenté comme implémenté).
+
+## [v0.14.0] - 2026-09-20
+
+### Added
+- **`create module --skip-install`** — le drapeau documenté par la spec §5.2 (étape 6) existe
+  enfin dans la commande : il désactive l'étape d'installation des dépendances du module, en plus
+  de la variable d'environnement `LIORIAN_CLI_SKIP_INSTALL=1` (l'un ou l'autre suffit).
+- **`publish` auto-connect (spec §5.6 étape 1)** — quand l'utilisateur n'est pas connecté,
+  `liorian publish` exécute d'abord le flux `liorian connect` (factorisé dans `doConnect()`)
+  puis poursuit la publication ; si l'auto-connexion échoue, l'erreur catégorisée
+  (`Run 'liorian connect' first.`, exit 2) est conservée.
+
+### Changed
+- **`debug.verbose` / `debug.logLevel` effectifs (spec §6.1, NFR-005)** — `debugf` honore
+  désormais la section `debug` de `lorian.config.json` (`debug.verbose: true` ou
+  `debug.logLevel: "debug"`) en plus de `--verbose` et `LIORIAN_CLI_DEBUG`.
+- **Tests hermétiques** — le PATH des scénarios E2E (et les tests `internal/debug`) est réduit
+  aux fixtures du harnais puis `/usr/bin` et `/bin` : les outils globaux de la machine
+  (esbuild, tsup, tsc, vitest…) ne peuvent plus fausser la résolution du build `debug`.
+- **Version bump** — `app.config.json` et le wrapper npm sont sur `0.14.0`.
+
+### Docs
+- `docs/rapport-implementation.md` (version courante `v0.14.0`, itération du 2026-09-20) et
+  `docs/specs/liorian.md` (métadonnées, dernière release documentée `0.14.0`) alignés.
+
 ## [v0.13.0] - 2026-09-19
 
 ### Changed

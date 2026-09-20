@@ -93,7 +93,7 @@ func SaveKeyPair(store KeyStore, pub ed25519.PublicKey, priv ed25519.PrivateKey)
 	return nil
 }
 
-// FindArchive finds the .SenMod archive for a module in .lorian/build/. 
+// FindArchive finds the .SenMod archive for a module in .lorian/build/.
 func FindArchive(root, moduleName, version string) (string, error) {
 	buildDir := config.BuildDir(root)
 	path := filepath.Join(buildDir, moduleName+"-"+version+config.ArchiveExt)

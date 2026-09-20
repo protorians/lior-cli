@@ -47,6 +47,7 @@ var (
 	createDescription string
 	createType        string
 	createCategory    string
+	createSkipInstall bool
 )
 
 // createSkipInstallEnv disables the dependency installation step of
@@ -65,8 +66,11 @@ func init() {
 	createCmd.Flags().StringVar(&createDescription, "description", "", i18n.T("create.flag.description"))
 	createCmd.Flags().StringVar(&createType, "type", "", i18n.T("create.flag.type"))
 	createCmd.Flags().StringVar(&createCategory, "category", "", i18n.T("create.flag.category"))
+	// --skip-install disables the dependency installation step (spec §5.2
+	// step 6); LIORIAN_CLI_SKIP_INSTALL=1 is the environment equivalent.
+	createCmd.Flags().BoolVar(&createSkipInstall, "skip-install", false, i18n.T("create.flag.skip_install"))
 	i18nHelp(createCmd, "cmd.create.short", "cmd.create.long")
-	for _, name := range []string{"mockup", "page-mockup", "domain", "id", "name", "version", "icon", "url", "description", "type", "category"} {
+	for _, name := range []string{"mockup", "page-mockup", "domain", "id", "name", "version", "icon", "url", "description", "type", "category", "skip-install"} {
 		i18nFlag(createCmd, name, "create.flag."+name)
 	}
 }
@@ -143,7 +147,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	// Resolve the dependencies/devDependencies declared in the manifest with
 	// the first available package manager (bun → pnpm → yarn → npm).
 	depsPM := ""
-	if os.Getenv(createSkipInstallEnv) == "" {
+	if !createSkipInstall && os.Getenv(createSkipInstallEnv) == "" {
 		var err error
 		depsPM, err = tui.RunWithSpinner(i18n.T("create.spinner.deps"), creator.ResolveDependencies)
 		if err != nil {

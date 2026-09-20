@@ -1,0 +1,72 @@
+# §2.4 Future Scope — `marketplace` against the public catalog
+# (mock `/api/catalog/*` + artifacts of the developer-store).
+
+# TC-030 — `marketplace search` lists the seeded catalog modules.
+exec $LIORIAN --no-color marketplace search
+stderr 'Searching the catalog'
+stdout '3 result\(s\)'
+stdout 'com.example.blog-manager'
+stdout 'com.analytics.visitors'
+stdout 'Protorians'
+
+# Full-text query narrows the results.
+exec $LIORIAN --no-color marketplace search visitors
+stdout '1 result\(s\)'
+stdout 'com.analytics.visitors'
+
+# Category filter (matched against PRIMARY/SECONDARY category).
+exec $LIORIAN --no-color marketplace search --category DATA
+stdout 'com.analytics.visitors'
+
+# An unmatched search is a neutral empty result, not an error.
+exec $LIORIAN --no-color marketplace search nonexistent-module
+stdout 'No module matches your search.'
+
+# TC-031 — `marketplace install` of an unsigned module inside a workspace.
+mkdir project
+cd project
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
+mkdir external_modules
+exec $LIORIAN --no-color marketplace install com.analytics.visitors
+stderr 'Installing com.analytics.visitors'
+stderr 'archive not signed'
+stdout '✓ Module installed'
+stdout 'Module : com.analytics.visitors v0.4.1'
+stdout 'Signature : not signed'
+grep '"id": "com.analytics.visitors"' external_modules/com.analytics.visitors/manifest.json
+exec test -f external_modules/com.analytics.visitors/index.tsx
+exec test -f src/app/visitors/page.tsx
+exec test -f public/assets/com.analytics.visitors/README.txt
+
+# An already-installed module is refused (exit 3) with a fix hint.
+exec sh -c '$LIORIAN --no-color marketplace install com.analytics.visitors; echo "exit=$?"'
+stderr 'already installed'
+stdout 'exit=3'
+
+# --force replaces the module.
+exec sh -c 'printf "stale" > external_modules/com.analytics.visitors/marker.txt'
+exec $LIORIAN --no-color marketplace install com.analytics.visitors --force
+stdout '✓ Module installed'
+! exec test -f external_modules/com.analytics.visitors/marker.txt
+
+# TC-032 — a signed module verifies its Ed25519 signature during install.
+exec $LIORIAN --no-color marketplace install com.example.blog-manager
+stdout '✓ Module installed'
+stdout 'Module : com.example.blog-manager v1.2.0'
+stdout 'Signature : ✓ Signature verified'
+grep '"version": "1.2.0"' external_modules/com.example.blog-manager/manifest.json
+
+# A module whose catalog checksum does not match its artifact is refused.
+! exec $LIORIAN --no-color marketplace install com.example.corrupted
+stderr 'SHA-256 checksum mismatch'
+stderr 'retry the installation'
+
+# An unknown module is a not-found error (exit 3).
+exec sh -c '$LIORIAN --no-color marketplace install com.unknown.module; echo "exit=$?"'
+stdout 'exit=3'
+stderr 'failed to fetch module'
+
+# Install outside a workspace requires a project root.
+cd ..
+! exec $LIORIAN --no-color marketplace install com.example.blog-manager
+stderr 'no Liorian project found'

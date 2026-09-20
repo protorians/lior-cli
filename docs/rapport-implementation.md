@@ -1,8 +1,8 @@
 # Rapport d'implémentation — Lior CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
-> Dernière mise à jour : 2026-09-18 — version courante du code : `v0.12.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/liorian.md` (statut *active* — implémentée, dernière release 0.12.0).
+> Dernière mise à jour : 2026-09-20 — version courante du code : `v0.14.0` (branche `alpha`).
+> Spécification de référence : `docs/specs/liorian.md` (statut *active* — implémentée, dernière release documentée 0.14.0).
 
 ---
 
@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `liorian-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`/cli`) | ✅ en place (releases v0.0.1 → v0.12.0) |
+| CI/CD GoReleaser + package npm (`/cli`) | ✅ en place (releases v0.0.1 → v0.13.0) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -293,6 +293,47 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >   confirmation et code de sortie `130` (`pkg.ExitCancelled`) ;
 > - réconcilié avec le **build réel** déjà introduit (repli bundler `esbuild`/`tsup` puis
 >   `tsc --noEmit`, v0.5.0).
+>
+> Itération du 2026-09-19 : **tests hermétiques (suite verte sur machine avec esbuild/tsup globaux)** —
+> le repli bundler par PATH (spec §5.9) peut résoudre des bundlers installés globalement sur la
+> machine du développeur et fausser la résolution `debug` du build :
+> - `e2e/e2e_test.go` : le PATH des scénarios est désormais **hermétique** — fixtures du harnais
+>   (`bun/npm/tsc/node`) puis uniquement `/usr/bin` et `/bin` ; le PATH de la machine n'est plus
+>   hérité, aucun outil global (esbuild, tsup, tsc, vitest…) ne peut plus fuir dans les scénarios ;
+> - `internal/debug/debugger_test.go` : helper `isolateToolchain` (PATH réduit à un répertoire vide)
+>   posé sur les tests qui exécutent `DebugModule`/`DebugAll` ou la résolution bundler sans shim
+>   explicite — le solveur ne retombe plus sur l'esbuild/tsup global de la machine ;
+> - gofmt réaligné (`internal/config/paths.go`, `internal/signing/signer.go`, `cmd/init_test.go`).
+>
+> Itération du 2026-09-19 (bis) : **réduction des écarts restants (spec §5.6 étape 1, NFR-005)** —
+> les deux derniers écarts constatés du rapport (§5, items `link`/`audit` « ✅/partiel » — en fait
+> entièrement implémentés) sont clos :
+> - **`publish` auto-connect (spec §5.6 étape 1)** : `cmd/publish.go` ne renvoie plus une erreur
+>   quand l'utilisateur n'est pas connecté — il exécute d'abord le flux `liorian connect`
+>   (factorisé dans `cmd/connect.go` `doConnect()`, réutilisé par la commande `connect`), puis
+>   recharge la session et poursuit la publication. Si l'auto-connexion échoue (ex. CI sans
+>   `LIORIAN_CLI_CONNECT_*`), l'erreur catégorisée avec le fix `Run 'liorian connect' first.`
+>   est conservée (exit 2). Le scénario E2E TC-011 publie désormais **sans connexion préalable**
+>   (le flux auto est vérifié), clé i18n `publish.info.connect` ajoutée (en-US/fr-FR, 396 clés).
+> - **`debug.verbose` / `debug.logLevel` consommés (spec §6.1, NFR-005)** : `debugf`
+>   (`cmd/root.go`) honore désormais la section `debug` de `lorian.config.json` — `debug.verbose:
+>   true` **ou** `debug.logLevel: "debug"` active les logs verbose (résolus une fois par processus
+>   depuis la racine projet, cache `sync.Once`), en plus de `--verbose` et `LIORIAN_CLI_DEBUG`. Les
+>   deux champs du modèle `DebugConfig` n'étaient parsés que pour rien ; ils sont maintenant effectifs.
+>
+> Itération du 2026-09-20 : **clôture du dernier écart spec restant (spec §5.2 step 6)** —
+> le drapeau `--skip-install` documenté par la spec et le rapport n'existait pas dans `create
+> module` (seule la variable d'environnement `LIORIAN_CLI_SKIP_INSTALL=1` était honorée) :
+> - `cmd/create.go` : flag `--skip-install` ajouté (désactive l'étape d'installation des
+>   dépendances avec ou sans l'environnement), localisé `create.flag.skip_install` (en-US/fr-FR,
+>   397 clés), registré via `i18nFlag` ; la garde devient
+>   `if !createSkipInstall && os.Getenv(createSkipInstallEnv) == ""` ;
+> - `cmd/create_test.go` : `TestRunCreateSkipInstallFlagSkipsInstallStep` (PATH vide → aucun
+>   « no package manager detected » en stderr lorsque le flag est posé sans l'environnement) et
+>   la liste des flags vérifiés par `TestCreateCommandFlagsRegistered` étendue (`type`,
+>   `category`, `skip-install`) ;
+> - suite complète verte : `go build`, `go vet`, `gofmt -l`, `go test ./...` (unitaires +
+>   E2E testscript), `go test ./e2e/ -run TestScripts -count=1`.
 
 ### 4.1 Sécurité — ✅ corrigé à l'itération du 2026-09-12
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
@@ -375,8 +416,8 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 `init` ✅ · `create module` ✅ · `connect` (email/password) ✅ · `connect` (MFA) ✅ · `disconnect` ✅ ·
 `pack` ✅ · `-v`/`help` ✅
 
-### Release 0.2.0 (Store) — ✅ largement faite
-`publish` ✅ (dont conflit SemVer + PUT) · `link` ✅/partiel · `unlink` ✅ · `audit` ✅/partiel ·
+### Release 0.2.0 (Store) — ✅ faite
+`publish` ✅ (dont conflit SemVer + PUT, auto-connect §5.6) · `link` ✅ · `unlink` ✅ · `audit` ✅ ·
 `debug` ✅ (vrai build + trace pas-à-pas v0.8.0) · `sign keygen/sign/verify` ✅
 
 ### Release 0.3.0 (Qualité) — ✅ largement faite

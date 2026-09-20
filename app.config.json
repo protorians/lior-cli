@@ -1,10 +1,10 @@
 {
   "$schema": "lorian.config.schema.json",
-  "version": "0.13.0",
+  "version": "0.15.0",
   "applications": {
     "liorian-socle": {
-      "name": "Liorian Socle",
-      "description": "Frontend Manager pour Liorian — Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
+      "name": "Lior Socle",
+      "description": "Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
       "domains": {
         "production": "socle.liorian.protorians.com",
         "staging": "socle-staging.liorian.protorians.com",
@@ -71,7 +71,11 @@
         "tokenEndpoint": "/oauth/token",
         "revokeEndpoint": "/oauth/revoke",
         "clientId": "lior-cli",
-        "scopes": ["openid", "profile", "email"]
+        "scopes": [
+          "openid",
+          "profile",
+          "email"
+        ]
       },
       "mfa": {
         "challengeEndpoint": "/mfa/challenge",

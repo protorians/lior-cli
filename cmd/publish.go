@@ -41,12 +41,23 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check auth
+	// Check auth. Spec §5.6 step 1: when not connected, run the `liorian
+	// connect` flow automatically before publishing.
+	s := tui.NewStyles()
 	sess, err := auth.LoadSession(auth.NewStore())
 	if err != nil || sess == nil || !sess.IsAuthenticated() {
-		return pkg.NewErrorWithFix(i18n.T("cat.authentication"),
-			i18n.T("publish.error.not_connected"),
-			i18n.T("publish.error.connect.fix"), pkg.ExitAuth)
+		fmt.Println(s.Info.Render(i18n.T("publish.info.connect")))
+		if cerr := doConnect(); cerr != nil {
+			return pkg.NewErrorWithFix(i18n.T("cat.authentication"),
+				i18n.T("publish.error.not_connected"),
+				i18n.T("publish.error.connect.fix"), pkg.ExitAuth)
+		}
+		sess, err = auth.LoadSession(auth.NewStore())
+		if err != nil || sess == nil || !sess.IsAuthenticated() {
+			return pkg.NewErrorWithFix(i18n.T("cat.authentication"),
+				i18n.T("publish.error.not_connected"),
+				i18n.T("publish.error.connect.fix"), pkg.ExitAuth)
+		}
 	}
 
 	email := ""
@@ -148,7 +159,6 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display metadata summary
-	s := tui.NewStyles()
 	fmt.Println()
 	fmt.Println(s.NeutralPanel(strings.TrimSpace(
 		s.Success.Render(i18n.Tf("publish.success.authenticated", email)) + "\n\n" +

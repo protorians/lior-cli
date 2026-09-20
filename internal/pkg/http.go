@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -265,6 +266,6 @@ func (e *APIError) Error() string {
 
 // IsNotFound reports whether the error is an HTTP 404.
 func IsNotFound(err error) bool {
-	apiErr, ok := err.(*APIError)
-	return ok && apiErr.StatusCode == http.StatusNotFound
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }

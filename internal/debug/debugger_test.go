@@ -35,6 +35,7 @@ func setupDebugProject(t *testing.T) string {
 func TestDebugModuleValid(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "my-module")
+	isolateToolchain(t)
 
 	debugger := &Debugger{Root: root}
 	result, err := debugger.DebugModule("com.test.my-module")
@@ -152,6 +153,7 @@ func TestDebugModuleBuildTimeoutFails(t *testing.T) {
 func TestDebugModuleReportsAndRecordsSteps(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "my-module")
+	isolateToolchain(t)
 
 	var reported []Step
 	debugger := &Debugger{Root: root, Reporter: func(s Step) { reported = append(reported, s) }}
@@ -181,6 +183,7 @@ func TestDebugModuleReportsAndRecordsSteps(t *testing.T) {
 func TestDebugModuleSummaryCountsWarningFinding(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "my-module")
+	isolateToolchain(t)
 
 	debugger := &Debugger{Root: root}
 	result, err := debugger.DebugModule("com.test.my-module")
@@ -238,6 +241,7 @@ func TestDebugAll(t *testing.T) {
 	root := setupDebugProject(t)
 	createTestModule(t, root, "mod-a")
 	createTestModule(t, root, "mod-b")
+	isolateToolchain(t)
 
 	debugger := &Debugger{Root: root}
 	results, err := debugger.DebugAll()
@@ -346,6 +350,14 @@ func TestFindBuildCommandNoSubstringFalsePositive(t *testing.T) {
 	}
 }
 
+// isolateToolchain empties PATH down to a bare shim directory (no bundlers,
+// no package managers) so the bundler/tsc PATH fallback (spec §5.9) cannot
+// leak globally installed executables from the developer machine.
+func isolateToolchain(t *testing.T) {
+	t.Helper()
+	t.Setenv("PATH", t.TempDir())
+}
+
 // writeFakeBin writes an executable shim that reports the command line and
 // exits successfully.
 func writeFakeBin(t *testing.T, path string) {
@@ -418,6 +430,7 @@ func TestFindBundlerBuildCommandRootNodeModules(t *testing.T) {
 func TestFindBundlerBuildCommandNone(t *testing.T) {
 	root := setupDebugProject(t)
 	moduleDir := writeFixtureModule(t, root, "my-module")
+	isolateToolchain(t)
 
 	d := &Debugger{Root: root}
 	if build := d.findBundlerBuildCommand(moduleDir); build != nil {

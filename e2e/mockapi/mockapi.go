@@ -1,10 +1,18 @@
 // Package mockapi is an in-memory HTTP server replicating the
 // `liorian-connect` wire contract (Raiton envelope `{message, data,
-// statusCode}`) for the E2E testscript suite: auth, guarded MFA and the
-// developer-store pipeline (product → version → artifact).
+// statusCode}`) for the E2E testscript suite: auth, guarded MFA, the
+// developer-store pipeline (product → version → artifact), and the public
+// module catalog behind `marketplace` (`/api/catalog/*`).
 package mockapi
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -47,17 +55,26 @@ type Server struct {
 	nextID    int
 	knownToks map[string]string // session token -> email
 	tokens    map[string]string // manifest token -> product id
+
+	// Public catalog state (marketplace): storefront entries and their
+	// artifact blobs, keyed by slug.
+	catalog          []CatalogModule
+	catalogArtifacts map[string][]byte
 }
 
-// New builds a fresh mock server with no state.
+// New builds a fresh mock server with no state, seeded with the public
+// catalog modules used by the `marketplace` scenarios.
 func New() *Server {
-	return &Server{
-		products:  map[string]*Product{},
-		versions:  map[string][]Version{},
-		created:   map[string]int{},
-		knownToks: map[string]string{},
-		tokens:    map[string]string{},
+	s := &Server{
+		products:         map[string]*Product{},
+		versions:         map[string][]Version{},
+		created:          map[string]int{},
+		knownToks:        map[string]string{},
+		tokens:           map[string]string{},
+		catalogArtifacts: map[string][]byte{},
 	}
+	s.seedCatalog()
+	return s
 }
 
 // Handler returns the routing http.Handler.
@@ -75,6 +92,10 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("/api/developer-store/modules/", s.storeModules)
 	mux.HandleFunc("/api/developer-store/modules", s.storeModules)
+
+	mux.HandleFunc("/api/catalog/modules", s.catalogSearch)
+	mux.HandleFunc("/api/catalog/modules/", s.catalogGet)
+	mux.HandleFunc("/catalog/artifacts/", s.catalogArtifact)
 	return mux
 }
 
@@ -494,4 +515,212 @@ func orDefault(v, def string) string {
 		return def
 	}
 	return v
+}
+
+// --- public catalog (marketplace) ---
+
+// CatalogModule mirrors the storefront entry served by `/api/catalog/*`
+// (the consumer side of the developer-store Product/Version entities).
+type CatalogModule struct {
+	ID                string `json:"id"`
+	Slug              string `json:"slug"`
+	Type              string `json:"type,omitempty"`
+	Domain            string `json:"domain,omitempty"`
+	Name              string `json:"name"`
+	Description       string `json:"description,omitempty"`
+	Icon              string `json:"icon,omitempty"`
+	PrimaryCategory   string `json:"primaryCategory,omitempty"`
+	SecondaryCategory string `json:"secondaryCategory,omitempty"`
+	Publisher         struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"publisher"`
+	Version            string `json:"version"`
+	ArtifactURL        string `json:"artifactUrl,omitempty"`
+	ArtifactChecksum   string `json:"artifactChecksum,omitempty"`
+	Signature          string `json:"signature,omitempty"`
+	SignaturePublicKey string `json:"signaturePublicKey,omitempty"`
+	SizeBytes          int64  `json:"sizeBytes,omitempty"`
+	Installs           int64  `json:"installs,omitempty"`
+	PublishedAt        string `json:"publishedAt,omitempty"`
+}
+
+// seedCatalog populates the storefront with deterministic modules: one
+// Ed25519-signed, one unsigned, and one whose catalog checksum does NOT match
+// its artifact (to exercise the checksum guard without breaking the others).
+func (s *Server) seedCatalog() {
+	s.seedModule("com.example.blog-manager", "blog-manager", "Blog Manager",
+		"Manage the blog editorial workflow", "COMMUNICATION", "1.2.0", 1290, true)
+	s.seedModule("com.analytics.visitors", "visitors", "Visitor Analytics",
+		"Track and report storefront visitors", "DATA", "0.4.1", 512, false)
+	s.seedModule("com.example.corrupted", "corrupted", "Corrupted Module",
+		"Artifact whose catalog checksum is wrong", "SYSTEM", "0.1.0", 7, false)
+	for i := range s.catalog {
+		if s.catalog[i].Slug == "com.example.corrupted" {
+			s.catalog[i].ArtifactChecksum = strings.Repeat("0", 64)
+		}
+	}
+}
+
+func (s *Server) seedModule(slug, page, name, desc, category, version string, installs int64, signed bool) {
+	data := buildModuleArchive(slug, page, version)
+	entry := CatalogModule{
+		ID: "cat_" + slug, Slug: slug, Type: "EXTERNAL", Domain: slug,
+		Name: name, Description: desc, Icon: "PuzzleIcon",
+		PrimaryCategory: category, SecondaryCategory: "OPERATIONS",
+		Publisher: func() struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} {
+			var p struct {
+				ID   string `json:"id"`
+				Name string `json:"name"`
+			}
+			p.ID = "pub-protorians"
+			p.Name = "Protorians"
+			return p
+		}(),
+		Version:          version,
+		ArtifactChecksum: sha256HexBytes(data),
+		SizeBytes:        int64(len(data)),
+		Installs:         installs,
+		PublishedAt:      "2026-01-15T10:00:00Z",
+	}
+	if signed {
+		pub, priv, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			panic("mock api: failed to generate signing key: " + err.Error())
+		}
+		entry.Signature = base64.StdEncoding.EncodeToString(ed25519.Sign(priv, data))
+		entry.SignaturePublicKey = base64.StdEncoding.EncodeToString(pub)
+	}
+	s.catalog = append(s.catalog, entry)
+	s.catalogArtifacts[slug] = data
+}
+
+func sha256HexBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+// buildModuleArchive packs a conformant module (manifest + entry + page +
+// assets) into a `.SenMod` ZIP, mirroring `internal/module/packer.go`.
+func buildModuleArchive(name, page, version string) []byte {
+	manifest := map[string]any{
+		"schemaVersion": 1,
+		"id":            name,
+		"domain":        name,
+		"key":           "MARKETPLACE_DEMO",
+		"name":          "Marketplace Demo",
+		"description":   "A module distributed through the public catalog",
+		"version":       version,
+		"icon":          "PuzzleIcon",
+		"type":          "EXTERNAL",
+		"entry":         "index.tsx",
+		"uri":           "/" + page,
+		"category":      "SYSTEM",
+		"token":         uuid.NewString(),
+		"publisher":     map[string]any{"id": "pub-protorians", "name": "Protorians"},
+		"platforms": map[string]any{
+			"web": map[string]any{"supported": true, "modes": []string{"web"}},
+		},
+		"managerCompatibility": map[string]any{"min": "0.17.1", "max": "0.17.x"},
+		"apiCompatibility":     map[string]any{"min": "0.27.0", "max": "0.27.x"},
+		"permissions":          []string{},
+		"optionalRequirements": map[string]string{},
+		"requirements":         map[string]any{},
+		"capabilities":         map[string]any{"needsNetwork": true},
+	}
+	raw, _ := json.MarshalIndent(manifest, "", "  ")
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	entries := map[string]string{
+		"external_modules/" + name + "/manifest.json": string(raw) + "\n",
+		"external_modules/" + name + "/index.tsx":     "export default function Demo() {\n  return <div>Demo</div>;\n}\n",
+		"src/app/" + page + "/page.tsx":               "export default function Page() { return <div>Page</div>; }\n",
+		"public/assets/" + name + "/README.txt":       "hello from the catalog\n",
+	}
+	// deterministic order keeps archives stable across runs
+	for _, rel := range []string{
+		"external_modules/" + name + "/manifest.json",
+		"external_modules/" + name + "/index.tsx",
+		"src/app/" + page + "/page.tsx",
+		"public/assets/" + name + "/README.txt",
+	} {
+		fw, err := zw.Create(rel)
+		if err != nil {
+			panic("mock api: " + err.Error())
+		}
+		if _, err := fw.Write([]byte(entries[rel])); err != nil {
+			panic("mock api: " + err.Error())
+		}
+	}
+	if err := zw.Close(); err != nil {
+		panic("mock api: " + err.Error())
+	}
+	return buf.Bytes()
+}
+
+// withArtifactURL fills the absolute storefront artifact URL for a request.
+func (m CatalogModule) withArtifactURL(r *http.Request) CatalogModule {
+	m.ArtifactURL = "http://" + r.Host + "/catalog/artifacts/" + m.Slug + ".SenMod"
+	return m
+}
+
+func (s *Server) catalogSearch(w http.ResponseWriter, r *http.Request) {
+	q := strings.ToLower(r.URL.Query().Get("q"))
+	cat := strings.ToUpper(r.URL.Query().Get("category"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 20
+	}
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	items := []CatalogModule{}
+	total := 0
+	for _, m := range s.catalog {
+		if q != "" && !strings.Contains(strings.ToLower(m.Name+" "+m.Slug+" "+m.Description), q) {
+			continue
+		}
+		if cat != "" && !strings.EqualFold(cat, m.PrimaryCategory) && !strings.EqualFold(cat, m.SecondaryCategory) {
+			continue
+		}
+		total++
+		if total <= offset || len(items) >= limit {
+			continue
+		}
+		items = append(items, m.withArtifactURL(r))
+	}
+	writeData(w, http.StatusOK, map[string]any{
+		"items": items, "total": total, "offset": offset, "limit": limit,
+	})
+}
+
+func (s *Server) catalogGet(w http.ResponseWriter, r *http.Request) {
+	ref := strings.TrimPrefix(r.URL.Path, "/api/catalog/modules/")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, m := range s.catalog {
+		if m.ID == ref || m.Slug == ref || m.Domain == ref {
+			writeData(w, http.StatusOK, m.withArtifactURL(r))
+			return
+		}
+	}
+	writeError(w, http.StatusNotFound, "Module not found")
+}
+
+func (s *Server) catalogArtifact(w http.ResponseWriter, r *http.Request) {
+	slug := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/catalog/artifacts/"), ".SenMod")
+	s.mu.Lock()
+	data, ok := s.catalogArtifacts[slug]
+	s.mu.Unlock()
+	if !ok {
+		writeError(w, http.StatusNotFound, "Artifact not found")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	_, _ = w.Write(data)
 }

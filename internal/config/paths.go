@@ -11,14 +11,14 @@ import (
 
 // Well-known directory and file names within a Liorian project.
 const (
-	ConfigFileName     = "lorian.config.json"
-	LorianConfigName   = "lorian.config.toml"
+	ConfigFileName      = "lorian.config.json"
+	LorianConfigName    = "lorian.config.toml"
 	ExternalModulesDir  = "external_modules"
 	InternalModulesDir  = "src/modules"
 	PublicAssetsDir     = "public/assets"
 	AppSrcDir           = "src/app"
-	LorianDir         = ".lorian"
-	LorianBuildsDir   = ".lorian/build"
+	LorianDir           = ".lorian"
+	LorianBuildsDir     = ".lorian/build"
 	ManifestFileName    = "manifest.json"
 	ModuleEntryFileName = "index.tsx"
 	// ArchiveExt is the extension of built module archives (`<name>-<version>.SenMod`).

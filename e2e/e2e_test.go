@@ -46,16 +46,24 @@ func TestScripts(t *testing.T) {
 			// Whole CLI under test is the freshly built binary.
 			env.Setenv("LIORIAN", liorianBin)
 			// Network: a dedicated mock liorian-auth API per script, so
-			// store/auth state never leaks between TC scenarios.
+			// store/auth state never leaks between TC scenarios. The mock
+			// also serves the public catalog (`/api/catalog/*`), which the
+			// marketplace commands reach through LIORIAN_STORE_API.
 			server := httptest.NewServer(mockapi.New().Handler())
 			env.Setenv("LIORIAN_AUTH_API", server.URL)
+			env.Setenv("LIORIAN_STORE_API", server.URL)
 			// Deterministic, isolated state: force the encrypted-file vault
 			// and skip the update check.
 			env.Setenv("LIORIAN_CLI_STORE", "file")
 			env.Setenv("LIORIAN_CLI_SKIP_UPDATE", "1")
 			// Portable fixture toolchain (fake bun/npm/tsc/node) used by
-			// init/install, debug and type-check scripts.
-			env.Setenv("PATH", fixturesBin()+string(os.PathListSeparator)+env.Getenv("PATH"))
+			// init/install, debug and type-check scripts. PATH is deliberately
+			// hermetic: the fixture binaries first, then only the standard
+			// system directories. The developer machine's own PATH is NOT
+			// inherited, so globally installed tools (esbuild, tsup, tsc,
+			// vitest…) can never leak into the scenarios and skew the
+			// bundler/type-check resolution (spec §5.9).
+			env.Setenv("PATH", fixturesBin()+string(os.PathListSeparator)+"/usr/bin"+string(os.PathListSeparator)+"/bin")
 			// testscript defaults HOME to the read-only `/no-home`: give each
 			// script a writable, isolated home so the vault fallbacks
 			// (credentials.enc / signing.enc / machine.secret) are deterministic.

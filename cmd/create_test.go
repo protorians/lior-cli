@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/pkg"
 	"github.com/spf13/cobra"
 )
@@ -110,11 +112,70 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 }
 
 func TestCreateCommandFlagsRegistered(t *testing.T) {
-	for _, name := range []string{"domain", "id", "name", "version", "icon", "url", "description", "mockup", "page-mockup"} {
+	for _, name := range []string{
+		"domain", "id", "name", "version", "icon", "url", "description",
+		"type", "category", "mockup", "page-mockup", "skip-install",
+	} {
 		if f := createCmd.Flag(name); f == nil {
 			t.Errorf("createCmd must expose the --%s flag", name)
 		}
 	}
+}
+
+// TestRunCreateSkipInstallFlagSkipsInstallStep verifies that the
+// `--skip-install` flag (spec §5.2 step 6) disables the dependency
+// installation step even when LIORIAN_CLI_SKIP_INSTALL is unset: with an
+// empty PATH (no package manager) the "no package manager detected" warning
+// must NOT be emitted.
+func TestRunCreateSkipInstallFlagSkipsInstallStep(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	// No package manager resolvable: a non-skipped run would warn pm_none.
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv(createSkipInstallEnv, "")
+
+	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	createDomain = "com.example.blog-manager"
+	createSkipInstall = true
+	defer func() { createDomain, createSkipInstall = "", false }()
+
+	stderr := captureStderr(func() {
+		if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
+			t.Fatalf("runCreate: %v", err)
+		}
+	})
+
+	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx")) {
+		t.Fatal("the module must have been created")
+	}
+	if strings.Contains(stderr, i18n.T("create.warn.pm_none")) ||
+		strings.Contains(stderr, "failed to install dependencies") {
+		t.Errorf("with --skip-install the dependency step must not run; got warnings on stderr:\n%s", stderr)
+	}
+}
+
+// captureStderr runs fn with os.Stderr redirected to a pipe and returns the
+// captured output.
+func captureStderr(fn func()) string {
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = orig }()
+
+	fn()
+
+	w.Close()
+	b, _ := io.ReadAll(r)
+	return string(b)
 }
 
 // writeRequirementMockup writes a scaffoldable mockup whose manifest declares
