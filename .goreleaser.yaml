@@ -63,7 +63,7 @@ release:
     ### Go
 
     ```bash
-    go install github.com/protorians/lior-cli@{{ .Tag }}
+    go install github.com/jetbrains/lior-cli@{{ .Tag }}
     ```
 
     ### npm / pnpm / yarn / bun
@@ -75,8 +75,8 @@ release:
     ### Homebrew (macOS / Linux)
 
     ```bash
-    brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-    brew install protorians/lior-cli/liorian
+    brew tap jetbrains/lior-cli https://github.com/jetbrains/lior-cli.git
+    brew install jetbrains/lior-cli/liorian
     ```
 
 checksum:

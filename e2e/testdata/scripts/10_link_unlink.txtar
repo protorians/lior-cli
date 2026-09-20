@@ -3,7 +3,7 @@
 # metadata via PUT /api/developer-store/modules/:id before unlinking.
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > lorian.config.json'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
@@ -14,19 +14,19 @@ exec $LIORIAN --no-color publish com.example.blog-manager
 stdout '✓ Published successfully'
 
 # TC-013 — link (remote token read from the manifest, synced by publish).
-exec sh -c 'awk -F\" "/\"token\"/{print \$4}" external_modules/com.example.blog-manager/manifest.json > remote.token'
+exec sh -c 'awk -F\" "/\"token\"/{print \$4}" library/modules/com.example.blog-manager/manifest.json > remote.token'
 exec sh -c '"$LIORIAN" --no-color link com.example.blog-manager "$(cat remote.token)"'
 stdout '✓ Module linked successfully'
 stdout 'Remote'
 exists .lorian/links.json
 exec grep -q '[0-9a-f]' .lorian/links.json
-exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
 
 # TC-014 — simple unlink: new local UUID token, remote link removed.
 env LIORIAN_CLI_YES=1
 exec $LIORIAN --no-color unlink com.example.blog-manager
 stdout '✓ Module unlinked successfully'
-exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
 
 # Re-link (remote token kept) then unlink with remote synchronization
 # (metadata → PUT /api/developer-store/modules/:id).

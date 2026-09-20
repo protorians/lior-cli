@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/protorians/lior-cli/internal/audit"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/audit"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -44,7 +44,7 @@ var auditCmd = &cobra.Command{
 	Long: `Audits the conformance of one (or all) module(s) against the
 Liorian rules: Clean Architecture, manifest.json and index.tsx.
 
-Without an argument, all modules in external_modules/ are audited.`,
+Without an argument, all modules in library/modules/ are audited.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runAudit(cmd, args)

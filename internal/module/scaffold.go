@@ -10,8 +10,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // Embedded reference mockups shipped inside the CLI so `liorian create
@@ -394,10 +394,10 @@ func scaffoldEmbeddedPage(root, moduleDir string, spec ModuleSpec) string {
 
 // rewritePageBody renames the mockup components in a page body and rewrites the
 // module import path to the module domain
-// (`@/external_modules/<domain>/...`).
+// (`@/library/modules/<domain>/...`).
 func rewritePageBody(body string, spec ModuleSpec) string {
 	body = applyReplacements(body, moduleReplacements(spec.ID))
-	return strings.ReplaceAll(body, "external_modules/"+spec.ID+"/", "external_modules/"+spec.Domain+"/")
+	return strings.ReplaceAll(body, config.ExternalModulesDir+"/"+spec.ID+"/", config.ExternalModulesDir+"/"+spec.Domain+"/")
 }
 
 // writeScaffoldedPage writes a page body at `src/app/<url>/page.tsx`.

@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // createTestModule sets up a valid module under a project root. The default
@@ -36,7 +36,7 @@ func createTestModule(t *testing.T, root, id string) {
 func setupAuditProject(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	// Create the external_modules dir (Creator does this, but be explicit)
+	// Create the library/modules dir (Creator does this, but be explicit)
 	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -106,11 +106,11 @@ func TestAuditAllSkipsDirsWithoutManifest(t *testing.T) {
 }
 
 func TestAuditAllMissingDir(t *testing.T) {
-	root := t.TempDir() // no external_modules
+	root := t.TempDir() // no library/modules
 	auditor := &Auditor{Root: root}
 	_, err := auditor.AuditModules("")
 	if err == nil {
-		t.Error("AuditModules sans external_modules/ doit échouer")
+		t.Error("AuditModules sans library/modules/ doit échouer")
 	}
 }
 

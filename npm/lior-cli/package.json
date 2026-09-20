@@ -1,16 +1,16 @@
 {
   "name": "@lior/cli",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Lior CLI - Create, maintain, and publish modules in the Liorian ecosystem",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/protorians/lior-cli.git",
+    "url": "https://github.com/jetbrains/lior-cli.git",
     "directory": "npm/lior-cli"
   },
-  "homepage": "https://github.com/protorians/lior-cli#readme",
+  "homepage": "https://github.com/jetbrains/lior-cli#readme",
   "bugs": {
-    "url": "https://github.com/protorians/lior-cli/issues"
+    "url": "https://github.com/jetbrains/lior-cli/issues"
   },
   "bin": {
     "liorian": "bin/liorian"

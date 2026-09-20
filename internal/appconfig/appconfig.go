@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // FileName is the well-known workspace registry file.

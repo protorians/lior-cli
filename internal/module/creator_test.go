@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/config"
 )
 
 func TestModuleExists(t *testing.T) {
@@ -16,12 +16,12 @@ func TestModuleExists(t *testing.T) {
 		t.Error("an absent module must not exist")
 	}
 
-	// External module (external_modules/<domain>/).
+	// External module (library/modules/<domain>/).
 	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir, "com.ext.mod"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if !ModuleExists(root, "com.ext.mod") {
-		t.Error("an external_modules/ module must be found by its folder domain")
+		t.Error("an external library/modules/ module must be found by its folder domain")
 	}
 
 	// External module referenced by its manifest id.
@@ -33,7 +33,7 @@ func TestModuleExists(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !ModuleExists(root, "analytics") {
-		t.Error("an external_modules/ module must be found by its manifest id")
+		t.Error("an external library/modules/ module must be found by its manifest id")
 	}
 
 	// Internal module (src/modules/<name>/).
@@ -56,7 +56,7 @@ func TestMissingRequirements(t *testing.T) {
 
 	manifest := NewManifest("consumer", "")
 	manifest.Requirements = map[string]any{
-		"dep-a":        true, // external_modules/
+		"dep-a":        true, // library/modules/
 		"int-b":        true, // src/modules/
 		"organization": true, // platform core
 		"identity":     true, // platform core

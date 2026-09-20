@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/debug"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/debug"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -19,7 +19,7 @@ var debugTimeout time.Duration
 var debugCmd = &cobra.Command{
 	Use:   "debug [module]",
 	Short: "Debug a module or all modules",
-	Long: `Runs the debug of one (or all) module(s) in external_modules/.
+	Long: `Runs the debug of one (or all) module(s) in library/modules/.
 
 Checks the module's conformance, tries to compile in debug mode,
 and displays logs and errors in real time.

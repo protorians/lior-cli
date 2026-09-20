@@ -17,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 func sha256Hex(data []byte) string {
@@ -509,7 +509,7 @@ func TestEntrySanitization(t *testing.T) {
 		want    string
 		allowed bool
 	}{
-		{"external_modules/com.example.x/manifest.json", "external_modules/com.example.x/manifest.json", true},
+		{config.ExternalModulesDir + "/com.example.x/manifest.json", config.ExternalModulesDir + "/com.example.x/manifest.json", true},
 		{"src/app/blog/page.tsx", "src/app/blog/page.tsx", true},
 		{"../evil.txt", "evil.txt", false},
 		{"../../etc/passwd", "etc/passwd", false},
@@ -532,7 +532,7 @@ func TestEntrySanitization(t *testing.T) {
 
 func TestWithinDir(t *testing.T) {
 	base := "/tmp/liorian-base"
-	if !withinDir(base, base+"/external_modules/x/manifest.json") {
+	if !withinDir(base, base+"/"+config.ExternalModulesDir+"/x/manifest.json") {
 		t.Error("expected a descendant to be within base")
 	}
 	if withinDir(base, base+"-elsewhere/evil.txt") {

@@ -2,7 +2,7 @@
 # liorian-auth mock (LIORIAN_AUTH_API).
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > lorian.config.json'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
@@ -36,7 +36,7 @@ exec $LIORIAN --no-color publish com.example.blog-manager
 stdout '✓ Connected as dev@example.com'
 stdout '✓ Published successfully'
 stdout 'URL : https://store.liorian.dev/modules/blog-manager'
-exec grep -q '"token": "[0-9a-f-]' external_modules/com.example.blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
 
 # TC-012 — same version already published: 409 conflict (exit 11 / ExitPublish).
 ! exec $LIORIAN --no-color publish com.example.blog-manager

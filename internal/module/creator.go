@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // ModuleSpec is the set of identity and metadata values used to scaffold a new
@@ -17,7 +17,7 @@ import (
 type ModuleSpec struct {
 	// Domain is the reverse-DNS dotted name of the module
 	// (e.g. com.organization.domain). It names the module directory under
-	// external_modules/ and public/assets/.
+	// library/modules/ and public/assets/.
 	Domain string
 	// ID is the kebab-case identifier of the module (e.g. hello-world).
 	ID string
@@ -84,7 +84,7 @@ func (s ModuleSpec) EffectiveAppName() string {
 
 // Creator builds new modules by scaffolding them from a reference mockup.
 type Creator struct {
-	// Root is the project root containing external_modules/.
+	// Root is the project root containing library/modules/.
 	Root string
 	// MockupDir optionally points to a reference module (e.g. the hello-world
 	// example) to copy and rename. When empty, the embedded mockup is used.
@@ -97,7 +97,7 @@ type Creator struct {
 
 // CreateResult summarises a module creation.
 type CreateResult struct {
-	// Name is the module address on disk: its domain (external_modules/<name>).
+	// Name is the module address on disk: its domain (library/modules/<name>).
 	Name string
 	ID   string
 	// Domain is the reverse-DNS dotted name of the module.
@@ -136,7 +136,7 @@ var platformCoreModules = map[string]bool{
 }
 
 // ModuleExists reports whether a module `ref` is available locally, either as
-// an external module in `external_modules/` (matched by its folder domain or
+// an external module in `library/modules/` (matched by its folder domain or
 // by its manifest id) or as an internal module in `src/modules/`.
 func ModuleExists(root, ref string) bool {
 	if pkg.DirExists(config.ModuleDir(root, ref)) {
@@ -161,7 +161,7 @@ func ModuleExists(root, ref string) bool {
 
 // RequirementSatisfied reports whether a requirement is provided: platform
 // core modules always count, otherwise the module must exist locally
-// (external_modules/ or src/modules/).
+// (library/modules/ or src/modules/).
 func RequirementSatisfied(root, req string) bool {
 	if platformCoreModules[req] {
 		return true
@@ -170,7 +170,7 @@ func RequirementSatisfied(root, req string) bool {
 }
 
 // MissingRequirements returns the requirements declared in `manifest` that are
-// not satisfied locally by an external (external_modules/) or an internal
+// not satisfied locally by an external (library/modules/) or an internal
 // (src/modules/) module. Platform core modules are always considered
 // satisfied.
 func (c *Creator) MissingRequirements(manifest *Manifest) []string {
@@ -197,7 +197,7 @@ func (c *Creator) ResolveDependencies() (string, error) {
 }
 
 // Create generates a module from the provided spec inside
-// `external_modules/<domain>` by copying the reference mockup (custom or
+// `library/modules/<domain>` by copying the reference mockup (custom or
 // embedded) and renaming its components and information with the spec
 // (identifier for components, domain for the directory and the declaration
 // identifier). A matching `src/app/<url>/page.tsx` is scaffolded from the page

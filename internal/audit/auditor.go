@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // jsxTagRE heuristically recognises JSX elements without a full TS/JSX parser:
@@ -52,7 +52,7 @@ func (ar *AuditResult) TotalWarnings() int {
 }
 
 // AuditModules audits one or all modules. When name is empty, all modules
-// in external_modules/ are audited.
+// in library/modules/ are audited.
 func (a *Auditor) AuditModules(name string) (*AuditResult, error) {
 	if name != "" {
 		return a.auditSingle(name)
@@ -210,7 +210,7 @@ func (a *Auditor) auditDependencies(name string, res *module.Result) {
 		return
 	}
 
-	// Check requirements (external_modules/ or internal src/modules/;
+	// Check requirements (library/modules/ or internal src/modules/;
 	// platform core modules are always satisfied).
 	for req := range manifest.Requirements {
 		addLevel(res, "requirements", req, module.RequirementSatisfied(a.Root, req),

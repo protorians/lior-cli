@@ -1,6 +1,6 @@
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 exec sh -c 'mkdir -p public/assets/com.example.blog-manager'
@@ -15,13 +15,13 @@ stdout 'Module : com.example.blog-manager v1.0.0'
 exists .lorian/build/com.example.blog-manager-1.0.0.SenMod
 
 # TC-010 — the archive contains the module manifest, app sources and assets.
-exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "external_modules/com.example.blog-manager/manifest.json"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "library/modules/com.example.blog-manager/manifest.json"'
 exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "src/app/blog-manager/page.tsx"'
 exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "public/assets/com.example.blog-manager/logo.txt"'
 
 # Missing module: exit 3 (ExitModuleNotFound).
 ! exec $LIORIAN --no-color pack com.example.missing
-stderr 'does not exist in external_modules'
+stderr 'does not exist in library/modules'
 exec sh -c '"$LIORIAN" --no-color pack com.example.missing >/dev/null 2>&1; echo $?'
 stdout '^3$'
 

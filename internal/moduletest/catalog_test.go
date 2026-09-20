@@ -38,7 +38,7 @@ func TestRunnerBinary(t *testing.T) {
 func TestFindRunnerBinary(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	root := t.TempDir()
-	moduleDir := filepath.Join(root, "external_modules", "com.test.mod")
+	moduleDir := filepath.Join(root, "library", "modules", "com.test.mod")
 	bin := filepath.Join(moduleDir, "node_modules", ".bin", "vitest")
 	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
 		t.Fatal(err)

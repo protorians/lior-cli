@@ -8,7 +8,7 @@
 
 ## 1. Vue d'ensemble
 
-La CLI est un binaire Go (module `github.com/protorians/lior-cli`, **Go 1.26.0**) qui couvre le
+La CLI est un binaire Go (module `github.com/jetbrains/lior-cli`, **Go 1.26.0**) qui couvre le
 cycle de vie :
 
 ```
@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `liorian-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`/cli`) + formula Homebrew (`Formula/`) | ✅ en place (releases v0.0.1 → v0.13.0, tap `protorians/lior-cli`) |
+| CI/CD GoReleaser + package npm (`/cli`) + formula Homebrew (`Formula/`) | ✅ en place (releases v0.0.1 → v0.13.0, tap `jetbrains/lior-cli`) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -35,16 +35,16 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 ## 2. Ce qui est implémenté (par commande)
 
 ### `liorian init` (FR-001, FR-002, FR-003)
-- Clone shallow de `protorians/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
+- Clone shallow de `jetbrains/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
 - Détection des package managers `bun → pnpm → yarn → npm` (FR-001) + choix interactif.
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
 - Écrit `lorian.config.json` (config projet).
 
 ### `liorian create module [nom]` (FR-004, FR-005)
-- Génère la structure `external_modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
+- Génère la structure `library/modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
   `components/`, `hooks/`, `services/` (avec `.gitkeep`).
 - Token UUID v4 dans le manifest (FR-005), key en `UPPER_SNAKE_CASE`.
-- Vérification des `requirements` (modules requis présents dans `external_modules/` ou `src/modules/` ;
+- Vérification des `requirements` (modules requis présents dans `library/modules/` ou `src/modules/` ;
   les modules cœur `organization`/`identity` toujours satisfaits) avec **rollback** en cas de module
   manquant, puis résolution des `dependencies`/`devDependencies` via le gestionnaire de paquets détecté
   (`bun → pnpm → yarn → npm`) à la racine du projet (`--skip-install` pour désactiver).
@@ -74,7 +74,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
 ### `liorian pack [module]` (FR-010, FR-011)
-- Zip `external_modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.lorian/build/<module>-<version>.SenMod`.
+- Zip `library/modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.lorian/build/<module>-<version>.SenMod`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
 ### `liorian sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
@@ -222,7 +222,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > la validation du token et atteint le conflit de version (TC-012, exit 11).
 >
 > Itération du 2026-09-15 : **mockup hello-world aligné 1:1 sur le socle**
-> (le mockup embarqué est identique à `liorian-socle/external_modules/hello-world`
+> (le mockup embarqué est identique à `liorian-socle/library/modules/hello-world`
 > : composants `View.*` / `Activity.*`, `AutoBreadcrumb`, suppression des
 > `Wrapper/Header/Main/Footer` et `WaitingActivity`/`AnimatedContent`) ;
 > `create module` expose les flags **`--mockup` / `--page-mockup`** (priorité

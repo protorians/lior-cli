@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/appconfig"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/appconfig"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // EnvAPIBase overrides the resolved catalog API base URL. Mirrors the

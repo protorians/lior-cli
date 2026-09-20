@@ -9,11 +9,12 @@ import (
 
 // Config mirrors the optional `lorian.config.json` file at the project root.
 type Config struct {
-	Project ProjectConfig `json:"project"`
-	Publish PublishConfig `json:"publish"`
-	Debug   DebugConfig   `json:"debug"`
-	Test    TestConfig    `json:"test"`
-	Cli     CliConfig     `json:"cli"`
+	Project   ProjectConfig   `json:"project"`
+	Publish   PublishConfig   `json:"publish"`
+	Debug     DebugConfig     `json:"debug"`
+	Test      TestConfig      `json:"test"`
+	Cli       CliConfig       `json:"cli"`
+	Toolchain ToolchainConfig `json:"toolchain"`
 }
 
 // TestConfig configures `liorian test`: which package manager installs and
@@ -74,6 +75,55 @@ type CliConfig struct {
 	// NoColor disables colored output. An empty/false value keeps the default
 	// terminal color profile.
 	NoColor bool `json:"noColor"`
+}
+
+// ToolchainConfig configures the application passthrough commands (`dev`,
+// `build`, `start`, `check`): the project can rename the package.json script
+// backing each command and register pre/post actions around it.
+type ToolchainConfig struct {
+	// Commands maps a liorian command ("dev", "build", "start", "check") to
+	// the package.json script that backs it. An empty value falls back to the
+	// default mapping ("dev"→"dev", "build"→"build", "start"→"start",
+	// "check"→"lint").
+	Commands map[string]string `json:"commands,omitempty"`
+	// Before lists package.json scripts run through the package manager
+	// before the toolchain command, keyed by liorian command name. A failing
+	// hook aborts the command.
+	Before map[string][]string `json:"before,omitempty"`
+	// After lists package.json scripts run through the package manager after
+	// the toolchain command, keyed by liorian command name. A failing hook
+	// makes the run non-zero.
+	After map[string][]string `json:"after,omitempty"`
+}
+
+// Command returns the configured package.json script for a liorian command
+// name, falling back to an empty string when none is configured.
+func (c ToolchainConfig) Command(name string) string {
+	return strings.TrimSpace(c.Commands[name])
+}
+
+// BeforeHooks returns the configured pre-action hook names for a liorian
+// command.
+func (c ToolchainConfig) BeforeHooks(name string) []string {
+	return c.CommandsHooks(c.Before, name)
+}
+
+// AfterHooks returns the configured post-action hook names for a liorian
+// command.
+func (c ToolchainConfig) AfterHooks(name string) []string {
+	return c.CommandsHooks(c.After, name)
+}
+
+// CommandsHooks returns the hook names configured for a command under the
+// given map, filtering out empty entries.
+func (c ToolchainConfig) CommandsHooks(hooks map[string][]string, name string) []string {
+	var out []string
+	for _, h := range hooks[name] {
+		if h = strings.TrimSpace(h); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // ProjectConfig configures the project-level settings.

@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/i18n"
 )
 
 // ErrCancelled is returned by RunWithSteps when the developer aborts the

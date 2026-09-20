@@ -13,12 +13,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/runner"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/runner"
+	"github.com/jetbrains/lior-cli/internal/tui"
 )
 
 const (
@@ -378,12 +378,12 @@ func FormatTestLogs(moduleName string, logs []string) []string {
 	return result
 }
 
-// TestAll runs the tests of all modules in external_modules/.
+// TestAll runs the tests of all modules in library/modules/.
 func (t *Tester) TestAll() ([]*TestResult, error) {
 	return t.TestAllCtx(context.Background())
 }
 
-// TestAllCtx runs the tests of all modules in external_modules/, stopping as
+// TestAllCtx runs the tests of all modules in library/modules/, stopping as
 // soon as ctx is done.
 func (t *Tester) TestAllCtx(ctx context.Context) ([]*TestResult, error) {
 	dir := filepath.Join(t.Root, config.ExternalModulesDir)

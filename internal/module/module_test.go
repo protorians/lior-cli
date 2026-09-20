@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // setupProject creates a project root with one module via the Creator.
@@ -56,7 +57,7 @@ func TestCreateModuleStructure(t *testing.T) {
 		"presentation/widgets/blog-manager.widget.tsx",
 	}
 	for _, rel := range expected {
-		p := filepath.Join(root, "external_modules", "com.example.blog-manager", filepath.FromSlash(rel))
+		p := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", filepath.FromSlash(rel))
 		if _, err := os.Stat(p); err != nil {
 			t.Errorf("fichier attendu manquant : %s (%v)", p, err)
 		}
@@ -69,7 +70,7 @@ func TestCreateModuleStructure(t *testing.T) {
 	}
 
 	// No mockup spelling must survive the rename.
-	dir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	dir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 	if err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -88,7 +89,7 @@ func TestCreateModuleDescriptionInIndex(t *testing.T) {
 	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager", Description: "Gestion de blog et d'articles"}); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	data, err := os.ReadFile(filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx"))
+	data, err := os.ReadFile(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "index.tsx"))
 	if err != nil {
 		t.Fatalf("lecture index.tsx: %v", err)
 	}
@@ -166,8 +167,8 @@ func TestArchiveStructure(t *testing.T) {
 
 	joined := strings.Join(names, "\n")
 	for _, want := range []string{
-		"external_modules/com.example.blog-manager/manifest.json",
-		"external_modules/com.example.blog-manager/index.tsx",
+		config.ExternalModulesDir + "/com.example.blog-manager/manifest.json",
+		config.ExternalModulesDir + "/com.example.blog-manager/index.tsx",
 		"src/app/blog-manager/page.tsx",
 		"public/assets/com.example.blog-manager/logo.svg",
 	} {
@@ -206,12 +207,12 @@ func TestValidateModuleMissingToken(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 	// Invalider le token
-	m, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
+	m, err := LoadManifest(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	m.Token = "pas-un-uuid"
-	if err := m.Save(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json")); err != nil {
+	if err := m.Save(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "manifest.json")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -227,7 +228,7 @@ func TestValidateModuleMissingToken(t *testing.T) {
 
 func TestValidateModuleWarnsOnMissingCanonicalFields(t *testing.T) {
 	root := t.TempDir()
-	moduleDir := filepath.Join(root, "external_modules", "com.example.legacy")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.legacy")
 	raw := `{
   "schemaVersion": 1,
   "id": "legacy",
@@ -336,7 +337,7 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	}
 
 	// Manifest enriched with remote metadata (fields absent after create).
-	m, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
+	m, err := LoadManifest(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +365,7 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("second Link: %v", err)
 	}
-	m, err = LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
+	m, err = LoadManifest(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

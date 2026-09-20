@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/tui"
 )
 
 func createTestModule(t *testing.T, root, id string) {
@@ -258,7 +258,7 @@ func TestDebugAllMissingDir(t *testing.T) {
 	debugger := &Debugger{Root: root}
 	_, err := debugger.DebugAll()
 	if err == nil {
-		t.Error("DebugAll sans external_modules/ doit échouer")
+		t.Error("DebugAll sans library/modules/ doit échouer")
 	}
 }
 

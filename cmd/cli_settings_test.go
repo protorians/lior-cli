@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
 )
 
 func TestNoColorFromArgs(t *testing.T) {

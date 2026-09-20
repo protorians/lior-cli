@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/runner"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/runner"
+	"github.com/jetbrains/lior-cli/internal/tui"
 )
 
 // Default execution windows (overridable via Debugger.Timeout).
@@ -366,12 +366,12 @@ func firstLine(s string) string {
 	return ""
 }
 
-// DebugAll runs debug on all modules in external_modules/.
+// DebugAll runs debug on all modules in library/modules/.
 func (d *Debugger) DebugAll() ([]*DebugResult, error) {
 	return d.DebugAllCtx(context.Background())
 }
 
-// DebugAllCtx runs debug on all modules in external_modules/, stopping as soon
+// DebugAllCtx runs debug on all modules in library/modules/, stopping as soon
 // as ctx is done.
 func (d *Debugger) DebugAllCtx(ctx context.Context) ([]*DebugResult, error) {
 	dir := filepath.Join(d.Root, config.ExternalModulesDir)

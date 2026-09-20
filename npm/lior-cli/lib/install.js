@@ -9,7 +9,7 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 
-const REPO = "protorians/lior-cli";
+const REPO = "jetbrains/lior-cli";
 const BINARY_NAME = "liorian";
 const ARCHIVE_PREFIX = "lior-cli";
 
@@ -32,7 +32,7 @@ function getUserAgent() {
   const pkg = require("../package.json");
   // `Node/<version>` is the engine token of Node's core `http`/`https`
   // package; `Senteints/<version>` is the CLI.
-  return `Protorians/5.0 (${getOsToken()}) Node/${process.version.slice(1)} Senteints/${pkg.version}`;
+  return `JetBrains/5.0 (${getOsToken()}) Node/${process.version.slice(1)} Senteints/${pkg.version}`;
 }
 
 const PLATFORM_MAP = {

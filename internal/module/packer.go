@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // MaxArchiveSize is the maximum allowed archive size (store limit: 50 MB).
@@ -92,7 +92,7 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 	}, nil
 }
 
-// createArchive zips `moduleSrc` (prefixed `external_modules/<name>/`),
+// createArchive zips `moduleSrc` (prefixed `library/modules/<name>/`),
 // `appSrc` (prefixed `src/app/<name>/`) and, when present, `assetsSrc`
 // (prefixed `public/assets/<name>/`) into `dest`.
 func (p *Packer) createArchive(dest, moduleSrc, appSrc, assetsSrc string) error {

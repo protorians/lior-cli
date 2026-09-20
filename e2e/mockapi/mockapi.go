@@ -576,8 +576,8 @@ func (s *Server) seedModule(slug, page, name, desc, category, version string, in
 				ID   string `json:"id"`
 				Name string `json:"name"`
 			}
-			p.ID = "pub-protorians"
-			p.Name = "Protorians"
+			p.ID = "pub-jetbrains"
+			p.Name = "JetBrains"
 			return p
 		}(),
 		Version:          version,
@@ -620,7 +620,7 @@ func buildModuleArchive(name, page, version string) []byte {
 		"uri":           "/" + page,
 		"category":      "SYSTEM",
 		"token":         uuid.NewString(),
-		"publisher":     map[string]any{"id": "pub-protorians", "name": "Protorians"},
+		"publisher":     map[string]any{"id": "pub-jetbrains", "name": "JetBrains"},
 		"platforms": map[string]any{
 			"web": map[string]any{"supported": true, "modes": []string{"web"}},
 		},
@@ -636,15 +636,15 @@ func buildModuleArchive(name, page, version string) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	entries := map[string]string{
-		"external_modules/" + name + "/manifest.json": string(raw) + "\n",
-		"external_modules/" + name + "/index.tsx":     "export default function Demo() {\n  return <div>Demo</div>;\n}\n",
-		"src/app/" + page + "/page.tsx":               "export default function Page() { return <div>Page</div>; }\n",
-		"public/assets/" + name + "/README.txt":       "hello from the catalog\n",
+		"library/modules/" + name + "/manifest.json": string(raw) + "\n",
+		"library/modules/" + name + "/index.tsx":     "export default function Demo() {\n  return <div>Demo</div>;\n}\n",
+		"src/app/" + page + "/page.tsx":              "export default function Page() { return <div>Page</div>; }\n",
+		"public/assets/" + name + "/README.txt":      "hello from the catalog\n",
 	}
 	// deterministic order keeps archives stable across runs
 	for _, rel := range []string{
-		"external_modules/" + name + "/manifest.json",
-		"external_modules/" + name + "/index.tsx",
+		"library/modules/" + name + "/manifest.json",
+		"library/modules/" + name + "/index.tsx",
 		"src/app/" + page + "/page.tsx",
 		"public/assets/" + name + "/README.txt",
 	} {

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 func TestGeneratePKCE(t *testing.T) {

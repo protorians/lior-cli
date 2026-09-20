@@ -1,6 +1,6 @@
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 
 # TC-006 — connect with MFA TOTP: LIORIAN_CLI_MFA_CODE read from the environment.

@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // Severity levels for validation findings.
@@ -106,7 +106,7 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 		"domain in mod.liorian.<name> format", LevelWarning)
 	// the module directory must be named after its domain
 	addLevel(res, "manifest.json", "domain directory", manifest.Domain == name,
-		"manifest domain matches the module directory (external_modules/<domain>)", LevelWarning)
+		"manifest domain matches the module directory (library/modules/<domain>)", LevelWarning)
 	// permissions must be an array (spec rule, WARNING severity)
 	addLevel(res, "manifest.json", "permissions", rawPermissionsIsArray(manifestPath),
 		"permissions is an array", LevelWarning)

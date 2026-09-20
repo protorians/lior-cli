@@ -16,11 +16,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/tui"
 )
 
 // Signature verification results.
@@ -188,7 +188,7 @@ func checksumHex(data []byte) string {
 
 // unpack extracts a `.SenMod` (ZIP) archive into a temporary directory,
 // validates the extracted module and copies only this module's directories
-// into the workspace: `external_modules/<name>/`, `public/assets/<name>/` and
+// into the workspace: `library/modules/<name>/`, `public/assets/<name>/` and
 // `src/app/<uri-or-id>/`. Nothing touches the workspace when the archive is
 // invalid or fails validation, so a bad install never leaves partial files.
 func unpack(data []byte, root string, force bool, res *InstallResult) error {
@@ -287,7 +287,7 @@ func sanitizeEntry(name string) string {
 
 // allowedEntry reports whether an archive entry belongs to the module layout.
 func allowedEntry(rel string) bool {
-	return strings.HasPrefix(rel, "external_modules/") ||
+	return strings.HasPrefix(rel, config.ExternalModulesDir+"/") ||
 		strings.HasPrefix(rel, "src/") ||
 		strings.HasPrefix(rel, "public/")
 }
@@ -325,10 +325,10 @@ func writeZipEntry(f *zip.File, target string) error {
 }
 
 // moduleNameFromFiles returns the module directory name, i.e. the `name`
-// segment of `external_modules/<name>/manifest.json`.
+// segment of `library/modules/<name>/manifest.json`.
 func moduleNameFromFiles(files []string) (string, error) {
 	for _, rel := range files {
-		rest, ok := strings.CutPrefix(rel, "external_modules/")
+		rest, ok := strings.CutPrefix(rel, config.ExternalModulesDir+"/")
 		if !ok {
 			continue
 		}

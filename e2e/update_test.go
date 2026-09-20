@@ -59,7 +59,7 @@ func TestUpdateNotification(t *testing.T) {
 	if !strings.Contains(string(out), "Update available") {
 		t.Errorf("notification d'update absente:\n%s", out)
 	}
-	if !strings.Contains(string(out), "https://github.com/protorians/lior-cli/releases/latest") {
+	if !strings.Contains(string(out), "https://github.com/jetbrains/lior-cli/releases/latest") {
 		t.Errorf("la notification doit pointer vers la page de release:\n%s", out)
 	}
 

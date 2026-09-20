@@ -6,14 +6,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/i18n"
 )
 
 // Well-known directory and file names within a Liorian project.
 const (
 	ConfigFileName      = "lorian.config.json"
 	LorianConfigName    = "lorian.config.toml"
-	ExternalModulesDir  = "external_modules"
+	ExternalModulesDir  = "library/modules"
 	InternalModulesDir  = "src/modules"
 	PublicAssetsDir     = "public/assets"
 	AppSrcDir           = "src/app"

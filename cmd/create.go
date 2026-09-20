@@ -6,17 +6,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var createCmd = &cobra.Command{
 	Use:   "create module [name]",
 	Short: "Create a new module",
-	Long: `Creates a new module in external_modules/{domain}/ from the embedded
+	Long: `Creates a new module in library/modules/{domain}/ from the embedded
 hello-world mockup, renamed with the given identifier (manifest.json,
 index.tsx, package.json, application/, domain/, infrastructure/,
 presentation/).
@@ -131,7 +131,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Block the creation when a module required by the manifest (requirements)
-	// is not available locally — external_modules/ or internal src/modules/.
+	// is not available locally — library/modules/ or internal src/modules/.
 	if missing := creator.MissingRequirements(result.Manifest); len(missing) > 0 {
 		if err := os.RemoveAll(result.Dir); err != nil {
 			debugf("rollback of %s: %v", result.Dir, err)

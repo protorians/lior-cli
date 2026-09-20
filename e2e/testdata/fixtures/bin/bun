@@ -5,9 +5,13 @@ if [ "$1" = "run" ]; then
   name="$1"
   shift
   case "$name" in
-    debug|dev|build|test)
+    debug|dev|build|start|lint|test|pre-build|post-build)
       echo "[fixture] bun run $name (ok)"
       exit 0
+      ;;
+    broken)
+      echo "[fixture] bun run broken (ko)"
+      exit 42
       ;;
     *)
       echo "[fixture] bun run $name (script introuvable)"

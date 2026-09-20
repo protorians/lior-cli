@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 )
 
 // writeScaffoldFixture builds a minimal hello-world-style module mockup plus a
@@ -84,7 +85,7 @@ export function HelloWorldWidget() {
 }
 `)
 
-	mustWrite(pageMockup, `import {HelloWorldView} from "@/external_modules/hello-world/presentation/views/hello-world.view";
+	mustWrite(pageMockup, `import {HelloWorldView} from "@/library/modules/hello-world/presentation/views/hello-world.view";
 
 export default function HelloWorldPage() {
     return <HelloWorldView/>;
@@ -104,7 +105,7 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 
 	// Files renamed with the new module name.
 	for _, rel := range []string{
@@ -198,7 +199,7 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 
 	// Page content renamed.
 	assertFileContains(t, wantPage,
-		`import {BlogManagerView} from "@/external_modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
+		`import {BlogManagerView} from "@/library/modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
 		"function BlogManagerPage()",
 		"<BlogManagerView/>",
 	)
@@ -234,10 +235,10 @@ func TestCreateFromMockupPatchesDefaultURI(t *testing.T) {
 	if !pkg.FileExists(wantPage) {
 		t.Fatalf("page non générée: %s", wantPage)
 	}
-	assertFileContains(t, filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx"),
+	assertFileContains(t, filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "index.tsx"),
 		"uri: '/blog-manager'",
 	)
-	manifest, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
+	manifest, err := LoadManifest(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatalf("manifest invalide sans description: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestCreateUsesEnvModuleMockup(t *testing.T) {
 	}
 
 	// The custom mockup (not the embedded one) must have been scaffolded.
-	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 	assertFileContains(t, filepath.Join(moduleDir, "index.tsx"),
 		"blogManagerModule",
 		"com.example.blog-manager",
@@ -282,7 +283,7 @@ func TestCreateUsesEnvModuleMockup(t *testing.T) {
 	if _, err := (&Creator{Root: root2}).Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
 		t.Fatalf("Create avec mockup env invalide: %v", err)
 	}
-	moduleDir2 := filepath.Join(root2, "external_modules", "com.example.blog-manager")
+	moduleDir2 := filepath.Join(root2, config.ExternalModulesDir, "com.example.blog-manager")
 	if !pkg.FileExists(filepath.Join(moduleDir2, "package.json")) {
 		t.Error("le fallback doit utiliser le mockup embarqué")
 	}
@@ -300,7 +301,7 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 		t.Errorf("token non UUID: %q", res.Token)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 	for _, rel := range []string{
 		"manifest.json",
 		"index.tsx",
@@ -338,7 +339,7 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 		t.Errorf("Page = %q, want %q", res.Page, wantPage)
 	}
 	assertFileContains(t, wantPage,
-		`import {BlogManagerView} from "@/external_modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
+		`import {BlogManagerView} from "@/library/modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
 		"function BlogManagerPage()",
 	)
 }
@@ -350,7 +351,7 @@ func TestCreateFromEmbeddedMockupManifestIsCanonical(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 	manifestPath := filepath.Join(moduleDir, "manifest.json")
 	assertFileContains(t, manifestPath,
 		`"$schema"`,
@@ -393,7 +394,7 @@ func TestCreateRespectsTypeAndCategoryFlags(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 	assertFileContains(t, filepath.Join(moduleDir, "manifest.json"),
 		`"type": "INTERNAL"`,
 		`"category": "DATA"`,
@@ -424,7 +425,7 @@ func TestCreateFromMockupEmptyDescriptionStaysEmpty(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	manifest, err := LoadManifest(filepath.Join(root, "external_modules", "com.example.blog-manager", "manifest.json"))
+	manifest, err := LoadManifest(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "manifest.json"))
 	if err != nil {
 		t.Fatalf("LoadManifest: %v", err)
 	}

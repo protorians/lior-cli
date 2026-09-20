@@ -1,0 +1,53 @@
+mkdir project
+cd project
+mkdir -p library/modules
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
+exec sh -c 'printf "{\"name\":\"socle\",\"version\":\"0.1.0\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\",\"start\":\"hugo\",\"lint\":\"eslint\",\"pre-build\":\"echo pre\",\"post-build\":\"echo post\"}}\n" > package.json'
+exec sh -c 'printf "{\"toolchain\":{\"before\":{\"build\":[\"pre-build\"]},\"after\":{\"build\":[\"post-build\"]}}}\n" > lorian.config.json'
+
+# TC-031 — `dev`: resolves the project `dev` script through the detected
+# package manager (bun) and streams the runner output. With no module in
+# library/modules/, the pre-flight gate is skipped.
+exec $LIORIAN --no-color dev
+stderr 'Starting the development server'
+stderr 'Command resolution'
+! stderr 'Checking modules for build errors \(debug\)'
+stderr '\[fixture\] bun run dev \(ok\)'
+
+# TC-032 — `check` maps to the `lint` script by default.
+exec $LIORIAN --no-color check
+stderr 'Running static checks'
+stderr '\[fixture\] bun run lint \(ok\)'
+
+# TC-033 — `build` runs the pre-actions, then the command, then the post-actions.
+exec $LIORIAN --no-color build
+stderr '\[fixture\] bun run pre-build \(ok\)'
+stderr '\[fixture\] bun run build \(ok\)'
+stderr '\[fixture\] bun run post-build \(ok\)'
+
+# TC-034 — `start` resolves the `start` script.
+exec $LIORIAN --no-color start
+stderr 'Starting the application'
+stderr '\[fixture\] bun run start \(ok\)'
+
+# TC-035 — a script missing from package.json hard-fails resolution with exit 1.
+exec sh -c 'printf "{\"name\":\"socle\",\"version\":\"0.1.0\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\",\"lint\":\"eslint\"}}\n" > package.json'
+! exec $LIORIAN --no-color start
+stderr 'no "start" script'
+
+# TC-036 — the underlying command's exit code is propagated: remap `check` to a
+# script that always fails and expect its code (42).
+exec sh -c 'printf "{\"name\":\"socle\",\"version\":\"0.1.0\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\",\"start\":\"hugo\",\"lint\":\"eslint\",\"broken\":\"echo broken\"}}\n" > package.json'
+exec sh -c 'printf "{\"toolchain\":{\"commands\":{\"check\":\"broken\"}}}\n" > lorian.config.json'
+exec sh -c '$LIORIAN --no-color check; echo "exit=$?"'
+stderr '\[fixture\] bun run broken \(ko\)'
+stdout 'exit=42'
+
+# TC-037 — the pre-flight gate aborts `dev` when a module is in error:
+# the debug check runs first and, on error, cancels the command with its code.
+mkdir -p library/modules/com.example.bad
+exec sh -c 'printf "{\"name\":\"bad\",\"version\":\"0.0.0\",\"entry\":\"index.tsx\"}\n" > library/modules/com.example.bad/manifest.json'
+exec sh -c '$LIORIAN --no-color dev; echo "exit=$?"'
+stderr 'Checking modules for build errors \(debug\)'
+stderr 'module debug check failed: 1 module\(s\) in error'
+stdout 'exit=10'

@@ -1,6 +1,6 @@
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 
 # TC-003 — invalid identifier: rejected (exit 1) with an explicit message.
@@ -14,7 +14,7 @@ stdout '^1$'
 stderr 'reverse-DNS'
 
 # TC-004 — valid name + domain: complete structure scaffolded from the
-# embedded mockup under external_modules/<domain>.
+# embedded mockup under library/modules/<domain>.
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 stdout 'Module created'
 stdout 'Token generated'
@@ -24,7 +24,7 @@ stdout 'Page created from mockup'
 stdout 'Required modules verified'
 stdout 'Dependencies resolved'
 
-cd external_modules/com.example.blog-manager
+cd library/modules/com.example.blog-manager
 exists manifest.json
 exists index.tsx
 exists README.md
@@ -50,5 +50,5 @@ exec grep -q '"category": "SYSTEM"' manifest.json
 ! exec grep -q 'dependencies:' index.tsx
 
 # The declaration declares a uri → the page is scaffolded in src/app.
-cd ../../src/app/blog-manager
+cd ../../../src/app/blog-manager
 exists page.tsx

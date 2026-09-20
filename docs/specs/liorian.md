@@ -8,8 +8,12 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.14.0 ;
+> - **État du code** : implémenté dans `jetbrains/lior-cli` (branche `alpha`) ; dernière release documentée 0.14.0 ;
 >   les écarts constatés entre la spec et le code sont documentés dans `docs/rapport-implementation.md`
+>
+> **Specs satellite** : les commandes outillage `dev`/`build`/`start`/`check` (passe-plat vers les
+> scripts `package.json` du projet, section `toolchain` de `lorian.config.json`) sont spécifiées
+> dans `docs/specs/liorian-toolchain.md`.
 >
 > **Documents de référence (workspace `liorian-workspace/docs`)** : la présente spec s'aligne sur
 > les contrats du workspace, en particulier le manifest de module
@@ -68,7 +72,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 ### Dans le périmètre (In Scope)
 
 - `liorian init` — Initialisation d'un projet Liorian (téléchargement de la release template + deps)
-- `liorian create module` — Création de module dans `external_modules/`
+- `liorian create module` — Création de module dans `library/modules/`
 - `liorian connect` — Authentification développeur (credentials + MFA)
 - `liorian auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
 - `liorian disconnect` — Suppression des credentials
@@ -103,15 +107,15 @@ init → create → develop → debug → audit → pack → sign → link → p
 | ID | Description |
 |----|-------------|
 | FR-001 | La CLI détecte automatiquement les gestionnaires de paquets disponibles (bun, pnpm, yarn, npm) et propose le choix à l'utilisateur |
-| FR-002 | `liorian init` télécharge la release (ZIP) du template `protorians/liorian-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
+| FR-002 | `liorian init` télécharge la release (ZIP) du template `jetbrains/liorian-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
 | FR-003 | `liorian init` installe les dépendances avec le gestionnaire choisi |
-| FR-004 | `liorian create module` crée un module dans `external_modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
+| FR-004 | `liorian create module` crée un module dans `library/modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
 | FR-005 | `liorian create module` génère un token UUID unique dans `manifest.json` et un manifeste conforme au schéma du workspace (`module-manifest.schema.json`, `schemaVersion: 1`) |
 | FR-006 | `liorian connect` authentifie le développeur via `liorian-connect` (email + mot de passe) |
 | FR-007 | `liorian connect` supporte le MFA (TOTP, backup codes) |
 | FR-008 | `liorian connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
 | FR-009 | `liorian disconnect` supprime toutes les credentials stockées |
-| FR-010 | `liorian pack` compresse `external_modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.SenMod` |
+| FR-010 | `liorian pack` compresse `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.SenMod` |
 | FR-011 | `liorian pack` déplace l'archive vers `.lorian/build/` |
 | FR-012 | `liorian publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
 | FR-013 | `liorian publish` demande les métadonnées du module si non définies |
@@ -311,7 +315,7 @@ Utilisateur
 #### Purpose
 
 Initialiser un nouveau projet Liorian en téléchargeant la release (ZIP) du template
-`protorians/liorian-socle` et en installant les dépendances. La source est `--channel`
+`jetbrains/liorian-socle` et en installant les dépendances. La source est `--channel`
 ("stable" par défaut) ; `LIORIAN_CLI_TEMPLATE_REPO` peut la remplacer par une URL GitHub,
 une URL ZIP directe ou un répertoire local (tests/miroirs).
 
@@ -368,7 +372,7 @@ Destination : /chemin/vers/mon-projet
 
 #### Purpose
 
-Créer un nouveau module dans `external_modules/<domain>/` à partir d'un **mockup de référence
+Créer un nouveau module dans `library/modules/<domain>/` à partir d'un **mockup de référence
 embarqué** dans le binaire (Clean Architecture, structure standardisée) — FR-004. Aucun checkout
 externe requis. Le manifeste produit respecte le contrat canonique du workspace
 (`schemaVersion: 1`, `docs/modules/module-manifest.md`).
@@ -376,10 +380,10 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
 #### Comportement
 
 1. **Vérifier le contexte** : être à la racine d'un projet Liorian (`lorian.config.json`,
-   `lorian.config.toml` ou présence de `external_modules/`)
+   `lorian.config.toml` ou présence de `library/modules/`)
 2. **Demander l'identité** du module (chaque prompt a un flag équivalent) :
    - **domaine** reverse-DNS (`--domain`, ex. `com.organization.domain`) — validation `ValidateDomain`,
-     il nomme le dossier `external_modules/<domain>/` et le champ `manifest.domain`
+     il nomme le dossier `library/modules/<domain>/` et le champ `manifest.domain`
    - **identifiant** kebab-case (`--id`, ou argument positionnel `create module <name>`) — 3-64,
      validation `ValidateName`, il nomme les composants et le champ `manifest.id`
    - **nom applicatif** affiché (`--name`, défaut : Title Case de l'identifiant)
@@ -402,7 +406,7 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
      `helloworld` → minuscules)
    - Le contenu des fichiers textes est réécrit en conséquence (renommage des fichiers inclus)
 5. **Vérifier les requirements** : chaque module du champ `requirements` du `manifest.json` doit
-   exister localement — dans `external_modules/` **ou** dans `src/modules/` (modules internes
+   exister localement — dans `library/modules/` **ou** dans `src/modules/` (modules internes
    de la plate-forme). Les modules cœur de la plate-forme `organization` et `identity` sont
    toujours considérés satisfaits. En cas de module requis manquant, la création **échoue**,
    le répertoire scaffoldé ainsi que la page éventuelle sont **supprimés** (rollback) et une
@@ -432,7 +436,7 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
 #### Structure générée (mockup embarqué hello-world)
 
 ```
-external_modules/<domain>/
+library/modules/<domain>/
 ├── manifest.json               # contrat module + token UUID v4 injecté
 ├── index.tsx                   # déclaration (identifier, widgets, service, routines, uri)
 ├── package.json                # dépendances du mockup
@@ -547,7 +551,7 @@ export default <camelId>Module;
 `src/app/<url>/page.tsx` (scaffoldé quand la déclaration porte un `uri`/`url`) :
 
 ```tsx
-import {<PascalId>View} from "@/external_modules/<domain>/presentation/views/<id>.view";
+import {<PascalId>View} from "@/library/modules/<domain>/presentation/views/<id>.view";
 
 export default function <PascalId>Page() {
     return <<PascalId>View/>;
@@ -558,7 +562,7 @@ export default function <PascalId>Page() {
 
 - Le token UUID est **unique** et généré à la création (injection dans le manifest scaffoldé)
 - Le **domaine** (reverse-DNS) ne peut pas entrer en conflit avec un module existant
-  (`external_modules/<domain>/`) ; l'identifiant doit être kebab-case (3-64)
+  (`library/modules/<domain>/`) ; l'identifiant doit être kebab-case (3-64)
 - Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
 - Le manifeste est conforme au schéma canonique (24 champs requis, `schemaVersion: 1`) ;
   `entry` pointe vers `index.tsx` et `domain` correspond au dossier du module
@@ -578,7 +582,7 @@ export default function <PascalId>Page() {
 ? URL de page : blog-manager
 ? Description : Gestion de blog et d'articles
 
-  ✓ Module créé : external_modules/com.example.blog-manager/
+  ✓ Module créé : library/modules/com.example.blog-manager/
   ✓ Token généré : a1b2c3d4-e5f6-7890-abcd-ef1234567890
   ✓ manifest.json initialisé
   ✓ index.tsx initialisé
@@ -701,18 +705,18 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 
 1. **Identifier le module** :
    - Si un argument `<module>` est fourni → l'utiliser
-   - Sinon → lister les modules dans `external_modules/` via un sélecteur Bubbletea
+   - Sinon → lister les modules dans `library/modules/` via un sélecteur Bubbletea
 2. **Vérifier l'existence** du module et de ses fichiers essentiels (`manifest.json`, `index.tsx`)
 3. **Valider le `manifest.json`** (champs requis : `id`, `name`, `version`, `token`)
 4. **Construire les chemins** :
-   - Source module : `external_modules/<module>/`
+   - Source module : `library/modules/<module>/`
    - Source page : `src/app/<module.uri>/` (le `uri` du manifeste, sans `/` initial)
    - Source assets : `public/assets/<module>/` (si existe)
    - Destination : `.lorian/build/`
 5. **Créer l'archive ZIP** :
    - Nom : `<module>-<version>.SenMod` (le `.SenMod` est un ZIP renommé)
-   - Contenu : dossiers `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>` (si existe)
-   - Préfixe dans l'archive : `external_modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>`
+   - Contenu : dossiers `library/modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>` (si existe)
+   - Préfixe dans l'archive : `library/modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>`
 6. **Déplacer** l'archive vers `.lorian/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
@@ -720,7 +724,7 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 
 ```
 <SenMod-file>.SenMod (ZIP)
-├── external_modules/<module>/
+├── library/modules/<module>/
 │   ├── manifest.json
 │   ├── index.tsx
 │   ├── application/
@@ -830,7 +834,7 @@ Lier un module créé dans `liorian-connect` avec le module en local, via son to
 
 #### Comportement
 
-1. **Vérifier le contexte projet** (racine + `external_modules/`) et l'authentification (sinon → `liorian connect`)
+1. **Vérifier le contexte projet** (racine + `library/modules/`) et l'authentification (sinon → `liorian connect`)
 2. **Sélectionner le module local** : argument positionnel ou sélecteur Bubbletea
 3. **Lister les modules en ligne** via API `GET /api/developer-store/modules`, proposer une sélection
    (items au format `token — name vversion`)
@@ -854,7 +858,7 @@ Lier un module créé dans `liorian-connect` avec le module en local, via son to
   ⠋ Vérification du module distant…
 
   ✓ Module lié avec succès
-    Local : external_modules/blog-manager/
+    Local : library/modules/blog-manager/
     Distant : m_abc123def456 (Blog Manager v0.1.0)
 ```
 
@@ -888,7 +892,7 @@ Délier un module local de son correspondant dans `liorian-connect`.
 
 ? Confirmer la déliaison : Oui
   ✓ Module délié avec succès
-    external_modules/blog-manager/ n'est plus lié à un module distant.
+    library/modules/blog-manager/ n'est plus lié à un module distant.
 ```
 
 ---
@@ -897,7 +901,7 @@ Délier un module local de son correspondant dans `liorian-connect`.
 
 #### Purpose
 
-Lancer le debug d'un ou tous les modules dans `external_modules/` : validation puis build réel du
+Lancer le debug d'un ou tous les modules dans `library/modules/` : validation puis build réel du
 module, avec une **trace pas-à-pas** des étapes exécutées, la **sortie de build en temps réel** et
 un **récapitulatif de sévérité** en fin d'exécution.
 
@@ -905,7 +909,7 @@ un **récapitulatif de sévérité** en fin d'exécution.
 
 1. **Analyser l'argument** :
    - Si `<module>` est fourni → debug uniquement ce module
-   - Sinon → debug **tous** les modules dans `external_modules/` (chaque module est introduit par
+   - Sinon → debug **tous** les modules dans `library/modules/` (chaque module est introduit par
      une ligne `Module <nom>`)
 2. **Valider le module** (mêmes règles que `audit`) et rapporter l'étape « Validation du module »
    avec le décompte `N erreur(s), M avertissement(s)` ; chaque règle en échec alimente le
@@ -1025,7 +1029,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 
 1. **Analyser l'argument** :
    - Si `<module>` est fourni → audit uniquement ce module
-   - Sinon → audit **tous** les modules dans `external_modules/`
+   - Sinon → audit **tous** les modules dans `library/modules/`
 2. **Vérifier l'existence** du ou des modules
 3. **Exécuter les vérifications** (pour chaque module) :
 
@@ -1040,7 +1044,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **manifest.json** | Champ `token` UUID valide | ERROR |
 | **manifest.json** | Champ `entry` pointe vers un fichier existant | ERROR |
 | **manifest.json** | Champ `domain` au format `mod.liorian.<name>` | WARNING |
-| **manifest.json** | Le `domain` correspond au dossier du module (`external_modules/<domain>`) | WARNING |
+| **manifest.json** | Le `domain` correspond au dossier du module (`library/modules/<domain>`) | WARNING |
 | **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
 | **manifest.json** | `optionalRequirements` est présent (objet, `{}` admis) | WARNING |
 | **manifest.json** | `platforms` est présent et `modes` est déclaré pour chaque plateforme `supported: true` | WARNING |
@@ -1052,7 +1056,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **index.tsx** | Déclaration module présente (`identifier` + `widgets`) — déclaration déclarative, l'ancien `render` async n'existe plus | ERROR |
 | **Clean Architecture** | Les composants n'importent pas directement les services (`../services`, `application/service`) | ERROR |
 | **Clean Architecture** | Les services ne contiennent pas de JSX (`services/` et `application/service/`, heuristique regex JSX) | ERROR |
-| **requirements** | Les requirements listées existent dans `external_modules/` **ou** `src/modules/` (exceptions : modules core plateforme `organization`, `identity`) | ERROR |
+| **requirements** | Les requirements listées existent dans `library/modules/` **ou** `src/modules/` (exceptions : modules core plateforme `organization`, `identity`) | ERROR |
 | **dependencies** | Les dépendances npm listées sont installées dans `node_modules` | ERROR |
 | **assets** | `public/assets/<module>/` contient des fichiers (si le dossier existe) | WARNING |
 
@@ -1357,7 +1361,7 @@ erreur catégorisée (exit 2).
 
 ```
   Ouverture de la page d'autorisation dans votre navigateur…
-  https://auth.liorian.protorians.com/oauth/authorize?response_type=code&…
+  https://auth.liorian.jetbrains.com/oauth/authorize?response_type=code&…
 
   ⠋ Échange du code d'autorisation…
 
@@ -1382,7 +1386,7 @@ erreur catégorisée (exit 2).
 
 #### Purpose
 
-Exécuter les tests d'un ou tous les modules dans `external_modules/` : validation puis exécution
+Exécuter les tests d'un ou tous les modules dans `library/modules/` : validation puis exécution
 de la suite de tests, avec la même **trace pas-à-pas** que le debug, la **sortie de test en temps
 réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécution se termine avec un
 **code de sortie non nul** dès qu'un module voit ses tests en échec.
@@ -1391,7 +1395,7 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
 
 1. **Analyser l'argument** :
    - Si `<module>` est fourni → tests de ce module uniquement
-   - Sinon → tests de **tous** les modules dans `external_modules/` (chaque module est introduit
+   - Sinon → tests de **tous** les modules dans `library/modules/` (chaque module est introduit
      par une ligne `Module <nom>`) ; le run global échoue (exit **`13`**) si au moins un module
      échoue
 2. **Valider le module** (mêmes règles que `audit`) et rapporter l'étape « Validation du module »
@@ -1867,7 +1871,7 @@ changelog:
 
 ```bash
 # Go install (releases GitHub)
-go install github.com/protorians/lior-cli@latest
+go install github.com/jetbrains/lior-cli@latest
 
 # npm / npx (npmjs)
 npm install -g @lior/cli
@@ -1880,11 +1884,11 @@ curl -sSL https://get.liorian.dev/cli | sh
 # Windows (PowerShell)
 iwr -useb https://get.liorian.dev@lior/cli.ps1 | iex
 
-# Homebrew (tap = dépôt protorians/lior-cli, formula `Formula/liorian.rb`)
-brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-brew install protorians/lior-cli/liorian
-# (après ce tap, `brew install protorians/lior-cli/liorian` suffit ensuite.
-#  La forme courte `brew install protorians/lior-cli` n'est PAS valide dans
+# Homebrew (tap = dépôt jetbrains/lior-cli, formula `Formula/liorian.rb`)
+brew tap jetbrains/lior-cli https://github.com/jetbrains/lior-cli.git
+brew install jetbrains/lior-cli/liorian
+# (après ce tap, `brew install jetbrains/lior-cli/liorian` suffit ensuite.
+#  La forme courte `brew install jetbrains/lior-cli` n'est PAS valide dans
 #  Homebrew : une référence de tap exige 3 segments `user/repo/formula`, et
 #  l'auto-tap `brew install user/repo/formula` sans `brew tap` vise le repo
 #  `user/homebrew-<repo>` — d'où le `brew tap` explicite vers ce dépôt.)

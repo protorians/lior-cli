@@ -97,7 +97,7 @@ func TestTfFormatsArguments(t *testing.T) {
 	defer Use(old)
 
 	Use("en-US")
-	if got := Tf("modules.error.module_absent", "blog", "external_modules"); !strings.Contains(got, "blog") || !strings.Contains(got, "external_modules") {
+	if got := Tf("modules.error.module_absent", "blog", "library/modules"); !strings.Contains(got, "blog") || !strings.Contains(got, "library/modules") {
 		t.Errorf("Tf formatting failed: %q", got)
 	}
 }

@@ -7,7 +7,7 @@ stderr 'Searching the catalog'
 stdout '3 result\(s\)'
 stdout 'com.example.blog-manager'
 stdout 'com.analytics.visitors'
-stdout 'Protorians'
+stdout 'JetBrains'
 
 # Full-text query narrows the results.
 exec $LIORIAN --no-color marketplace search visitors
@@ -26,15 +26,15 @@ stdout 'No module matches your search.'
 mkdir project
 cd project
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
-mkdir external_modules
+mkdir -p library/modules
 exec $LIORIAN --no-color marketplace install com.analytics.visitors
 stderr 'Installing com.analytics.visitors'
 stderr 'archive not signed'
 stdout '✓ Module installed'
 stdout 'Module : com.analytics.visitors v0.4.1'
 stdout 'Signature : not signed'
-grep '"id": "com.analytics.visitors"' external_modules/com.analytics.visitors/manifest.json
-exec test -f external_modules/com.analytics.visitors/index.tsx
+grep '"id": "com.analytics.visitors"' library/modules/com.analytics.visitors/manifest.json
+exec test -f library/modules/com.analytics.visitors/index.tsx
 exec test -f src/app/visitors/page.tsx
 exec test -f public/assets/com.analytics.visitors/README.txt
 
@@ -44,17 +44,17 @@ stderr 'already installed'
 stdout 'exit=3'
 
 # --force replaces the module.
-exec sh -c 'printf "stale" > external_modules/com.analytics.visitors/marker.txt'
+exec sh -c 'printf "stale" > library/modules/com.analytics.visitors/marker.txt'
 exec $LIORIAN --no-color marketplace install com.analytics.visitors --force
 stdout '✓ Module installed'
-! exec test -f external_modules/com.analytics.visitors/marker.txt
+! exec test -f library/modules/com.analytics.visitors/marker.txt
 
 # TC-032 — a signed module verifies its Ed25519 signature during install.
 exec $LIORIAN --no-color marketplace install com.example.blog-manager
 stdout '✓ Module installed'
 stdout 'Module : com.example.blog-manager v1.2.0'
 stdout 'Signature : ✓ Signature verified'
-grep '"version": "1.2.0"' external_modules/com.example.blog-manager/manifest.json
+grep '"version": "1.2.0"' library/modules/com.example.blog-manager/manifest.json
 
 # A module whose catalog checksum does not match its artifact is refused.
 ! exec $LIORIAN --no-color marketplace install com.example.corrupted

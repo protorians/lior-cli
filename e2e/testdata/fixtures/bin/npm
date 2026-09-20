@@ -5,9 +5,13 @@ if [ "$1" = "run" ]; then
   name="$1"
   shift
   case "$name" in
-    debug|dev|build)
+    debug|dev|build|start|lint|pre-build|post-build)
       echo "[fixture] npm run $name (ok)"
       exit 0
+      ;;
+    broken)
+      echo "[fixture] npm run broken (ko)"
+      exit 42
       ;;
     *)
       echo "[fixture] npm run $name (script introuvable)"

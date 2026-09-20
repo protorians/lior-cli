@@ -13,7 +13,7 @@ set -euo pipefail
 
 VERSION="${1:?usage: release-notes.sh <version>}"
 TAG="v${VERSION}"
-REPO="${GITHUB_REPOSITORY:-protorians/lior-cli}"
+REPO="${GITHUB_REPOSITORY:-jetbrains/lior-cli}"
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
 
 changelog() {
@@ -53,7 +53,7 @@ All archives and binaries are published to the [\`./dist\`](${BASE}) release ass
 ### Go
 
 \`\`\`bash
-go install github.com/protorians/lior-cli@${TAG}
+go install github.com/jetbrains/lior-cli@${TAG}
 \`\`\`
 
 ### npm / pnpm / yarn / bun
@@ -65,8 +65,8 @@ npm install -g @lior/cli
 ### Homebrew (macOS / Linux)
 
 \`\`\`bash
-brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-brew install protorians/lior-cli/liorian
+brew tap jetbrains/lior-cli https://github.com/jetbrains/lior-cli.git
+brew install jetbrains/lior-cli/liorian
 \`\`\`
 
 ### Binary

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/protorians/lior-cli/e2e/mockapi"
+	"github.com/jetbrains/lior-cli/e2e/mockapi"
 	"github.com/rogpeppe/go-internal/testscript"
 )
 

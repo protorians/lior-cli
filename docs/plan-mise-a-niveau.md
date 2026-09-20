@@ -76,7 +76,7 @@ round-trip **sans perte**.
 ### A.2 Corriger le mockup embarqué — ✅ Fait
 
 - `internal/module/mockups/hello-world/manifest.json` : aligner 1:1 sur
-  `frontend/liorian-socle/external_modules/hello-world/manifest.json` → ajouter `$schema`
+  `frontend/liorian-socle/library/modules/hello-world/manifest.json` → ajouter `$schema`
   (chemin SDK réel) et `optionalRequirements: {}`.
 - `internal/module/mockups/hello-world/index.tsx` : retirer `requirements`, `dependencies`,
   `devDependencies` (à ne laisser que dans `manifest.json`).

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/config"
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/moduletest"
-	"github.com/protorians/lior-cli/internal/pkg"
-	"github.com/protorians/lior-cli/internal/tui"
+	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/moduletest"
+	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/jetbrains/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -23,7 +23,7 @@ var (
 var testCmd = &cobra.Command{
 	Use:   "test [module]",
 	Short: "Run the tests of a module or all modules",
-	Long: `Runs the tests of one (or all) module(s) in external_modules/.
+	Long: `Runs the tests of one (or all) module(s) in library/modules/.
 
 Validates the module, resolves a test package with the package manager chosen
 at install (bun/pnpm/yarn/npm), installs it within that manager's scope when

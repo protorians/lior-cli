@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/protorians/lior-cli/internal/i18n"
-	"github.com/protorians/lior-cli/internal/module"
-	"github.com/protorians/lior-cli/internal/pkg"
+"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/module"
+	"github.com/jetbrains/lior-cli/internal/pkg"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +19,7 @@ func TestRunCreateUsesMockupAndPageFlags(t *testing.T) {
 	t.Chdir(root)
 	t.Setenv(createSkipInstallEnv, "1")
 
-	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
@@ -59,7 +60,7 @@ export default helloWorldModule
 `)
 	write("marker.txt", "from-custom-mockup\n")
 
-	if err := os.WriteFile(pageMockup, []byte(`import {HelloWorldView} from "@/external_modules/hello-world/presentation/views/hello-world.view";
+	if err := os.WriteFile(pageMockup, []byte(`import {HelloWorldView} from "@/library/modules/hello-world/presentation/views/hello-world.view";
 export default function HelloWorldPage() {
     return <HelloWorldView/>;
 }
@@ -76,7 +77,7 @@ export default function HelloWorldPage() {
 		t.Fatalf("runCreate: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, "external_modules", "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
 	if !pkg.FileExists(filepath.Join(moduleDir, "marker.txt")) {
 		t.Error("the custom --mockup directory must be scaffolded (marker.txt missing)")
 	}
@@ -92,7 +93,7 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 	t.Chdir(root)
 	t.Setenv(createSkipInstallEnv, "1")
 
-	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
@@ -107,7 +108,7 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 		t.Fatalf("runCreate: %v", err)
 	}
 
-	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "package.json")) {
+	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "package.json")) {
 		t.Error("an unusable --mockup must fall back to the embedded mockup (package.json missing)")
 	}
 }
@@ -165,7 +166,7 @@ func TestRunCreateSkipInstallFlagSkipsInstallStep(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv(createSkipInstallEnv, "")
 
-	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
@@ -182,7 +183,7 @@ func TestRunCreateSkipInstallFlagSkipsInstallStep(t *testing.T) {
 		}
 	})
 
-	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx")) {
+	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "index.tsx")) {
 		t.Fatal("the module must have been created")
 	}
 	if strings.Contains(stderr, i18n.T("create.warn.pm_none")) ||
@@ -241,7 +242,7 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	t.Chdir(root)
 	t.Setenv(createSkipInstallEnv, "1")
 
-	if err := os.Mkdir(filepath.Join(root, "external_modules"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
@@ -259,10 +260,10 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	if err == nil {
 		t.Fatal("create must fail when a required module is missing")
 	}
-	if !strings.Contains(err.Error(), "analytics") || !strings.Contains(err.Error(), "external_modules/") {
+	if !strings.Contains(err.Error(), "analytics") || !strings.Contains(err.Error(), "library/modules/") {
 		t.Errorf("error must mention the missing requirement and the lookup dirs, got: %v", err)
 	}
-	if pkg.DirExists(filepath.Join(root, "external_modules", "com.example.blog-manager")) {
+	if pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")) {
 		t.Error("the module dir must be rolled back when creation is blocked")
 	}
 }
@@ -272,7 +273,7 @@ func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
 	t.Chdir(root)
 	t.Setenv(createSkipInstallEnv, "1")
 
-	if err := os.MkdirAll(filepath.Join(root, "external_modules"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "src", "modules", "analytics"), 0o755); err != nil {
@@ -292,7 +293,7 @@ func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate with an internal required module must succeed: %v", err)
 	}
-	if !pkg.FileExists(filepath.Join(root, "external_modules", "com.example.blog-manager", "index.tsx")) {
+	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "index.tsx")) {
 		t.Error("the module must have been created")
 	}
 }

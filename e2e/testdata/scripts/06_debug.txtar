@@ -1,13 +1,13 @@
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 exec $LIORIAN --no-color create module matcher --domain com.test.matcher
 exec $LIORIAN --no-color create module runner --domain com.test.runner
 exec $LIORIAN --no-color create module renderer --domain com.test.renderer
 
 # TC-015 — `debug` of a single module: build script detected → OK.
-exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > external_modules/com.test.runner/package.json'
+exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > library/modules/com.test.runner/package.json'
 exec $LIORIAN --no-color debug com.test.runner
 stderr 'Debugging: com.test.runner'
 stderr 'Module validation'
@@ -20,7 +20,7 @@ stdout 'Summary'
 stdout 'success'
 
 # Module without a build script but with TypeScript → tsc --noEmit fallback → OK.
-exec sh -c 'printf "export const helper: number = 42;\n" > external_modules/com.test.matcher/helper.ts'
+exec sh -c 'printf "export const helper: number = 42;\n" > library/modules/com.test.matcher/helper.ts'
 exec sh -c 'printf "{\"compilerOptions\":{}}\n" > tsconfig.json'
 exec $LIORIAN --no-color debug com.test.matcher
 stderr 'Debugging: com.test.matcher'
@@ -29,12 +29,12 @@ stdout 'tsc --noEmit'
 
 # Module without a build script but with a real bundler (esbuild) in its own
 # node_modules → real bundle into dist/ → OK (spec §5.9, vrai build du module).
-exec sh -c 'mkdir -p external_modules/com.test.renderer/node_modules/.bin && printf "#!/bin/sh\nmkdir -p \"\$4\" && printf \"export default ok;\" > \"\$4/index.js\"\n" > external_modules/com.test.renderer/node_modules/.bin/esbuild && chmod 755 external_modules/com.test.renderer/node_modules/.bin/esbuild'
+exec sh -c 'mkdir -p library/modules/com.test.renderer/node_modules/.bin && printf "#!/bin/sh\nmkdir -p \"\$4\" && printf \"export default ok;\" > \"\$4/index.js\"\n" > library/modules/com.test.renderer/node_modules/.bin/esbuild && chmod 755 library/modules/com.test.renderer/node_modules/.bin/esbuild'
 exec $LIORIAN --no-color debug com.test.renderer
 stderr 'Debugging: com.test.renderer'
 stdout 'Status : ✓ OK'
 stdout 'esbuild'
-exists external_modules/com.test.renderer/dist/index.js
+exists library/modules/com.test.renderer/dist/index.js
 
 # TC-016 — `debug` without argument: report of all modules (table).
 exec $LIORIAN --no-color debug

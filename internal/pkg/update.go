@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/jetbrains/lior-cli/internal/i18n"
 )
 
 // GitHubRelease is the minimal representation of a GitHub release for version
@@ -21,7 +21,7 @@ type GitHubRelease struct {
 }
 
 // UpdateCheckURL is the GitHub API endpoint for the latest release.
-const UpdateCheckURL = "https://api.github.com/repos/protorians/lior-cli/releases/latest"
+const UpdateCheckURL = "https://api.github.com/repos/jetbrains/lior-cli/releases/latest"
 
 // UpdateCheckURLEnv overrides the update-check endpoint (tests, mirrors,
 // self-hosted release servers). It must return the JSON shape of a GitHub

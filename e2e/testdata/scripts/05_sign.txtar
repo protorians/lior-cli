@@ -1,6 +1,6 @@
 mkdir project
 cd project
-mkdir external_modules
+mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 exec $LIORIAN --no-color pack com.example.blog-manager
