@@ -576,8 +576,8 @@ func (s *Server) seedModule(slug, page, name, desc, category, version string, in
 				ID   string `json:"id"`
 				Name string `json:"name"`
 			}
-			p.ID = "pub-jetbrains"
-			p.Name = "JetBrains"
+			p.ID = "pub-protorians"
+			p.Name = "protorians"
 			return p
 		}(),
 		Version:          version,
@@ -620,7 +620,7 @@ func buildModuleArchive(name, page, version string) []byte {
 		"uri":           "/" + page,
 		"category":      "SYSTEM",
 		"token":         uuid.NewString(),
-		"publisher":     map[string]any{"id": "pub-jetbrains", "name": "JetBrains"},
+		"publisher":     map[string]any{"id": "pub-protorians", "name": "protorians"},
 		"platforms": map[string]any{
 			"web": map[string]any{"supported": true, "modes": []string{"web"}},
 		},

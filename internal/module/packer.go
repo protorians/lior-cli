@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jetbrains/lior-cli/internal/config"
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // MaxArchiveSize is the maximum allowed archive size (store limit: 50 MB).

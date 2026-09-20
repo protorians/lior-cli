@@ -9,12 +9,12 @@ import (
 	"text/template"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jetbrains/lior-cli/internal/appconfig"
-	"github.com/jetbrains/lior-cli/internal/config"
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/pkg"
-	"github.com/jetbrains/lior-cli/internal/tui"
 	"github.com/muesli/termenv"
+	"github.com/protorians/lior-cli/internal/appconfig"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 

@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jetbrains/lior-cli/internal/auth"
-	"github.com/jetbrains/lior-cli/internal/module"
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/auth"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func raiton(w http.ResponseWriter, status int, data string) {

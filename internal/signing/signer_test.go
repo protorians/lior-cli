@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // newVolatileStore returns a fallback key store isolated in a temp dir with a

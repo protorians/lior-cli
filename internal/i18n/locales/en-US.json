@@ -9,7 +9,7 @@
   "flag.sync_remote": "update the remote module metadata before unlinking",
   "audit.flag.output": "output format (table | json)",
 
-  "update.available": "Update available: v%s → v%s\n  → https://github.com/jetbrains/lior-cli/releases/latest",
+  "update.available": "Update available: v%s → v%s\n  → https://github.com/protorians/lior-cli/releases/latest",
 
   "cat.project": "Project",
   "cat.package_manager": "Package manager",
@@ -59,7 +59,7 @@
   "label.runner": "Runner",
 
   "cmd.init.short": "Initialize a new Liorian project",
-  "cmd.init.long": "Initializes a new Liorian project by downloading the release\narchive of the template jetbrains/liorian-socle (ZIP) and installing\nthe dependencies.\n\nThe release channel (stable [default], alpha, beta, rc) and the package\nmanager are detected automatically (bun, pnpm, yarn, npm)\nand offered to the user.",
+  "cmd.init.long": "Initializes a new Liorian project by downloading the release\narchive of the template protorians/liorian-socle (ZIP) and installing\nthe dependencies.\n\nThe release channel (stable [default], alpha, beta, rc) and the package\nmanager are detected automatically (bun, pnpm, yarn, npm)\nand offered to the user.",
   "init.flag.channel": "release channel (alpha, beta, rc, stable)",
   "init.prompt.name": "Project name",
   "init.dest": "Destination: %s",

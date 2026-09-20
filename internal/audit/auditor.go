@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jetbrains/lior-cli/internal/config"
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/module"
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // jsxTagRE heuristically recognises JSX elements without a full TS/JSX parser:

@@ -8,7 +8,7 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `jetbrains/lior-cli` (branche `alpha`) ; dernière release documentée 0.14.0 ;
+> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.14.0 ;
 >   les écarts constatés entre la spec et le code sont documentés dans `docs/rapport-implementation.md`
 >
 > **Specs satellite** : les commandes outillage `dev`/`build`/`start`/`check` (passe-plat vers les
@@ -107,7 +107,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | ID | Description |
 |----|-------------|
 | FR-001 | La CLI détecte automatiquement les gestionnaires de paquets disponibles (bun, pnpm, yarn, npm) et propose le choix à l'utilisateur |
-| FR-002 | `liorian init` télécharge la release (ZIP) du template `jetbrains/liorian-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
+| FR-002 | `liorian init` télécharge la release (ZIP) du template `protorians/liorian-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
 | FR-003 | `liorian init` installe les dépendances avec le gestionnaire choisi |
 | FR-004 | `liorian create module` crée un module dans `library/modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
 | FR-005 | `liorian create module` génère un token UUID unique dans `manifest.json` et un manifeste conforme au schéma du workspace (`module-manifest.schema.json`, `schemaVersion: 1`) |
@@ -315,7 +315,7 @@ Utilisateur
 #### Purpose
 
 Initialiser un nouveau projet Liorian en téléchargeant la release (ZIP) du template
-`jetbrains/liorian-socle` et en installant les dépendances. La source est `--channel`
+`protorians/liorian-socle` et en installant les dépendances. La source est `--channel`
 ("stable" par défaut) ; `LIORIAN_CLI_TEMPLATE_REPO` peut la remplacer par une URL GitHub,
 une URL ZIP directe ou un répertoire local (tests/miroirs).
 
@@ -1361,7 +1361,7 @@ erreur catégorisée (exit 2).
 
 ```
   Ouverture de la page d'autorisation dans votre navigateur…
-  https://auth.liorian.jetbrains.com/oauth/authorize?response_type=code&…
+  https://auth.liorian.protorians.com/oauth/authorize?response_type=code&…
 
   ⠋ Échange du code d'autorisation…
 
@@ -1871,24 +1871,24 @@ changelog:
 
 ```bash
 # Go install (releases GitHub)
-go install github.com/jetbrains/lior-cli@latest
+go install github.com/protorians/lior-cli@latest
 
 # npm / npx (npmjs)
-npm install -g @lior/cli
+npm install -g @liorian/cli
 # ou
-npx @lior/cli
+npx @liorian/cli
 
 # macOS / Linux
 curl -sSL https://get.liorian.dev/cli | sh
 
 # Windows (PowerShell)
-iwr -useb https://get.liorian.dev@lior/cli.ps1 | iex
+iwr -useb https://get.liorian.dev/cli.ps1 | iex
 
-# Homebrew (tap = dépôt jetbrains/lior-cli, formula `Formula/liorian.rb`)
-brew tap jetbrains/lior-cli https://github.com/jetbrains/lior-cli.git
-brew install jetbrains/lior-cli/liorian
-# (après ce tap, `brew install jetbrains/lior-cli/liorian` suffit ensuite.
-#  La forme courte `brew install jetbrains/lior-cli` n'est PAS valide dans
+# Homebrew (tap = dépôt protorians/lior-cli, formula `Formula/liorian.rb`)
+brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
+brew install protorians/lior-cli/liorian
+# (après ce tap, `brew install protorians/lior-cli/liorian` suffit ensuite.
+#  La forme courte `brew install protorians/lior-cli` n'est PAS valide dans
 #  Homebrew : une référence de tap exige 3 segments `user/repo/formula`, et
 #  l'auto-tap `brew install user/repo/formula` sans `brew tap` vise le repo
 #  `user/homebrew-<repo>` — d'où le `brew tap` explicite vers ce dépôt.)

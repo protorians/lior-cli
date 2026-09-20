@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/pkg"
-	"github.com/jetbrains/lior-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -263,9 +263,9 @@ func TestGithubOwnerRepo(t *testing.T) {
 		owner string
 		name  string
 	}{
-		{"https://github.com/jetbrains/liorian-socle", "jetbrains", "liorian-socle"},
-		{"https://github.com/jetbrains/liorian-socle.git", "jetbrains", "liorian-socle"},
-		{"https://github.com/jetbrains/liorian-socle/", "jetbrains", "liorian-socle"},
+		{"https://github.com/protorians/liorian-socle", "protorians", "liorian-socle"},
+		{"https://github.com/protorians/liorian-socle.git", "protorians", "liorian-socle"},
+		{"https://github.com/protorians/liorian-socle/", "protorians", "liorian-socle"},
 		{"not-a-github-url", "", ""},
 		{"", "", ""},
 	}

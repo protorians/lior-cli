@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // inputModel is a Bubble Tea model wrapping a text input.

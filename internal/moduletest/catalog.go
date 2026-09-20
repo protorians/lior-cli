@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // Sentinels used as a runner name in `lorian.config.json` and in-memory.

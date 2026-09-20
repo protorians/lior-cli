@@ -9,7 +9,7 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 
-const REPO = "jetbrains/lior-cli";
+const REPO = "protorians/lior-cli";
 const BINARY_NAME = "liorian";
 const ARCHIVE_PREFIX = "lior-cli";
 
@@ -32,7 +32,7 @@ function getUserAgent() {
   const pkg = require("../package.json");
   // `Node/<version>` is the engine token of Node's core `http`/`https`
   // package; `Senteints/<version>` is the CLI.
-  return `JetBrains/5.0 (${getOsToken()}) Node/${process.version.slice(1)} Senteints/${pkg.version}`;
+  return `protorians/5.0 (${getOsToken()}) Node/${process.version.slice(1)} Senteints/${pkg.version}`;
 }
 
 const PLATFORM_MAP = {
@@ -114,7 +114,7 @@ async function main() {
   const binDir = path.join(__dirname, "..", "bin");
   const tmpDir = path.join(os.tmpdir(), `lorian-install-${Date.now()}`);
 
-  console.log(`Installing @lior/cli ${version} for ${platform.triple}...`);
+  console.log(`Installing @liorian/cli ${version} for ${platform.triple}...`);
 
   try {
     fs.mkdirSync(tmpDir, { recursive: true });
@@ -153,9 +153,9 @@ async function main() {
       fs.chmodSync(targetBinary, 0o755);
     }
 
-    console.log(`@lior/cli ${version} installed successfully.`);
+    console.log(`@liorian/cli ${version} installed successfully.`);
   } catch (err) {
-    console.error(`Failed to install @lior/cli: ${err.message}`);
+    console.error(`Failed to install @liorian/cli: ${err.message}`);
     console.error("");
     console.error("You can install the binary manually from:");
     console.error(`  https://github.com/${REPO}/releases`);

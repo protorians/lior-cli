@@ -8,7 +8,7 @@
 
 ## 1. Vue d'ensemble
 
-La CLI est un binaire Go (module `github.com/jetbrains/lior-cli`, **Go 1.26.0**) qui couvre le
+La CLI est un binaire Go (module `github.com/protorians/lior-cli`, **Go 1.26.0**) qui couvre le
 cycle de vie :
 
 ```
@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `liorian-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`/cli`) + formula Homebrew (`Formula/`) | ✅ en place (releases v0.0.1 → v0.13.0, tap `jetbrains/lior-cli`) |
+| CI/CD GoReleaser + package npm (`/cli`) + formula Homebrew (`Formula/`) | ✅ en place (releases v0.0.1 → v0.13.0, tap `protorians/lior-cli`) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -35,7 +35,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 ## 2. Ce qui est implémenté (par commande)
 
 ### `liorian init` (FR-001, FR-002, FR-003)
-- Clone shallow de `jetbrains/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
+- Clone shallow de `protorians/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
 - Détection des package managers `bun → pnpm → yarn → npm` (FR-001) + choix interactif.
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
 - Écrit `lorian.config.json` (config projet).

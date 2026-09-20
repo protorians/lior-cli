@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jetbrains/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/config"
 )
 
 func TestModuleExists(t *testing.T) {

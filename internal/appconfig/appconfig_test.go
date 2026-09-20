@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func TestResolvedWorkspaceOverridesEmbedded(t *testing.T) {

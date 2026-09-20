@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // progressBarMinWidth and progressBarMaxWidth bound the progress bar so it

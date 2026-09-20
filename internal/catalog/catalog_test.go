@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jetbrains/lior-cli/internal/module"
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 func raiton(t *testing.T, data any) []byte {
@@ -30,7 +30,7 @@ func sampleModules() []CatalogModule {
 			Publisher: struct {
 				ID   string `json:"id"`
 				Name string `json:"name"`
-			}{ID: "pub_1", Name: "JetBrains"},
+			}{ID: "pub_1", Name: "protorians"},
 		},
 		{
 			ID: "mod_2", Slug: "com.analytics.visitors", Domain: "com.analytics.visitors",

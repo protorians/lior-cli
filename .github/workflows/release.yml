@@ -152,7 +152,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish-npm:
-    name: Publish @lior/cli to npm
+    name: Publish @liorian/cli to npm
     runs-on: ubuntu-latest
     needs: [release, prepare]
     if: needs.release.result == 'success'

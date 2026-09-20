@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jetbrains/lior-cli/internal/config"
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/pkg"
-	"github.com/jetbrains/lior-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -17,7 +17,7 @@ import (
 // `liorian init` (spec FR-002). `LIORIAN_CLI_TEMPLATE_REPO` overrides it:
 // it accepts a GitHub repository URL, a direct zip download URL or a local
 // directory (useful for tests and mirrors).
-const defaultTemplateRepo = "https://github.com/jetbrains/liorian-socle"
+const defaultTemplateRepo = "https://github.com/protorians/liorian-socle"
 
 func templateRepo() string {
 	if v := os.Getenv("LIORIAN_CLI_TEMPLATE_REPO"); v != "" {
@@ -41,7 +41,7 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize a new Liorian project",
 	Long: `Initializes a new Liorian project by downloading the release
-archive of the template jetbrains/liorian-socle (ZIP) and installing
+archive of the template protorians/liorian-socle (ZIP) and installing
 the dependencies.
 
 The package manager is detected automatically (bun, pnpm, yarn, npm)

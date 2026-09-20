@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jetbrains/lior-cli/internal/config"
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/module"
-	"github.com/jetbrains/lior-cli/internal/pkg"
-	"github.com/jetbrains/lior-cli/internal/runner"
-	"github.com/jetbrains/lior-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/runner"
+	"github.com/protorians/lior-cli/internal/tui"
 )
 
 // Default execution windows (overridable via Debugger.Timeout).

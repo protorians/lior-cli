@@ -3,7 +3,7 @@
 > **Statut : CANDIDATE — à implémenter**
 >
 > Cette spécification décrit l'alignement des commandes du **moteur applicatif du socle**
-> (le framework web du template `jetbrains/liorian-socle`) sous la CLI `liorian`. Ces
+> (le framework web du template `protorians/liorian-socle`) sous la CLI `liorian`. Ces
 > commandes restent la passerelle unique vers les scripts d'application déclarés dans le
 > `package.json` du projet, afin de permettre, aujourd'hui comme demain, d'exécuter des
 > **actions avant et/ou après** la commande du moteur (passerelle extensible).

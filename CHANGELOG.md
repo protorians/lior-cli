@@ -29,10 +29,11 @@ All notable changes to this project will be documented in this file.
   renommé `library/modules/` : tout l'outillage (`init`, `create`, `pack`, `sign`, `debug`,
   `test`, `audit`, `link`) et le harnais E2E sont alignés sur le nouveau chemin. Les projets
   existants doivent déplacer leurs modules vers `library/modules/`.
-- **Références d'organisation harmonisées sur `jetbrains`** — le module Go passe sur
-  `github.com/jetbrains/lior-cli`, les domaines d'application sur `*.liorian.jetbrains.com`, le
-  tap Homebrew sur `jetbrains/lior-cli` (formula, GoReleaser, README) et l'auto-update sur les
-  releases `jetbrains/lior-cli` ; les derniers reliquats `protorians` sont purgés du dépôt.
+- **Références d'organisation harmonisées sur `protorians`** — le module Go passe sur
+  `github.com/protorians/lior-cli`, le paquet npm sur `@liorian/cli` (au lieu de `@lior/cli`),
+  les domaines d'application sur `*.liorian.protorians.com`, le tap Homebrew sur
+  `protorians/lior-cli` (formula, GoReleaser, README) et l'auto-update sur les releases
+  `protorians/lior-cli` ; les derniers reliquats `jetbrains` sont purgés du dépôt.
 - **Version bump** — `app.config.json` et le wrapper npm passent sur `0.18.0`.
 
 ### Docs
@@ -96,7 +97,7 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **Distribution Homebrew (spec §10.2)** — la formula est renommée `Formula/lior-cli.rb` →
   `Formula/liorian.rb` (nom de la formula aligné sur le binaire installé `liorian`) : la
-  commande d'installation devient `brew install jetbrains/lior-cli/liorian` (référence de
+  commande d'installation devient `brew install protorians/lior-cli/liorian` (référence de
   tap en 3 segments). `README.md`, spec §10.2, notes de release GoReleaser et
   `scripts/release-notes.sh` alignés ; la formula `lior-cli.rb` est supprimée.
 
@@ -119,10 +120,10 @@ All notable changes to this project will be documented in this file.
   - test E2E `e2e/update_test.go` (`TestUpdateNotification`) : binaire versionné, notification
     `Update available: v0.14.0 → v99.0.0` + lien releases, exactement une requête GET.
 - **Distribution Homebrew (spec §10.2)** — formula `Formula/lior-cli.rb` (tap = dépôt
-  `jetbrains/lior-cli`) avec archives darwin/linux amd64/arm64, shas et `brew test` :
-  "brew tap jetbrains/lior-cli https://github.com/jetbrains/lior-cli.git" puis
-  `brew install jetbrains/lior-cli/lior-cli` (la forme à 2 segments `brew install
-  jetbrains/lior-cli` n'existe pas dans Homebrew : référence de tap en 3 segments).
+  `protorians/lior-cli`) avec archives darwin/linux amd64/arm64, shas et `brew test` :
+  "brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git" puis
+  `brew install protorians/lior-cli/lior-cli` (la forme à 2 segments `brew install
+  protorians/lior-cli` n'existe pas dans Homebrew : référence de tap en 3 segments).
 
 ## [v0.15.0] - 2026-09-21
 
@@ -185,14 +186,14 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - **Nom commercial `Lior` / code de projet `lorian`** — le produit reste commandé `liorian`, mais ses surfaces publiques sont réparties
-  en trois strates : **nom commercial `Lior`** (module Go `github.com/jetbrains/liorian-cli` → `github.com/jetbrains/lior-cli`,
+  en trois strates : **nom commercial `Lior`** (module Go `github.com/protorians/liorian-cli` → `github.com/protorians/lior-cli`,
   paquet npm `@liorian/cli` → `@lior/cli`, artefacts de release `liorian-cli_*` → `lior-cli_*`, client OAuth `lior-cli`) ;
   **code de projet `lorian`** (fichiers `liorian.config.json`/`liorian.config.toml` → `lorian.config.*`, schéma
   `liorian.config.schema.json` → `lorian.config.schema.json`, dossier projet `.liorian/` → `.lorian/`, vault `~/.liorian-cli` →
   `~/.lorian-cli`, services keychain `liorian-cli`/`liorian-cli-signing` → `lorian-cli`/`lorian-cli-signing`) ;
   **commande `liorian`** inchangée (binaire, wrapper npm, aide `Lior CLI`, variables `LIORIAN_*`).
 - **L'écosystème reste `Liorian`** — applications plateforme (`Liorian Socle/Connect/Console/Store/Auth`), domaines
-  `*.liorian.jetbrains.com`, template `jetbrains/liorian-socle`, domaine d'audit `mod.liorian.*` et SDK `@liorian/sdk`
+  `*.liorian.protorians.com`, template `protorians/liorian-socle`, domaine d'audit `mod.liorian.*` et SDK `@liorian/sdk`
   ne changent pas de nom.
 - **Rupture** — les fichiers de configuration et chemins internes `liorian*` sont renommés `lorian*` ; les scripts et CI
   doivent être mis à jour. Bump `v0.13.0` (ligne 0.x).
@@ -201,10 +202,10 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - **Changement de nom — `liorian`** — tout l'écosystème est renommé de `sentients`/`sentient` vers `liorian` : binaire et commande
-  `sentients` → `liorian`, module Go `github.com/jetbrains/sentient-cli` → `github.com/jetbrains/liorian-cli`, paquet npm `@sentients/cli` →
-  `@liorian/cli`, template de démarrage `jetbrains/sentients-socle` → `jetbrains/liorian-socle` et services de plateforme
-  (`sentient-socle`, `sentient-connect`, `sentient-auth`, `sentient-store`) ainsi que domaines `*.sentient.jetbrains.com` →
-  `*.liorian.jetbrains.com`.
+  `sentients` → `liorian`, module Go `github.com/protorians/sentient-cli` → `github.com/protorians/liorian-cli`, paquet npm `@sentients/cli` →
+  `@liorian/cli`, template de démarrage `protorians/sentients-socle` → `protorians/liorian-socle` et services de plateforme
+  (`sentient-socle`, `sentient-connect`, `sentient-auth`, `sentient-store`) ainsi que domaines `*.sentient.protorians.com` →
+  `*.liorian.protorians.com`.
 - **Variables d'environnement renommées** — préfixe `SENTIENT_*` / `SENTIENTS` → `LIORIAN_*` / `$LIORIAN` (`LIORIAN_CLI_*`,
   `LIORIAN_AUTH_API`, `LIORIAN_CLI_TEMPLATE_REPO`, …).
 - **Configuration et chemins** — `sentients.config.json` → `liorian.config.json`, schéma `sentient.config.schema.json` →
@@ -393,7 +394,7 @@ All notable changes to this project will be documented in this file.
 - **Internationalisation (i18n)** — interface bilingue `en-US` (défaut) / `fr-FR` : aide, descriptions, prompts, flags et erreurs sont traduits. La langue est résolue dans l'ordre `--lang` → `LIORIAN_CLI_LANG` → `cli.lang` de `liorian.config.json` → locale de l'OS (`LC_ALL`/`LC_MESSAGES`/`LANG`), avec repli sur `en-US`.
 - **Registre d'applications embarqué** — `app.config.json` est compilé dans le binaire (`//go:embed`) : chaque commande résout l'URL de base et le timeout des API (`liorian-auth`, `liorian-store`) depuis le registre, surchargeable par un `app.config.json` local remonté des répertoires ou par `LIORIAN_AUTH_API`.
 - **`create module` depuis le mockup hello-world** — le module est généré depuis un module de référence embarqué (Clean Architecture : `application/`, `domain/`, `infrastructure/`, `presentation/`, `manifest.json`, `index.tsx`), renommé avec le nom du module ; une page `src/app/<name>/page.tsx` est aussi scaffolée quand le manifest déclare une `uri`/`url`. Surcharges `LIORIAN_MODULE_MOCKUP` et `LIORIAN_PAGE_MOCKUP`.
-- **`init` par canal de release** — téléchargement du ZIP de release du template `jetbrains/liorian-socle` (au lieu d'un clone git) avec `--channel alpha|beta|rc|stable` (stable par défaut) ; les dossiers existants non vides ne sont plus écrasés sans accord explicite.
+- **`init` par canal de release** — téléchargement du ZIP de release du template `protorians/liorian-socle` (au lieu d'un clone git) avec `--channel alpha|beta|rc|stable` (stable par défaut) ; les dossiers existants non vides ne sont plus écrasés sans accord explicite.
 - **`audit --output table|json`** — sortie machine (JSON) ou tableau pour les audits de modules.
 - **`unlink --sync-remote`** — synchronisation des métadonnées locales (nom, type, description) vers le produit distant avant le déliage.
 - **Scripts de développement** — `scripts/dev-uninstall.sh` ; `dev-install.sh` gagne `--build-only`, `--install-only` et `--prefix`.
@@ -402,7 +403,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Authentification liorian-auth** — la base URL n'est plus codée en dur : résolution `LIORIAN_AUTH_API` → registre workspace → registre embarqué ; le champ `device` devient une chaîne ; timeouts configurés par application (`api.timeout`).
 - **Configuration JSON** — `liorian.config.json` remplace le TOML (`.liorian-cli.toml`) avec des clés camelCase ; le parser TOML est retiré.
-- **User-Agent standardisé** `JetBrains/5.0 (…) Senteints/<version>` sur toutes les requêtes HTTP de la CLI et de l'installeur npm.
+- **User-Agent standardisé** `protorians/5.0 (…) Senteints/<version>` sur toutes les requêtes HTTP de la CLI et de l'installeur npm.
 - **`pack`** inclut désormais `src/app/<module.url>/` dans l'archive `.SenMod`.
 
 ### Removed
@@ -529,7 +530,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **init** — Cloner `jetbrains/liorian-socle` + installer les dépendances (détection bun/pnpm/yarn/npm)
+- **init** — Cloner `protorians/liorian-socle` + installer les dépendances (détection bun/pnpm/yarn/npm)
 - **create module** — Créer un module standardisé dans `library/modules/`
 - **connect** — Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes)
 - **disconnect** — Invalider le token côté serveur et supprimer les credentials

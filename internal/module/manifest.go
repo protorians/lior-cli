@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/pkg"
 )
 
 // Manifest is the metadata file of a Liorian module (`manifest.json`).

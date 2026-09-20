@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // Well-known directory and file names within a Liorian project.

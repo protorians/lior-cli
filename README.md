@@ -26,12 +26,12 @@ go build -o liorian .
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap jetbrains/lior-cli https://github.com/jetbrains/lior-cli.git
-brew install jetbrains/lior-cli/liorian
+brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
+brew install protorians/lior-cli/liorian
 ```
 
 > Homebrew exige une référence `user/repo/formula` (3 segments) : la forme
-> `brew install jetbrains/lior-cli` (2 segments) n'est pas valide dans Homebrew.
+> `brew install protorians/lior-cli` (2 segments) n'est pas valide dans Homebrew.
 
 ### Go / npm / binaire
 
@@ -42,7 +42,7 @@ Voir la section « Installation » de la spécification (`docs/specs/liorian.md`
 
 | Commande | Description |
 |----------|-------------|
-| `liorian init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `jetbrains/liorian-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
+| `liorian init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `protorians/liorian-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
 | `liorian create module [nom] [--domain d] [--type INTERNAL\|EXTERNAL] [--category CAT] [--mockup dir] [--page-mockup file]` | Créer un module dans `library/modules/` depuis le mockup hello-world (renommé avec le nom du module), surchargeable via `--mockup` / `--page-mockup` (`LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) ; `--type` (défaut `EXTERNAL`) et `--category` (défaut `SYSTEM`) sont écrits dans le manifeste et la déclaration |
 | `liorian connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `liorian auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |

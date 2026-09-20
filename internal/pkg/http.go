@@ -39,7 +39,7 @@ var (
 // default; `Senteints/<version>` is the CLI (the version is injected via
 // SetCLIVersion).
 func UserAgent() string {
-	return fmt.Sprintf("JetBrains/5.0 (%s) Go-http-client/1.1 Senteints/%s", osPlatformToken(), cliVersion)
+	return fmt.Sprintf("protorians/5.0 (%s) Go-http-client/1.1 Senteints/%s", osPlatformToken(), cliVersion)
 }
 
 // osPlatformToken returns a browser-style platform token describing the real

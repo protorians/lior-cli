@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jetbrains/lior-cli/internal/config"
-	"github.com/jetbrains/lior-cli/internal/i18n"
-	"github.com/jetbrains/lior-cli/internal/module"
-	"github.com/jetbrains/lior-cli/internal/pkg"
-	"github.com/jetbrains/lior-cli/internal/signing"
-	"github.com/jetbrains/lior-cli/internal/tui"
+	"github.com/protorians/lior-cli/internal/config"
+	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
+	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/signing"
+	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 

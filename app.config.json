@@ -6,8 +6,8 @@
       "name": "Lior Socle",
       "description": "Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
       "domains": {
-        "production": "socle.liorian.jetbrains.com",
-        "staging": "socle-staging.liorian.jetbrains.com",
+        "production": "socle.liorian.protorians.com",
+        "staging": "socle-staging.liorian.protorians.com",
         "development": "localhost:5010"
       },
       "api": {
@@ -19,8 +19,8 @@
       "name": "Liorian Connect",
       "description": "Espace Développeur & Publication de Modules",
       "domains": {
-        "production": "connect.liorian.jetbrains.com",
-        "staging": "connect-staging.liorian.jetbrains.com",
+        "production": "connect.liorian.protorians.com",
+        "staging": "connect-staging.liorian.protorians.com",
         "development": "localhost:5020"
       },
       "api": {
@@ -32,8 +32,8 @@
       "name": "Liorian Console",
       "description": "Administration & gouvernance",
       "domains": {
-        "production": "console.liorian.jetbrains.com",
-        "staging": "console-staging.liorian.jetbrains.com",
+        "production": "console.liorian.protorians.com",
+        "staging": "console-staging.liorian.protorians.com",
         "development": "localhost:5030"
       },
       "api": {
@@ -45,8 +45,8 @@
       "name": "Liorian Store",
       "description": "Storefront client pour l'installation de modules",
       "domains": {
-        "production": "store.liorian.jetbrains.com",
-        "staging": "store-staging.liorian.jetbrains.com",
+        "production": "store.liorian.protorians.com",
+        "staging": "store-staging.liorian.protorians.com",
         "development": "localhost:5040"
       },
       "api": {
@@ -58,8 +58,8 @@
       "name": "Liorian Auth",
       "description": "Service d'authentification SSO — Login, consentement OAuth, MFA",
       "domains": {
-        "production": "auth.liorian.jetbrains.com",
-        "staging": "auth-staging.liorian.jetbrains.com",
+        "production": "auth.liorian.protorians.com",
+        "staging": "auth-staging.liorian.protorians.com",
         "development": "localhost:5050"
       },
       "api": {

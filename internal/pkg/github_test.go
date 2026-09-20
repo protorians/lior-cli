@@ -82,7 +82,7 @@ func TestResolveReleaseURL(t *testing.T) {
 	}
 	defer func() { githubReleasesAPIURL = old }()
 
-	got, err := resolveReleaseURL("jetbrains", "liorian-socle", string(ChannelStable))
+	got, err := resolveReleaseURL("protorians", "liorian-socle", string(ChannelStable))
 	if err != nil {
 		t.Fatalf("resolveReleaseURL(stable): %v", err)
 	}
@@ -90,7 +90,7 @@ func TestResolveReleaseURL(t *testing.T) {
 		t.Errorf("resolveReleaseURL(stable) = %q, want %q", got, want)
 	}
 
-	got, err = resolveReleaseURL("jetbrains", "liorian-socle", string(ChannelBeta))
+	got, err = resolveReleaseURL("protorians", "liorian-socle", string(ChannelBeta))
 	if err != nil {
 		t.Fatalf("resolveReleaseURL(beta): %v", err)
 	}
@@ -98,7 +98,7 @@ func TestResolveReleaseURL(t *testing.T) {
 		t.Errorf("resolveReleaseURL(beta) = %q, want %q", got, want)
 	}
 
-	if _, err := resolveReleaseURL("jetbrains", "liorian-socle", string(ChannelRC)); err == nil {
+	if _, err := resolveReleaseURL("protorians", "liorian-socle", string(ChannelRC)); err == nil {
 		t.Error("a missing channel must return an error")
 	}
 }
@@ -129,9 +129,9 @@ func writeTestZip(t *testing.T, entries map[string]string) string {
 
 func TestDownloadAndExtractZip(t *testing.T) {
 	zipPath := writeTestZip(t, map[string]string{
-		"jetbrains-liorian-socle-abc123/package.json":             `{"name":"liorian-socle"}`,
-		"jetbrains-liorian-socle-abc123/README.md":                "template\n",
-		"jetbrains-liorian-socle-abc123/library/modules/.gitkeep": "",
+		"protorians-liorian-socle-abc123/package.json":             `{"name":"liorian-socle"}`,
+		"protorians-liorian-socle-abc123/README.md":                "template\n",
+		"protorians-liorian-socle-abc123/library/modules/.gitkeep": "",
 	})
 	zipData, err := os.ReadFile(zipPath)
 	if err != nil {
@@ -160,7 +160,7 @@ func TestDownloadAndExtractZip(t *testing.T) {
 
 func TestDownloadAndExtractZipReportsProgress(t *testing.T) {
 	zipPath := writeTestZip(t, map[string]string{
-		"jetbrains-liorian-socle-abc123/package.json": `{"name":"liorian-socle"}`,
+		"protorians-liorian-socle-abc123/package.json": `{"name":"liorian-socle"}`,
 	})
 	zipData, err := os.ReadFile(zipPath)
 	if err != nil {

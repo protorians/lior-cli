@@ -7,7 +7,7 @@ stderr 'Searching the catalog'
 stdout '3 result\(s\)'
 stdout 'com.example.blog-manager'
 stdout 'com.analytics.visitors'
-stdout 'JetBrains'
+stdout 'protorians'
 
 # Full-text query narrows the results.
 exec $LIORIAN --no-color marketplace search visitors

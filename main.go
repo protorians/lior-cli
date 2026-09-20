@@ -3,7 +3,7 @@ package main
 import (
 	_ "embed"
 
-	"github.com/jetbrains/lior-cli/cmd"
+	"github.com/protorians/lior-cli/cmd"
 )
 
 var (

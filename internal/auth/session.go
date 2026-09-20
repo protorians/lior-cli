@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jetbrains/lior-cli/internal/appconfig"
-	"github.com/jetbrains/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/appconfig"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 // TokenTTL is the client-side lifetime of a session token. The API responses
