@@ -21,6 +21,23 @@ go build -o liorian .
 ./liorian --help
 ```
 
+## Installation (distribution)
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
+brew install protorians/lior-cli/lior-cli
+```
+
+> Homebrew exige une référence `user/repo/formula` (3 segments) : la forme
+> `brew install protorians/lior-cli` (2 segments) n'est pas valide dans Homebrew.
+
+### Go / npm / binaire
+
+Voir la section « Installation » de la spécification (`docs/specs/liorian.md`,
+§10.2) pour les canaux `go install`, `npm`/`npx`, script `curl` et Windows.
+
 ## Commandes
 
 | Commande | Description |
@@ -41,6 +58,11 @@ go build -o liorian .
 | `liorian test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `lorian.config.json` ; exit `13` en cas d'échec |
 | `liorian -v` / `--version` | Afficher la version |
 | `liorian help` | Aide contextuelle |
+
+> Une nouvelle version détectée au démarrage affiche une **notification seule**
+> (`Update available: vX → vY`) — le CLI ne télécharge ni n'impose jamais la
+> mise à jour (S-015 / NFR-006), et le check est désactivable via
+> `LIORIAN_CLI_SKIP_UPDATE` (cache 24 h).
 
 ## Configuration
 
@@ -86,6 +108,8 @@ go build -o liorian .
 | `LIORIAN_MODULE_MOCKUP` | Répertoire du module de référence pour `create module` (repli sur le mockup embarqué) |
 | `LIORIAN_PAGE_MOCKUP` | Gabarit `page.tsx` pour `create module` (repli sur le mockup embarqué) |
 | `LIORIAN_CLI_TEMPLATE_REPO` | Source du template `init` (repo GitHub, URL ZIP directe ou répertoire local) |
+| `LIORIAN_CLI_UPDATE_URL` | Endpoint du check auto-update (défaut : releases GitHub) |
+| `LIORIAN_CLI_SKIP_UPDATE` | Désactive le check auto-update (réseau coupé) |
 
 ## Sécurité
 

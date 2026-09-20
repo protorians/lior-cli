@@ -1877,8 +1877,14 @@ curl -sSL https://get.liorian.dev/cli | sh
 # Windows (PowerShell)
 iwr -useb https://get.liorian.dev@lior/cli.ps1 | iex
 
-# Homebrew (à créer)
-brew install protorians/liorian/liorian-cli
+# Homebrew (tap = dépôt protorians/lior-cli, formula `Formula/lior-cli.rb`)
+brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
+brew install protorians/lior-cli/lior-cli
+# (après ce tap, `brew install protorians/lior-cli/lior-cli` suffit ensuite.
+#  La forme courte `brew install protorians/lior-cli` n'est PAS valide dans
+#  Homebrew : une référence de tap exige 3 segments `user/repo/formula`, et
+#  l'auto-tap `brew install user/repo/formula` sans `brew tap` vise le repo
+#  `user/homebrew-<repo>` — d'où le `brew tap` explicite vers ce dépôt.)
 ```
 
 ### 10.3 Variables de compilation

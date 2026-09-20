@@ -3,6 +3,30 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.16.0] - 2026-09-20
+
+### Fixed
+- **Auto-update (S-015 / NFR-006) — la notification n'apparaissait jamais** : la comparaison de
+  version dans `pkg.CheckForUpdate` était inversée (`isNewer` faisait retomber sur une chaîne
+  vide, donc aucune mise à jour n'était jamais signalée). Correctif et couverture de bout en bout.
+
+### Added
+- **Auto-update documenté et testé (S-015 / NFR-006)** — notification seule, **pas de mise à jour
+  forcée ni de téléchargement automatique** de la nouvelle version :
+  - endpoint du check surchargeable via `LIORIAN_CLI_UPDATE_URL` (tests hermétiques, miroirs,
+    serveur de releases auto-hébergé) en plus du défaut GitHub releases (cache 24 h) ;
+  - désactivation inchangée : `LIORIAN_CLI_SKIP_UPDATE` (ou `CI` sans opt-in `LIORIAN_CLI_UPDATE`) ;
+  - tests unitaires `internal/pkg/update` exercent désormais `CheckForUpdate` de bout en bout
+    (mock HTTP : notification, à jour, erreur silencieuse, cache, skip) et **garantissent un unique
+    GET / aucune requête de téléchargement** ;
+  - test E2E `e2e/update_test.go` (`TestUpdateNotification`) : binaire versionné, notification
+    `Update available: v0.14.0 → v99.0.0` + lien releases, exactement une requête GET.
+- **Distribution Homebrew (spec §10.2)** — formula `Formula/lior-cli.rb` (tap = dépôt
+  `protorians/lior-cli`) avec archives darwin/linux amd64/arm64, shas et `brew test` :
+  "brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git" puis
+  `brew install protorians/lior-cli/lior-cli` (la forme à 2 segments `brew install
+  protorians/lior-cli` n'existe pas dans Homebrew : référence de tap en 3 segments).
+
 ## [v0.15.0] - 2026-09-21
 
 ### Added

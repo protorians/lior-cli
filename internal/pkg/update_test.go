@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -102,66 +104,113 @@ func TestCheckForUpdateCached(t *testing.T) {
 	}
 }
 
-func TestCheckForUpdateNewerAvailable(t *testing.T) {
-	// Clear cache
-	os.Remove(cachePath())
-
-	// Mock GitHub API returning a newer version
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// newUpdateServer starts a recording httptest server that answers the update
+// check with a GitHub-shaped release payload. Its cleanup asserts the check
+// hit the endpoint `expected` times and never issued anything but a plain GET
+// (S-015: notification seule, pas de téléchargement).
+func newUpdateServer(t *testing.T, tag string, status, expected int) *httptest.Server {
+	t.Helper()
+	var mu sync.Mutex
+	var requests []*http.Request
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requests = append(requests, r)
+		mu.Unlock()
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(GitHubRelease{TagName: "v99.0.0"}); err != nil {
+		if err := json.NewEncoder(w).Encode(GitHubRelease{TagName: tag}); err != nil {
 			t.Error(err)
 		}
 	}))
-	defer server.Close()
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if got := len(requests); got != expected {
+			t.Errorf("le mock update a reçu %d requête(s), %d attendue(s)", got, expected)
+		}
+		for _, r := range requests {
+			if r.Method != http.MethodGet {
+				t.Errorf("update check a émis %s %s — tout téléchargement est interdit (S-015)", r.Method, r.URL.Path)
+			}
+		}
+	})
+	return srv
+}
 
-	// Test the parsing logic directly via the helper
-	latest, err := fetchLatestFromURL(server.URL)
-	if err != nil {
-		t.Fatalf("fetchLatestFromURL: %v", err)
-	}
-	if latest != "v99.0.0" {
-		t.Errorf("latest = %q, want v99.0.0", latest)
-	}
+// TestCheckForUpdateNotifiesAndNeverDownloads is the S-015 / NFR-006 contract:
+// a newer release triggers a notification only — the check never fetches any
+// asset (no automatic download of the new version).
+func TestCheckForUpdateNotifiesAndNeverDownloads(t *testing.T) {
+	os.Remove(cachePath())
 
-	// Test isNewer with the comparison
-	if !isNewer("0.1.0", normalizeVersion(latest)) {
-		t.Error("99.0.0 doit être plus récent que 0.1.0")
+	srv := newUpdateServer(t, "v99.0.0", http.StatusOK, 1)
+	t.Setenv(UpdateCheckURLEnv, srv.URL)
+
+	msg := CheckForUpdate("0.1.0")
+	if msg == "" {
+		t.Fatal("une mise à jour disponible doit retourner une notification")
+	}
+	if !strings.Contains(msg, "99.0.0") {
+		t.Errorf("la notification doit mentionner v99.0.0, got %q", msg)
 	}
 }
 
 func TestCheckForUpdateUpToDate(t *testing.T) {
 	os.Remove(cachePath())
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(GitHubRelease{TagName: "v0.1.0"}); err != nil {
-			t.Error(err)
-		}
-	}))
-	defer server.Close()
+	srv := newUpdateServer(t, "v0.1.0", http.StatusOK, 1)
+	t.Setenv(UpdateCheckURLEnv, srv.URL)
 
-	latest, err := fetchLatestFromURL(server.URL)
-	if err != nil {
-		t.Fatalf("fetchLatestFromURL: %v", err)
+	if msg := CheckForUpdate("0.1.0"); msg != "" {
+		t.Errorf("même version ne doit pas signaler de mise à jour, got %q", msg)
 	}
-	if isNewer("0.1.0", normalizeVersion(latest)) {
-		t.Error("même version ne doit pas signaler de mise à jour")
+	if msg := CheckForUpdate("0.2.0"); msg != "" {
+		t.Errorf("version plus récente que la release ne doit rien signaler, got %q", msg)
 	}
 }
 
 func TestCheckForUpdateNetworkError(t *testing.T) {
 	os.Remove(cachePath())
 
-	// Server that returns an error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
+	srv := newUpdateServer(t, "", http.StatusInternalServerError, 1)
+	t.Setenv(UpdateCheckURLEnv, srv.URL)
 
-	_, err := fetchLatestFromURL(server.URL)
-	if err == nil {
-		t.Error("erreur HTTP 500 doit être retournée")
+	// Une erreur réseau/API est silencieuse : on ne casse jamais la commande.
+	if msg := CheckForUpdate("0.1.0"); msg != "" {
+		t.Errorf("erreur HTTP 500 doit être silencieuse, got %q", msg)
+	}
+}
+
+func TestCheckForUpdateChecksCache(t *testing.T) {
+	// A recent cache entry means the release endpoint is never hit again.
+	os.Remove(cachePath())
+	writeCache(time.Now())
+	defer os.Remove(cachePath())
+
+	// No env override: a stale/next test would otherwise reach the network.
+	srv := newUpdateServer(t, "v99.0.0", http.StatusOK, 0)
+	t.Setenv(UpdateCheckURLEnv, srv.URL)
+
+	// First call respects the recent cache and stays off the network; the
+	// recorded request count is asserted as zero by the mock cleanup, and the
+	// message must stay empty.
+	if msg := CheckForUpdate("0.1.0"); msg != "" {
+		t.Errorf("cache récent doit éviter la vérification, got %q", msg)
+	}
+}
+
+func TestCheckForUpdateSkipTakesPrecedence(t *testing.T) {
+	os.Remove(cachePath())
+
+	srv := newUpdateServer(t, "v99.0.0", http.StatusOK, 0)
+	t.Setenv(UpdateCheckURLEnv, srv.URL)
+	t.Setenv(SkipUpdateEnvVar, "1")
+
+	if msg := CheckForUpdate("0.1.0"); msg != "" {
+		t.Errorf("LIORIAN_CLI_SKIP_UPDATE=1 doit couper la vérification, got %q", msg)
 	}
 }
 
@@ -261,21 +310,4 @@ func setOrUnset(t *testing.T, key, value string) {
 			_ = os.Unsetenv(key)
 		}
 	})
-}
-
-// fetchLatestFromURL is a test helper that fetches from a custom URL.
-func fetchLatestFromURL(baseURL string) (string, error) {
-	resp, err := http.Get(baseURL)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", &APIError{StatusCode: resp.StatusCode, Message: "HTTP error"}
-	}
-	var release GitHubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", err
-	}
-	return release.TagName, nil
 }

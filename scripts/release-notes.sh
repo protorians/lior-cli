@@ -62,6 +62,13 @@ go install github.com/protorians/lior-cli@${TAG}
 npm install -g @lior/cli
 \`\`\`
 
+### Homebrew (macOS / Linux)
+
+\`\`\`bash
+brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
+brew install protorians/lior-cli/lior-cli
+\`\`\`
+
 ### Binary
 
 Download the archive matching your platform from the table above, extract it, and add the executable to your \`PATH\`.
