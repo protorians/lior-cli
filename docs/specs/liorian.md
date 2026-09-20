@@ -1514,7 +1514,8 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
     }
   },
   "cli": {
-    "lang": "fr-FR"
+    "lang": "fr-FR",
+    "noColor": true
   }
 }
 ```
@@ -1523,7 +1524,9 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
 > historique `lorian.config.toml` ne sert plus que de marqueur de projet (racine) pour
 > `create`/`link`/etc., et `lorian.config.json` est écrit par `liorian init`.
 > `cli.lang` force la langue d'interface (NFR-007, FR-025) ; un champ vide garde l'auto-détection
-> (`LIORIAN_CLI_LANG` / locale OS).
+> (`LIORIAN_CLI_LANG` / locale OS). `cli.noColor` désactive les couleurs de sortie. `--lang`,
+> `--no-color` et `--verbose` **persistent** leur choix dans ce fichier à chaque exécution dans le
+> projet (`cli.lang`, `cli.noColor`, `debug.verbose`), la priorité restant flag → env → config.
 >
 > La section `test` est **écrite automatiquement** par `liorian test` : `packageManager` reprend
 > le gestionnaire choisi à l'installation (ou celui réellement utilisé), `runner` mémorise le

@@ -90,6 +90,42 @@ func TestTestConfigSetRunnerClearsEntry(t *testing.T) {
 	}
 }
 
+func TestCliConfigSettingsRoundTrip(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "lorian.config.json")
+
+	cfg := Default()
+	cfg.Cli.Lang = "fr-FR"
+	cfg.Cli.NoColor = true
+	cfg.Debug.Verbose = true
+	if err := cfg.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Cli.Lang != "fr-FR" {
+		t.Errorf("Cli.Lang = %q, want fr-FR", loaded.Cli.Lang)
+	}
+	if !loaded.Cli.NoColor {
+		t.Error("Cli.NoColor doit être true après round-trip")
+	}
+	if !loaded.Debug.Verbose {
+		t.Error("Debug.Verbose doit être true après round-trip")
+	}
+}
+
+func TestCliConfigDefaultsOff(t *testing.T) {
+	cfg := Default()
+	if cfg.Cli.NoColor {
+		t.Error("NoColor doit être false par défaut")
+	}
+	if cfg.Debug.Verbose {
+		t.Error("Debug.Verbose doit être false par défaut")
+	}
+}
+
 func TestFindProjectRoot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ExternalModulesDir), 0o755); err != nil {

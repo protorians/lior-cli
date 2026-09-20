@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.17.0] - 2026-09-20
+
+### Added
+- **Préférences CLI persistées (spec §5.11)** — `--lang`, `--no-color` et `--verbose`
+  mémorisent désormais leur choix dans `lorian.config.json` (`cli.lang`, `cli.noColor`,
+  `debug.verbose`) à chaque exécution dans un projet Liorian : le choix est appliqué à tous
+  les lancements suivants sans repasser les flags.
+- **Nouvelle clé `cli.noColor`** — désactive les couleurs de sortie au niveau projet. La
+  priorité reste `flag --no-color[=true|false]` → env → config : le flag écarte la config
+  (lu dès l'aide/version, avant même l'analyse Cobra) et `--no-color=false` permet d'effacer
+  une valeur persistée.
+
+### Changed
+- **Lecture des préférences centralisée** — extraction des réglages CLI (`lang`, `noColor`)
+  dans `cmd.cliSettings()`, et analyse brute de `--no-color` avant le premier affichage
+  Cobra (aide/version) pour que la config persistée s'applique dès le démarrage.
+
+### Docs
+- Synchro de la spec §5.11 (`lorian.config.json`) avec la clé `cli.noColor` et la
+  persistance des flags.
+
 ## [v0.16.1] - 2026-09-20
 
 ### Fixed

@@ -71,6 +71,9 @@ type CliConfig struct {
 	// Lang is the UI locale of the CLI (e.g. "fr-FR", "en-US"). An empty
 	// value keeps the auto-detection (LIORIAN_CLI_LANG / OS locale).
 	Lang string `json:"lang"`
+	// NoColor disables colored output. An empty/false value keeps the default
+	// terminal color profile.
+	NoColor bool `json:"noColor"`
 }
 
 // ProjectConfig configures the project-level settings.

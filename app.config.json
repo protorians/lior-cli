@@ -1,6 +1,6 @@
 {
   "$schema": "lorian.config.schema.json",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "applications": {
     "liorian-socle": {
       "name": "Lior Socle",
