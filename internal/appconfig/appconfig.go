@@ -28,6 +28,9 @@ const (
 // Config mirrors the registry schema (lorian.config.schema.json).
 type Config struct {
 	Version      string                 `json:"version"`
+	Branch       string                 `json:"branch"`
+	Commit       string                 `json:"commit"`
+	Date         string                 `json:"date"`
 	Applications map[string]Application `json:"applications"`
 
 	// sourcePath records where the config came from (for debug output).

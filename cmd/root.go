@@ -148,17 +148,18 @@ func setupHelpTemplates(root *cobra.Command) {
 {{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}`)
 }
 
-// Execute runs the CLI. The version/commit/date build info comes from
-// ldflags (see .goreleaser.yaml); appConfig is the `app.config.json` registry
-// embedded in the binary (see main.go).
-func Execute(version, commit, date string, appConfig []byte) {
+// Execute runs the CLI. The version/branch/commit/date build info comes from
+// `app.config.json` (aligned in main.go) or ldflags (see .goreleaser.yaml);
+// appConfig is the `app.config.json` registry embedded in the binary (see
+// main.go).
+func Execute(version, branch, commit, date string, appConfig []byte) {
 	// Parameterise the CLI with the embedded workspace registry: API base
 	// URLs and timeouts. A local `app.config.json` overrides it at call time.
 	appconfig.SetEmbedded(appConfig)
 
 	// rootCmd.Version is read by Cobra at execution time, so it is computed
 	// here (not in init) to pick up the values injected via ldflags.
-	rootCmd.Version = fmt.Sprintf("v%s (%s/%s) %s", version, runtime.GOOS, runtime.GOARCH, commit)
+	rootCmd.Version = fmt.Sprintf("v%s (%s/%s) %s (%s)", version, runtime.GOOS, runtime.GOARCH, branch, commit)
 
 	// Set the CLI version for the User-Agent header.
 	pkg.SetCLIVersion(version)

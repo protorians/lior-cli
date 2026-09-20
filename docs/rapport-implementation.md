@@ -153,7 +153,8 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   désormais allégé de ses helpers `runStream`/`scanLines`/proc).
 
 ### `liorian help`, `liorian -v` / `--version` (FR-019, FR-020)
-- Aide contextuelle Cobra ; version injectée via ldflags (`main.version/commit/date`).
+- Aide contextuelle Cobra ; version/branch/commit/date alignées sur `app.config.json`, surchargées
+  par ldflags au build de release (`main.version/branch/commit/date`).
 - **Auto-update (S-015, NFR-006)** ✅ — non bloquant, **notification seule** via les releases
   GitHub (cache 24 h) : une version plus récente affiche `Update available: vX → vY` + lien vers
   la page de releases ; **aucun téléchargement automatique** de la nouvelle version n'existe

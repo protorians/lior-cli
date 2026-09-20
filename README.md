@@ -150,8 +150,11 @@ go vet ./...
 ## Build & distribution
 
 ```bash
-# Binaire local
-go build -ldflags "-X main.version=$(git describe --tags) -X main.commit=$(git rev-parse --short HEAD)" -o liorian .
+# Binaire local (la version/branch/commit/date viennent de `app.config.json`)
+go build -o liorian .
+
+# Ou avec override ldflags
+go build -ldflags "-X main.version=$(git describe --tags) -X main.branch=$(git branch --show-current) -X main.commit=$(git rev-parse --short HEAD)" -o liorian .
 
 # Release multi-plateforme
 goreleaser release --clean

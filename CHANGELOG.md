@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.19.0] - 2026-09-20
+
+### Added
+- **Build info aligné sur `app.config.json`** — la version, la branche, l'id de commit et la date
+  proviennent désormais du registre `app.config.json` embarqué (nouvelles clés `branch`, `commit`,
+  `date`), qui devient la source de vérité d'un build local ; les `ldflags` (GoReleaser, script
+  `dev-install`) restent prioritaires pour les builds de release.
+- **`--version` enrichie** — `liorian -v` / `--version` affiche désormais
+  `liorian v<version> (<os>/<arch>) <branche> (<commit>)`.
+
+### Changed
+- **Variables de compilation** — `main.branch` et `main.commit` coexistent désormais ; le template
+  GoReleaser passe de `{{.Commit}}` à `{{.Branch}}` + `{{.ShortCommit}}`.
+- **Version bump** — `app.config.json` et le wrapper npm passent sur `0.19.0`.
+
+### Docs
+- `README.md`, `docs/specs/liorian.md` et le rapport d'implémentation alignés sur les nouveaux
+  champs de configuration et la sortie de version.
+
+### Technical Details
+- `main.go` : helper `buildInfo()` qui résout version/branche/commit/date depuis le
+  `app.config.json` embarqué, en laissant la priorité aux valeurs injectées par `ldflags` ; champs
+  `Branch`, `Commit` et `Date` ajoutés à `internal/appconfig.Config`.
+- `cmd/root.go` : signature `Execute(version, branch, commit, date, appConfig)` et template de
+  version Cobra mis à jour ; scénario E2E `01_help_version.txtar` rendu tolérant au SemVer.
+- `internal/pkg/update_test.go` : les tests de notification de mise à jour forcent le contrôle
+  réseau via `LIORIAN_CLI_UPDATE=1` (robustesse en CI).
+
 ## [v0.18.0] - 2026-09-20
 
 ### Added

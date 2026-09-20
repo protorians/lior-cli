@@ -1172,13 +1172,13 @@ Afficher la version actuelle de la CLI.
 
 #### Comportement
 
-1. Lire la version compilée dans le binaire (via `ldflags` : `main.version`, `main.commit`, `main.date`)
-2. Afficher : `liorian v<version> (<os>/<arch>) <commit>` (template de version Cobra)
+1. Lire la version compilée dans le binaire — alignée sur `app.config.json` (`main.version`, `main.branch`, `main.commit`, `main.date`), surchargée par `ldflags` au build de release
+2. Afficher : `liorian v<version> (<os>/<arch>) <branch> (<commit>)` (template de version Cobra)
 
 #### Sortie
 
 ```
-liorian v0.6.0 (darwin/arm64) abc1234
+liorian v0.18.0 (darwin/arm64) alpha (52d0b9a)
 ```
 
 ---
@@ -1836,7 +1836,8 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
+      - -X main.branch={{.Branch}}
+      - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
 
 archives:
@@ -1898,9 +1899,10 @@ brew install protorians/lior-cli/liorian
 
 | Variable | Description | Défaut |
 |----------|-------------|--------|
-| `main.version` | Version du binaire | `dev` |
-| `main.commit` | Hash du commit git | `none` |
-| `main.date` | Date de compilation | compilation time |
+| `main.version` | Version du binaire (alignée sur `app.config.json`) | `dev` |
+| `main.branch` | Branche git (alignée sur `app.config.json`) | `none` |
+| `main.commit` | Hash court du commit git (aligné sur `app.config.json`) | `none` |
+| `main.date` | Date de compilation (alignée sur `app.config.json`) | `unknown` |
 
 ---
 

@@ -10,6 +10,19 @@
       "description": "Version du schéma de configuration",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
     },
+    "branch": {
+      "type": "string",
+      "description": "Branche git alignée sur le binaire compilé"
+    },
+    "commit": {
+      "type": "string",
+      "description": "Hash court du commit git aligné sur le binaire compilé"
+    },
+    "date": {
+      "type": "string",
+      "description": "Date de compilation / de release (RFC 3339)",
+      "format": "date-time"
+    },
     "applications": {
       "type": "object",
       "description": "Applications Liorian configurées",

@@ -137,7 +137,7 @@ func TestExecuteHonorsPersistedNoColor(t *testing.T) {
 	os.Args = []string{"liorian"}
 	defer func() { os.Args = origArgs }()
 
-	Execute("dev", "none", "unknown", nil)
+	Execute("dev", "none", "none", "unknown", nil)
 
 	if got := lipgloss.ColorProfile(); got != termenv.Ascii {
 		t.Errorf("ColorProfile = %v, want termenv.Ascii (persisted noColor)", got)
@@ -168,7 +168,7 @@ func TestExecutePersistsFlags(t *testing.T) {
 		i18n.Use("en-US")
 	}()
 
-	Execute("dev", "none", "unknown", nil)
+	Execute("dev", "none", "none", "unknown", nil)
 
 	cfg, err := config.Load(config.ConfigPath(root))
 	if err != nil {

@@ -148,6 +148,8 @@ func TestCheckForUpdateNotifiesAndNeverDownloads(t *testing.T) {
 
 	srv := newUpdateServer(t, "v99.0.0", http.StatusOK, 1)
 	t.Setenv(UpdateCheckURLEnv, srv.URL)
+	// Force the network check even when CI is set in the environment.
+	t.Setenv("LIORIAN_CLI_UPDATE", "1")
 
 	msg := CheckForUpdate("0.1.0")
 	if msg == "" {
@@ -163,6 +165,8 @@ func TestCheckForUpdateUpToDate(t *testing.T) {
 
 	srv := newUpdateServer(t, "v0.1.0", http.StatusOK, 1)
 	t.Setenv(UpdateCheckURLEnv, srv.URL)
+	// Force the network check even when CI is set in the environment.
+	t.Setenv("LIORIAN_CLI_UPDATE", "1")
 
 	if msg := CheckForUpdate("0.1.0"); msg != "" {
 		t.Errorf("même version ne doit pas signaler de mise à jour, got %q", msg)
@@ -177,6 +181,8 @@ func TestCheckForUpdateNetworkError(t *testing.T) {
 
 	srv := newUpdateServer(t, "", http.StatusInternalServerError, 1)
 	t.Setenv(UpdateCheckURLEnv, srv.URL)
+	// Force the network check even when CI is set in the environment.
+	t.Setenv("LIORIAN_CLI_UPDATE", "1")
 
 	// Une erreur réseau/API est silencieuse : on ne casse jamais la commande.
 	if msg := CheckForUpdate("0.1.0"); msg != "" {

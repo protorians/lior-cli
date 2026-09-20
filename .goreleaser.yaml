@@ -23,7 +23,8 @@ builds:
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
+      - -X main.branch={{.Branch}}
+      - -X main.commit={{.ShortCommit}}
       - -X main.date={{.Date}}
 
 archives:

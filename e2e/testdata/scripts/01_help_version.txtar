@@ -10,8 +10,9 @@ stdout 'Builds a module'
 stdout 'Usage:'
 stdout '  liorian pack \[<module>\[@<version>\]\] \[flags\]'
 
-# TC-021 — `liorian -v` / `--version` affiche la version.
+# TC-021 — `liorian -v` / `--version` affiche la version alignée sur
+# `app.config.json` (le build dev sans ldflags remonte la version du fichier).
 exec $LIORIAN --no-color -v
-stdout '^liorian vdev'
+stdout '^liorian v[0-9]+\.[0-9]+\.[0-9]+'
 exec $LIORIAN --no-color --version
-stdout '^liorian vdev'
+stdout '^liorian v[0-9]+\.[0-9]+\.[0-9]+'

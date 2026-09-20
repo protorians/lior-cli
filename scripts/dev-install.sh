@@ -57,7 +57,7 @@ build() {
   mkdir -p "$BUILD_DIR"
   echo "=== Step 1/2 — Build (dev) ==="
   GOFLAGS=-mod=mod CGO_ENABLED=0 go build \
-    -ldflags "-X main.version=dev -X main.commit=$(git rev-parse --short HEAD 2>/dev/null || echo none) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    -ldflags "-X main.version=dev -X main.branch=$(git branch --show-current 2>/dev/null || echo none) -X main.commit=$(git rev-parse --short HEAD 2>/dev/null || echo none) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     -o "$BUILD_BIN" .
   echo "Built: $BUILD_BIN"
 }
