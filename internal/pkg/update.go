@@ -23,6 +23,11 @@ type GitHubRelease struct {
 // UpdateCheckURL is the GitHub API endpoint for the latest release.
 const UpdateCheckURL = "https://api.github.com/repos/protorians/lior-cli/releases/latest"
 
+// UpdateCheckURLEnv overrides the update-check endpoint (tests, mirrors,
+// self-hosted release servers). It must return the JSON shape of a GitHub
+// release (`{"tag_name": "v…"}`).
+const UpdateCheckURLEnv = "LIORIAN_CLI_UPDATE_URL"
+
 // CacheDuration controls how often the update check runs (once per day).
 const CacheDuration = 24 * time.Hour
 
@@ -37,10 +42,13 @@ func cachePath() string {
 // value (e.g. `1`, `true`). It lets CI/CD runs stay off the network.
 const SkipUpdateEnvVar = "LIORIAN_CLI_SKIP_UPDATE"
 
-// CheckForUpdate queries the GitHub releases API and returns a notification
-// message when a newer version is available. Returns empty string when the
-// CLI is up-to-date or when the check should be skipped (cached, offline,
+// CheckForUpdate queries the release API and returns a notification message
+// when a newer version is available. Returns empty string when the CLI is
+// up-to-date or when the check should be skipped (cached, offline,
 // `LIORIAN_CLI_SKIP_UPDATE` set, running in CI, etc.).
+//
+// S-015 / NFR-006: the check is informational only — it never downloads or
+// installs the new version (spec: "notification, pas de mise à jour forcée").
 func CheckForUpdate(currentVersion string) string {
 	if currentVersion == "" || currentVersion == "dev" {
 		return ""
@@ -68,7 +76,9 @@ func CheckForUpdate(currentVersion string) string {
 	currentClean := normalizeVersion(currentVersion)
 	latestClean := normalizeVersion(latestVersion)
 
-	if currentClean == latestClean || isNewer(currentClean, latestClean) {
+	// Nothing to report when the latest release is not strictly newer than
+	// the running version (equal, or the running version is ahead).
+	if !isNewer(currentClean, latestClean) {
 		return ""
 	}
 
@@ -93,12 +103,32 @@ func skipUpdate() bool {
 	return false
 }
 
-// fetchLatestVersion retrieves the latest release tag from GitHub.
+// updateCheckURL returns the endpoint to query for the latest release: the
+// `LIORIAN_CLI_UPDATE_URL` override when set, the GitHub API otherwise.
+func updateCheckURL() string {
+	if url := strings.TrimSpace(os.Getenv(UpdateCheckURLEnv)); url != "" {
+		return url
+	}
+	return UpdateCheckURL
+}
+
+// fetchLatestVersion retrieves the latest release tag.
 func fetchLatestVersion() (string, error) {
+	return fetchLatestFromURL(updateCheckURL())
+}
+
+// fetchLatestFromURL retrieves the latest release tag from a custom release
+// endpoint. The response is expected to have a GitHub-shaped payload
+// (`{"tag_name": "v…"}`).
+func fetchLatestFromURL(url string) (string, error) {
+	if strings.TrimSpace(url) == "" {
+		return "", nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", UpdateCheckURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "", err
 	}
@@ -112,7 +142,7 @@ func fetchLatestVersion() (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GitHub API returned %d", resp.StatusCode)
+		return "", fmt.Errorf("update API returned %d", resp.StatusCode)
 	}
 
 	var release GitHubRelease

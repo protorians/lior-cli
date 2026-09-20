@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/protorians/lior-cli/internal/config"
@@ -89,25 +90,66 @@ func langFromArgs(args []string) string {
 	return ""
 }
 
+// noColorFromArgs scans the raw arguments for `--no-color`, `--no-color=true`
+// or `--no-color=false` before Cobra has parsed the flag set. The second return
+// value reports whether the flag was present at all, so the caller can honour
+// the flag over any config value (and clear a persisted noColor with
+// `--no-color=false`).
+func noColorFromArgs(args []string) (bool, bool) {
+	for _, a := range args {
+		if a == "--no-color" {
+			return true, true
+		}
+		if v, ok := strings.CutPrefix(a, "--no-color="); ok {
+			parsed, err := strconv.ParseBool(v)
+			if err != nil {
+				return true, true // malformed value: keep the disable-colors intent
+			}
+			return parsed, true
+		}
+	}
+	return false, false
+}
+
 // configLang reads the `"cli".lang` key from the project config when the
 // current directory sits inside a Liorian project.
 func configLang() (string, bool) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", false
-	}
-	root, err := config.FindProjectRoot(cwd)
-	if err != nil {
-		return "", false
-	}
-	cfg, err := config.Load(config.ConfigPath(root))
-	if err != nil {
+	cfg, ok := cliSettings()
+	if !ok {
 		return "", false
 	}
 	if lang := strings.TrimSpace(cfg.Cli.Lang); lang != "" {
 		return lang, true
 	}
 	return "", false
+}
+
+// configNoColor reads the `"cli".noColor` key from the project config when the
+// current directory sits inside a Liorian project.
+func configNoColor() bool {
+	cfg, ok := cliSettings()
+	if !ok {
+		return false
+	}
+	return cfg.Cli.NoColor
+}
+
+// cliSettings loads the project config (from the current directory upward)
+// when an explicit Liorian project root exists.
+func cliSettings() (config.Config, bool) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return config.Config{}, false
+	}
+	root, err := config.FindProjectRoot(cwd)
+	if err != nil {
+		return config.Config{}, false
+	}
+	cfg, err := config.Load(config.ConfigPath(root))
+	if err != nil {
+		return config.Config{}, false
+	}
+	return cfg, true
 }
 
 // langApplier is an indirection pointer to applyLanguage, breaking the

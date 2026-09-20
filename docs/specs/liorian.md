@@ -1514,7 +1514,8 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
     }
   },
   "cli": {
-    "lang": "fr-FR"
+    "lang": "fr-FR",
+    "noColor": true
   }
 }
 ```
@@ -1523,7 +1524,9 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
 > historique `lorian.config.toml` ne sert plus que de marqueur de projet (racine) pour
 > `create`/`link`/etc., et `lorian.config.json` est écrit par `liorian init`.
 > `cli.lang` force la langue d'interface (NFR-007, FR-025) ; un champ vide garde l'auto-détection
-> (`LIORIAN_CLI_LANG` / locale OS).
+> (`LIORIAN_CLI_LANG` / locale OS). `cli.noColor` désactive les couleurs de sortie. `--lang`,
+> `--no-color` et `--verbose` **persistent** leur choix dans ce fichier à chaque exécution dans le
+> projet (`cli.lang`, `cli.noColor`, `debug.verbose`), la priorité restant flag → env → config.
 >
 > La section `test` est **écrite automatiquement** par `liorian test` : `packageManager` reprend
 > le gestionnaire choisi à l'installation (ou celui réellement utilisé), `runner` mémorise le
@@ -1877,8 +1880,14 @@ curl -sSL https://get.liorian.dev/cli | sh
 # Windows (PowerShell)
 iwr -useb https://get.liorian.dev@lior/cli.ps1 | iex
 
-# Homebrew (à créer)
-brew install protorians/liorian/liorian-cli
+# Homebrew (tap = dépôt protorians/lior-cli, formula `Formula/liorian.rb`)
+brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
+brew install protorians/lior-cli/liorian
+# (après ce tap, `brew install protorians/lior-cli/liorian` suffit ensuite.
+#  La forme courte `brew install protorians/lior-cli` n'est PAS valide dans
+#  Homebrew : une référence de tap exige 3 segments `user/repo/formula`, et
+#  l'auto-tap `brew install user/repo/formula` sans `brew tap` vise le repo
+#  `user/homebrew-<repo>` — d'où le `brew tap` explicite vers ce dépôt.)
 ```
 
 ### 10.3 Variables de compilation

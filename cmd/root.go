@@ -48,6 +48,9 @@ Full lifecycle: init → create → develop → debug → audit → pack → sig
 			i18n.Use(flagLang)
 			langApplier()
 		}
+		// Persist --lang / --no-color / --verbose so the choice applies to
+		// every subsequent run inside the project.
+		persistCliSettings(cmd)
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -161,7 +164,15 @@ func Execute(version, commit, date string, appConfig []byte) {
 	_ = ResolveLanguage(os.Args[1:])
 	applyLanguage()
 
-	if flagNoColor {
+	// Colors: honour the effective `cli.noColor` config unless the raw
+	// `--no-color[=true|false]` flag overrides it (flag > config). The raw
+	// argument is scanned here because Cobra parses flags only inside
+	// rootCmd.Execute(), i.e. after the first help/version output.
+	if noColor, set := noColorFromArgs(os.Args[1:]); set {
+		if noColor {
+			lipgloss.SetColorProfile(termenv.Ascii)
+		}
+	} else if configNoColor() {
 		lipgloss.SetColorProfile(termenv.Ascii)
 	}
 
@@ -237,4 +248,53 @@ func debugf(format string, args ...any) {
 func warn(message string) {
 	s := tui.NewStyles()
 	fmt.Fprintln(os.Stderr, s.Warning.Render("⚠ "+message))
+}
+
+// persistCliSettings records the `--lang`, `--no-color` and `--verbose` root
+// flags in the project's lorian.config.json so the choice survives across
+// runs. Only flags the user explicitly passed are written (each one keeps its
+// own precedence over the config on later runs). Without a project root, the
+// settings cannot be persisted and the call is a silent no-op.
+func persistCliSettings(root *cobra.Command) {
+	langSet := root.Flags().Changed("lang")
+	noColorSet := root.Flags().Changed("no-color")
+	verboseSet := root.Flags().Changed("verbose")
+	if !langSet && !noColorSet && !verboseSet {
+		return
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	projectRoot, err := config.FindProjectRoot(cwd)
+	if err != nil {
+		return
+	}
+
+	cfg, err := config.Load(config.ConfigPath(projectRoot))
+	if err != nil {
+		debugf("loading config for CLI settings persistence: %v", err)
+		return
+	}
+
+	changed := false
+	if langSet && flagLang != "" && cfg.Cli.Lang != flagLang {
+		cfg.Cli.Lang = flagLang
+		changed = true
+	}
+	if noColorSet && cfg.Cli.NoColor != flagNoColor {
+		cfg.Cli.NoColor = flagNoColor
+		changed = true
+	}
+	if verboseSet && cfg.Debug.Verbose != flagVerbose {
+		cfg.Debug.Verbose = flagVerbose
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	if err := cfg.Save(config.ConfigPath(projectRoot)); err != nil {
+		debugf("saving config after CLI settings: %v", err)
+	}
 }

@@ -24,7 +24,7 @@ Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal
 | 13 packages internes (`appconfig`, `auth`, `config`, `i18n`, `module`, `signing`, `audit`, `debug`, `moduletest`, `runner`, `store`, `tui`, `pkg`) | ✅ présents |
 | Tests unitaires (`go test ./...`) | ✅ verts (15 packages ok) |
 | E2E testscript (`go test ./e2e/ -run TestScripts`) | ✅ verts — 13 scénarios, TC-001 → TC-029 (mock `liorian-connect` in-memory) |
-| CI/CD GoReleaser + package npm (`/cli`) | ✅ en place (releases v0.0.1 → v0.13.0) |
+| CI/CD GoReleaser + package npm (`/cli`) + formula Homebrew (`Formula/`) | ✅ en place (releases v0.0.1 → v0.13.0, tap `protorians/lior-cli`) |
 | Messages d'erreur français + codes de sortie spec (§11.1) | ✅ respectés |
 
 **Bilan de couverture spec :** les FR-001 → FR-024, NFR-005/006, SEC-001/002/003/004/005/006/007/008/009
@@ -154,7 +154,11 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 
 ### `liorian help`, `liorian -v` / `--version` (FR-019, FR-020)
 - Aide contextuelle Cobra ; version injectée via ldflags (`main.version/commit/date`).
-- Auto-update non bloquant (NFR-006) via GitHub releases (cache 24 h, **notification seule**).
+- **Auto-update (S-015, NFR-006)** ✅ — non bloquant, **notification seule** via les releases
+  GitHub (cache 24 h) : une version plus récente affiche `Update available: vX → vY` + lien vers
+  la page de releases ; **aucun téléchargement automatique** de la nouvelle version n'existe
+  (« pas de mise à jour forcée »). Endpoint surchargeable par `LIORIAN_CLI_UPDATE_URL` (tests,
+  miroirs) et désactivable par `LIORIAN_CLI_SKIP_UPDATE` / `CI` (opt-in `LIORIAN_CLI_UPDATE`).
 
 ---
 
@@ -423,7 +427,11 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
 ### Release 0.3.0 (Qualité) — ✅ largement faite
 - S-013 mode verbose/logs ✅ déjà présent (`--verbose`, `LIORIAN_CLI_DEBUG`).
 - S-014 config `lorian.config.json` ✅ déjà présente.
-- S-015 auto-update ✅ partiel (notification seule, pas de download ; désactivable en CI).
+- S-015 auto-update ✅ **complet au 2026-09-20** (notification seule, **pas de téléchargement
+  automatique** de la nouvelle version, désactivable en CI). Correctif : la comparaison de version
+  était inversée (`isNewer` faisait retomber sur vide — la notification ne s'affichait jamais) ;
+  le check est désormais testable et testé de bout en bout (`LIORIAN_CLI_UPDATE_URL`, unitaires
+  mockées + test E2E `TestUpdateNotification`, S-015 « jamais plus d'une requête GET »).
 - S-016/017/018 tests unitaires + E2E (testscript) + CI — unitaires ✅ (15 packages), **E2E ✅** (13 scénarios
   txtar, TC-001 → TC-029, mock `liorian-connect` in-memory), **CI ✅** (job `e2e`).
 
