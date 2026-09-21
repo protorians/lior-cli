@@ -12,13 +12,17 @@ import (
 	"github.com/protorians/lior-cli/internal/i18n"
 )
 
-// inputModel is a Bubble Tea model wrapping a text input.
+// inputModel is a Bubble Tea model wrapping a text input. autoEscape marks
+// prompts where escape must be treated as "keep the typed value and let the
+// caller auto-complete the remaining fields" instead of a plain cancellation.
 type inputModel struct {
-	title  string
-	input  textinput.Model
-	secret bool
-	result string
-	cancel bool
+	title      string
+	input      textinput.Model
+	secret     bool
+	autoEscape bool
+	result     string
+	cancel     bool
+	escaped    bool
 }
 
 func (m inputModel) Init() tea.Cmd {
@@ -38,7 +42,12 @@ func (m inputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			m.result = m.input.Value()
 			return m, tea.Quit
-		case "ctrl+c", "esc":
+		case "esc":
+			m.result = m.input.Value()
+			m.cancel = true
+			m.escaped = true
+			return m, tea.Quit
+		case "ctrl+c":
 			m.cancel = true
 			return m, tea.Quit
 		case "tab":
@@ -67,13 +76,30 @@ func (m inputModel) View() string {
 	if !m.secret && m.input.Placeholder != "" {
 		line += " " + s.Hint.Render("["+i18n.T("tui.input.tab")+"]")
 	}
+	if m.autoEscape {
+		line += " " + s.Hint.Render("["+i18n.T("tui.input.esc")+"]")
+	}
 	return line + "\n"
 }
 
-// askInput runs an interactive text input prompt.
-func askInput(title, placeholder string, secret bool) (string, bool, error) {
+// inputQuit is the reason an interactive text input prompt ended.
+type inputQuit int
+
+const (
+	// inputQuitEnter ends the prompt on <enter>.
+	inputQuitEnter inputQuit = iota
+	// inputQuitEsc ends the prompt on <esc>; the typed value is preserved.
+	inputQuitEsc
+	// inputQuitCancel ends the prompt on <ctrl+c>; no value is kept.
+	inputQuitCancel
+)
+
+// askInput runs an interactive text input prompt. autoEscape turns <esc> into
+// an auto-complete request (the partially typed value is preserved) instead of
+// a plain cancellation.
+func askInput(title, placeholder string, secret, autoEscape bool) (string, inputQuit, error) {
 	if !IsInteractive() {
-		return "", true, RequireInteractive(i18n.T("tui.input"))
+		return "", inputQuitCancel, RequireInteractive(i18n.T("tui.input"))
 	}
 	s := NewStyles()
 	input := textinput.New()
@@ -86,41 +112,55 @@ func askInput(title, placeholder string, secret bool) (string, bool, error) {
 	input.TextStyle = s.Value
 	input.Cursor.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(s.palette.accent))
 
-	m := inputModel{title: title, input: input, secret: secret}
+	m := inputModel{title: title, input: input, secret: secret, autoEscape: autoEscape}
 	p := tea.NewProgram(m)
 	final, err := p.Run()
 	if err != nil {
-		return "", false, err
+		return "", inputQuitCancel, err
 	}
 	fm, ok := final.(inputModel)
 	if !ok {
-		return "", false, errors.New(i18n.T("tui.error.input_unexpected"))
+		return "", inputQuitCancel, errors.New(i18n.T("tui.error.input_unexpected"))
 	}
 	if fm.cancel {
-		return "", true, nil
+		if fm.escaped {
+			return fm.result, inputQuitEsc, nil
+		}
+		return "", inputQuitCancel, nil
 	}
-	return fm.result, false, nil
+	return fm.result, inputQuitEnter, nil
 }
 
 // AskText collects one line of visible text.
 func AskText(title, placeholder string) (string, error) {
-	value, cancelled, err := askInput(title, placeholder, false)
+	value, quit, err := askInput(title, placeholder, false, false)
 	if err != nil {
 		return "", err
 	}
-	if cancelled {
+	if quit != inputQuitEnter {
 		return "", errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return value, nil
 }
 
+// AskTextAuto collects one line of visible text where <esc> signals "auto-fill
+// the rest". It returns the (possibly empty, possibly partially typed) value
+// and auto=true when the developer pressed <esc>.
+func AskTextAuto(title, placeholder string) (string, bool, error) {
+	value, quit, err := askInput(title, placeholder, false, true)
+	if err != nil {
+		return "", false, err
+	}
+	return value, quit == inputQuitEsc, nil
+}
+
 // AskSecret collects a masked secret.
 func AskSecret(title string) (string, error) {
-	value, cancelled, err := askInput(title, "••••••••", true)
+	value, quit, err := askInput(title, "••••••••", true, false)
 	if err != nil {
 		return "", err
 	}
-	if cancelled {
+	if quit != inputQuitEnter {
 		return "", errors.New(i18n.T("tui.error.cancelled"))
 	}
 	return value, nil

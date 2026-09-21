@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/protorians/lior-cli/internal/i18n"
 )
 
 func sendKeyMsg(t *testing.T, m tea.Model, msg tea.Msg) tea.Model {
@@ -98,6 +99,34 @@ func TestInputModelCancelsOnEsc(t *testing.T) {
 	}
 	if !fm.cancel {
 		t.Error("esc should cancel the prompt")
+	}
+}
+
+func TestInputModelEscPreservesTypedValue(t *testing.T) {
+	m := inputModel{title: "Nom", input: textinput.New(), autoEscape: true}
+	m.input.SetValue("blog")
+
+	next := sendKeyMsg(t, m, escKey())
+	fm, ok := next.(inputModel)
+	if !ok {
+		t.Fatalf("type = %T", next)
+	}
+	if !fm.cancel {
+		t.Error("esc should cancel the prompt")
+	}
+	if !fm.escaped {
+		t.Error("esc should mark the auto-complete mode")
+	}
+	if fm.result != "blog" {
+		t.Errorf("result = %q, want the partially typed value %q", fm.result, "blog")
+	}
+}
+
+func TestInputModelEscapeAutoHintRendered(t *testing.T) {
+	m := inputModel{title: "Nom", input: textinput.New(), autoEscape: true}
+	m.input.Placeholder = "suggested"
+	if v := m.View(); !strings.Contains(v, i18n.T("tui.input.esc")) {
+		t.Errorf("the auto-escape hint must be rendered, got: %q", v)
 	}
 }
 

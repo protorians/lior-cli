@@ -6,6 +6,7 @@ mkdir -p library/modules
 exec sh -c 'echo keep > library/modules/.gitkeep'
 exec sh -c 'printf "app = \"template\"\n" > lorian.config.toml'
 exec sh -c 'printf "{\"name\":\"liorian-socle\",\"scripts\":{\"dev\":\"vite\",\"build\":\"tsc\"}}\n" > package.json'
+exec sh -c 'printf "# Encryption\nNEXT_PUBLIC_APP_NAME=\"Sentient\"\nNEXT_PUBLIC_ENCRYPTION_KEY=\nNEXT_PUBLIC_VAPID_PUBLIC_KEY=\n" > .env-sample'
 cd $WORK
 
 env LIORIAN_CLI_TEMPLATE_REPO=$WORK/template
@@ -15,8 +16,11 @@ stdout 'Package manager: bun'
 
 cd demo-app
 exists lorian.config.json
+exists .env
 exists library/modules
 exec grep -q 'autoAudit' lorian.config.json
+exec grep -q 'NEXT_PUBLIC_APP_NAME="demo-app"' .env
+exec grep -q 'VAPID_PRIVATE_KEY=' .env
 cd $WORK
 
 # TC-002 — no package manager detected: explicit refusal (exit 1), before any

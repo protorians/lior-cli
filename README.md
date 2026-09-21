@@ -42,8 +42,9 @@ Voir la section « Installation » de la spécification (`docs/specs/liorian.md`
 
 | Commande | Description |
 |----------|-------------|
-| `liorian init [--channel alpha|beta|rc|stable]` | Télécharger la release ZIP de `protorians/liorian-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) |
+| `liorian init [--channel alpha\|beta\|rc\|stable] [--auto-env]` | Télécharger la release ZIP de `protorians/liorian-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) ; génère le `.env` depuis l'exemple du template (clé applicative, paire VAPID, nom/slug) — `--auto-env` (ou `LIORIAN_CLI_ENV_AUTO`) accepte toutes les valeurs suggérées sans question |
 | `liorian create module [nom] [--domain d] [--type INTERNAL\|EXTERNAL] [--category CAT] [--mockup dir] [--page-mockup file]` | Créer un module dans `library/modules/` depuis le mockup hello-world (renommé avec le nom du module), surchargeable via `--mockup` / `--page-mockup` (`LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) ; `--type` (défaut `EXTERNAL`) et `--category` (défaut `SYSTEM`) sont écrits dans le manifeste et la déclaration |
+| `liorian create view <module> [nom] [--name id] [--label titre] [--description texte] [--mockup file]` | Créer une vue de présentation (`presentation/views/<id>.view.tsx`) dans un module existant depuis le mockup embarqué (composant `<Id>View`, titre et description renommés) |
 | `liorian connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `liorian auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |
 | `liorian disconnect` | Invalider le token côté serveur et supprimer les credentials |
@@ -53,12 +54,14 @@ Voir la section « Installation » de la spécification (`docs/specs/liorian.md`
 | `liorian sign verify [module]` | Vérifier la signature d'un module |
 | `liorian publish [module]` | Auditer, packer et publier un module sur le store |
 | `liorian link` / `unlink` | Associer un module local à un module distant du store (token) |
+| `liorian marketplace search\|install` | Rechercher (`search [query]`) et installer (`install <module>`) des modules depuis le catalogue public (`LIORIAN_STORE_API`) |
 | `liorian audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
+| `liorian repair [module] [--dry-run] [--warnings] [--no-install] [--no-interaction] [--output table\|json]` | Réparer automatiquement les anomalies bloquantes d'un (ou tous les) module(s) : champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé ; les points non réparables deviennent des instructions pas à pas |
 | `liorian debug [module]` | Valider le module et lancer un build de diagnostic |
 | `liorian test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `lorian.config.json` ; exit `13` en cas d'échec |
-| `liorian dev [-- args]` | Démarrer le serveur de développement de l'application (script `dev`) via le gestionnaire choisi à l'installation (Ctrl+C pour arrêter) ; exécute d'abord `debug` + `test` sur les modules |
-| `liorian build [-- args]` | Construire l'application (script `build`) via le gestionnaire choisi à l'installation ; exécute d'abord `debug` + `test` + `audit` sur les modules ; exit = code de la commande |
-| `liorian start [-- args]` | Démarrer l'application en production (script `start`) via le gestionnaire choisi à l'installation ; exécute d'abord `debug` + `test` + `audit` sur les modules |
+| `liorian dev [-- args]` | Démarrer le serveur de développement de l'application (script `dev`) via le gestionnaire choisi à l'installation (Ctrl+C pour arrêter) ; exécute d'abord l'`audit` des modules |
+| `liorian build [-- args]` | Construire l'application (script `build`) via le gestionnaire choisi à l'installation ; exécute d'abord l'`audit` des modules ; exit = code de la commande |
+| `liorian start [-- args]` | Démarrer l'application en production (script `start`) via le gestionnaire choisi à l'installation ; exécute d'abord l'`audit` des modules |
 | `liorian check [-- args]` | Exécuter l'analyse statique (script `lint` par défaut, remappable via `toolchain.commands.check`) ; exit = code de la commande |
 | `liorian -v` / `--version` | Afficher la version |
 | `liorian help` | Aide contextuelle |
@@ -113,9 +116,10 @@ Voir la section « Installation » de la spécification (`docs/specs/liorian.md`
 > `docs/specs/liorian-toolchain.md`. Exit codes : `1` résolution impossible, `130` interruption
 > (Ctrl+C), sinon le code de la commande.
 >
-> **Porte de santé (pre-flight)** — `dev` vérifie d'abord les modules (`debug` + `test`),
-> `build`/`start` ajoutent `audit` (`debug` + `test` + `audit`) : un module en erreur annule
-> la commande (warnings non bloquants, sans module le contrôle est ignoré).
+> **Porte de santé (pre-flight)** — `dev`, `build` et `start` exécutent d'abord l'`audit` de
+> conformité des modules : un module en erreur annule la commande (warnings non bloquants,
+> sans module le contrôle est ignoré). Les contrôles `debug`/`test` restent des commandes
+> dédiées (`liorian debug`, `liorian test`) et ne sont plus lancés par la porte.
 
 ## Variables d'environnement
 
@@ -124,9 +128,12 @@ Voir la section « Installation » de la spécification (`docs/specs/liorian.md`
 | `LIORIAN_AUTH_API` | URL de base de l'API liorian-auth (authentications) |
 | `LIORIAN_CLI_AUTH_CODE` | Code d'autorisation OAuth2 pour `liorian auth` en mode non interactif (CI) |
 | `LIORIAN_CLI_DEBUG` | Active les logs détaillés (`--verbose` équivalent) |
+| `LIORIAN_CLI_ENV_AUTO` | Équivalent de `--auto-env` : `init` accepte toutes les valeurs suggérées du `.env` sans question |
 | `LIORIAN_CLI_LANG` | Force la langue d'interface (`fr-FR`, `en-US`) |
 | `LIORIAN_MODULE_MOCKUP` | Répertoire du module de référence pour `create module` (repli sur le mockup embarqué) |
 | `LIORIAN_PAGE_MOCKUP` | Gabarit `page.tsx` pour `create module` (repli sur le mockup embarqué) |
+| `LIORIAN_VIEW_MOCKUP` | Fichier de vue de référence pour `create view` (repli sur le mockup embarqué) |
+| `LIORIAN_STORE_API` | URL de base de l'API du catalogue pour `liorian marketplace` (défaut : `api.baseUrl` de `liorian-store`) |
 | `LIORIAN_CLI_TEMPLATE_REPO` | Source du template `init` (repo GitHub, URL ZIP directe ou répertoire local) |
 | `LIORIAN_CLI_UPDATE_URL` | Endpoint du check auto-update (défaut : releases GitHub) |
 | `LIORIAN_CLI_SKIP_UPDATE` | Désactive le check auto-update (réseau coupé) |

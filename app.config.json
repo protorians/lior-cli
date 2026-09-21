@@ -1,9 +1,9 @@
 {
   "$schema": "lorian.config.schema.json",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "branch": "alpha",
-  "commit": "0567861",
-  "date": "2026-09-21T01:26:04Z",
+  "commit": "e7cbd2f",
+  "date": "2026-09-21T04:26:39Z",
   "applications": {
     "liorian-socle": {
       "name": "Lior Socle",

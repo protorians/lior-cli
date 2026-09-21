@@ -3,6 +3,37 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.21.0] - 2026-09-21
+
+### Added
+- **Génération du `.env` pendant `liorian init`** — le `.env` est désormais produit à partir du
+  fichier d'exemple du template (`.env-sample`, `.env.sample`, `.env.example`, `.env.dist` ou
+  `.env.template`, premier trouvé). Les variables connues sont synthétisées : clé applicative
+  (`APP_KEY` / `*ENCRYPTION_KEY`, 32 octets hex), nom et slug du projet (`*APP_NAME`,
+  `*APP_SLUG`), paire VAPID pour le Web Push (`*VAPID_PUBLIC_KEY` + clé privée associée). Un
+  `.env` existant n'est **jamais écrasé** ; le fichier écrit conserve les commentaires, l'ordre
+  et le style de citation de l'exemple, avec des permissions `0600`.
+- **Flag `--auto-env` / variable `LIORIAN_CLI_ENV_AUTO`** — configure entièrement `init` sans
+  question (nom du projet déduit du dossier courant, gestionnaire de paquets recommandé, `.env`
+  accepté tel quel). Sans ces options, `init` propose d'abord d'accepter toutes les valeurs
+  suggérées ; en cas de refus, chaque variable restante est demandée avec sa suggestion en
+  placeholder.
+- **Touche `Échap` pour auto-remplir** — dans les invites de saisie de `init`, `Échap` conserve
+  la valeur saisie et accepte la suggestion pour toutes les variables restantes (indice
+  `esc: auto-fill the rest`). Nouvelle API `tui.AskTextAuto` (distincte de l'annulation
+  `Ctrl+C`).
+
+### Technical Details
+- `internal/pkg/env.go` : parseur/sérialiseur dotenv préservant commentaires, lignes vides et
+  ordre (`ParseEnv`/`EnvFile`/`Render`), détection de l'exemple (`FindEnvSample`),
+  `NewEncryptionKey` et `NewVAPIDKeys` (ECDSA P-256, base64url sans padding).
+- `cmd/init_env.go` : `planEnvFromSample`/`synthesizeEnv`/`completeEnv`, helpers `slugify`,
+  `envKeyLabel`, `vapidPrivateKey` ; l'étape `.env` s'exécute hors du spinner (une invite
+  Bubbletea ne peut pas posséder le terminal pendant le spinner).
+- `cmd/init.go` : étape 7 (`.env`) + ligne « Environment: .env » dans la carte de résumé.
+- `internal/tui/prompts.go` : `inputQuit` (`Enter`/`Esc`/`Cancel`) et `askInput(... autoEscape)`.
+
+
 ## [v0.20.0] - 2026-09-21
 
 ### Added

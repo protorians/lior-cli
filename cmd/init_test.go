@@ -273,7 +273,16 @@ func TestI18nInitDestKeysExist(t *testing.T) {
 		"init.release.meta",
 		"init.release.unknown",
 		"init.flag.channel",
+		"init.flag.auto_env",
 		"init.error.channel_invalid",
+		"init.spinner.env",
+		"init.warn.env",
+		"init.error.env",
+		"init.error.env_read",
+		"init.error.env_write",
+		"init.prompt.env",
+		"init.summary.env",
+		"init.prompt.env_auto",
 	} {
 		if i18n.T(key) == key {
 			t.Errorf("i18n key %q must resolve to a message", key)

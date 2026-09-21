@@ -54,11 +54,14 @@ and offered to the user.`,
 }
 
 var initChannel string
+var initAutoEnv bool
 
 func init() {
 	initCmd.Flags().StringVar(&initChannel, "channel", "", "release channel (alpha, beta, rc, stable)")
+	initCmd.Flags().BoolVar(&initAutoEnv, "auto-env", false, "auto-configure the .env without prompting")
 	i18nHelp(initCmd, "cmd.init.short", "cmd.init.long")
 	i18nFlag(initCmd, "channel", "init.flag.channel")
+	i18nFlag(initCmd, "auto-env", "init.flag.auto_env")
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
@@ -71,6 +74,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if projectName == "" {
 		if !tui.IsInteractive() {
 			projectName = "liorian-socle"
+		} else if envAutoConfigured() {
+			// --auto-env (or LIORIAN_CLI_ENV_AUTO) means fully scripted setup:
+			// derive the project name from the current directory without asking.
+			projectName = defaultProjectName()
 		} else {
 			defaultName := defaultProjectName()
 			name, err := tui.AskText(i18n.T("init.prompt.name"), defaultName)
@@ -154,24 +161,20 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	pmName := available[0] // bun is first; recommended default
-	if len(available) > 1 {
-		if !tui.IsInteractive() {
-			pmName = available[0]
-		} else {
-			var items []string
-			for i, name := range available {
-				if i == 0 {
-					items = append(items, name+i18n.T("init.hint.recommended"))
-				} else {
-					items = append(items, name)
-				}
+	if len(available) > 1 && tui.IsInteractive() && !envAutoConfigured() {
+		var items []string
+		for i, name := range available {
+			if i == 0 {
+				items = append(items, name+i18n.T("init.hint.recommended"))
+			} else {
+				items = append(items, name)
 			}
-			selected, err := tui.Select(i18n.T("init.prompt.pm"), items)
-			if err != nil {
-				return err
-			}
-			pmName = strings.TrimSuffix(selected, i18n.T("init.hint.recommended"))
 		}
+		selected, err := tui.Select(i18n.T("init.prompt.pm"), items)
+		if err != nil {
+			return err
+		}
+		pmName = strings.TrimSuffix(selected, i18n.T("init.hint.recommended"))
 	}
 	debugf("selected package manager: %s", pmName)
 
@@ -237,12 +240,57 @@ func runInit(cmd *cobra.Command, args []string) error {
 		debugf("writing config file: %v", err)
 	}
 
-	// Step 7 — summary
+	// Step 7 — generate .env from the template sample. An existing .env is
+	// never overwritten. Known variables are synthesised while the spinner
+	// runs; the remaining ones are then offered as editable placeholders.
+	// Unless auto-configuration is requested (--auto-env / LIORIAN_CLI_ENV_AUTO)
+	// or the run is non-interactive, the developer is asked whether to accept
+	// every suggestion at once; a "no" falls back to per-variable prompting,
+	// where Esc accepts the remaining suggestions. Prompting happens outside
+	// the spinner (a Bubbletea prompt cannot own the terminal while the
+	// spinner program runs).
+	var envCreated bool
+	if envGenerationNeeded(targetDir) {
+		plan, err := tui.RunWithSpinner(i18n.T("init.spinner.env"), func() (*envPlan, error) {
+			return planEnvFromSample(targetDir, projectName)
+		})
+		if err != nil {
+			warn(i18n.Tf("init.warn.env", err.Error()))
+		} else if plan != nil {
+			auto := envAutoConfigured()
+			skip := false
+			if !auto && tui.IsInteractive() {
+				yes, err := tui.Confirm(i18n.T("init.prompt.env_auto"), true)
+				if err != nil {
+					warn(i18n.Tf("init.warn.env", err.Error()))
+					skip = true
+				} else {
+					auto = yes
+				}
+			}
+			if !skip {
+				if err := plan.completeEnv(auto); err != nil {
+					warn(i18n.Tf("init.warn.env", err.Error()))
+				} else {
+					envCreated = true
+				}
+			}
+		}
+	}
+
+	// Step 8 — summary
 	s := tui.NewStyles()
+	summary := []string{
+		s.Value.Render(strings.TrimSpace(i18n.Tf("init.summary.pm", pmName))),
+	}
+	if envCreated {
+		summary = append(summary, s.Value.Render(strings.TrimSpace(i18n.Tf("init.summary.env", pkg.EnvFileName))))
+	}
+
 	fmt.Println()
 	fmt.Println(s.SummaryCard(
 		s.Success.Render(i18n.T("init.success")),
-		s.Value.Render(strings.TrimSpace(i18n.Tf("init.summary.pm", pmName))),
+		summary...,
 	))
 	fmt.Println()
 	fmt.Println(s.StepsList(i18n.T("init.next"),

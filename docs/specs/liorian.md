@@ -8,7 +8,7 @@
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
-> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.14.0 ;
+> - **État du code** : implémenté dans `protorians/lior-cli` (branche `alpha`) ; dernière release documentée 0.20.0 ;
 >   les écarts constatés entre la spec et le code sont documentés dans `docs/rapport-implementation.md`
 >
 > **Specs satellite** : les commandes outillage `dev`/`build`/`start`/`check` (passe-plat vers les
@@ -32,7 +32,7 @@
 | Rôle | Outil CLI pour le cycle de vie complet des modules Liorian |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
-| Statut de la version | `active` (spec) — implémentée (rel. 0.14.0) |
+| Statut de la version | `active` (spec) — implémentée (rel. 0.20.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
 | Emplacement cible (SpecKit) | `liorian.md` |
 
@@ -71,8 +71,9 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ### Dans le périmètre (In Scope)
 
-- `liorian init` — Initialisation d'un projet Liorian (téléchargement de la release template + deps)
+- `liorian init` — Initialisation d'un projet Liorian (téléchargement de la release template + deps + `.env`)
 - `liorian create module` — Création de module dans `library/modules/`
+- `liorian create view` — Création d'une vue de présentation dans un module existant
 - `liorian connect` — Authentification développeur (credentials + MFA)
 - `liorian auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
 - `liorian disconnect` — Suppression des credentials
@@ -84,6 +85,8 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `liorian debug <module>` — Debug d'un ou tous les modules
 - `liorian test <module>` — Exécution des tests d'un ou tous les modules
 - `liorian audit <module>` — Audit de conformité d'un ou tous les modules
+- `liorian repair [module]` — Réparation automatique des anomalies bloquantes d'un ou tous les modules
+- `liorian dev|build|start|check` — Outillage applicatif (spécifié dans `docs/specs/liorian-toolchain.md`)
 - `liorian help` — Affichage de l'aide
 - `liorian -v | --version` — Affichage de la version
 
@@ -96,7 +99,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ### Périmètre futur (Future Scope)
 
-- `liorian marketplace` — Recherche/installation de modules tiers
+- Catalogue de modules tiers distribué (le storefront `liorian marketplace` est disponible en lecture/installation)
 
 ---
 
@@ -133,6 +136,11 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `LIORIAN_CLI_LANG` → `cli.lang` de `lorian.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
 | FR-026 | `liorian auth` authentifie le développeur via le flux OAuth2 **code d'autorisation + PKCE** (navigateur + serveur local en boucle), complément du `liorian connect` (email/mot de passe) |
 | FR-027 | `liorian auth` stocke la session OAuth (`access_token`, `refresh_token`, expiration) dans le keychain (repli vault chiffré) et la partage avec les commandes authentifiées |
+| FR-028 | `liorian init` génère le `.env` depuis le fichier d'exemple du template (`.env-sample` & co) : clé applicative, nom/slug du projet et paire VAPID synthétisés, variables restantes proposées avec leur valeur suggérée ; un `.env` existant n'est jamais écrasé |
+| FR-029 | `liorian init` accepte `--auto-env` (ou `LIORIAN_CLI_ENV_AUTO`) pour ne poser aucune question (nom du projet, gestionnaire de paquets, `.env`) et accepter les valeurs suggérées ; sans cette option, une confirmation globale est proposée puis un prompt par variable (Échap = accepter le reste) |
+| FR-030 | `liorian create view <module> [name]` génère une vue de présentation `presentation/views/<name>.view.tsx` depuis le mockup embarqué (composant, titre, description renommés) |
+| FR-031 | `liorian repair [module]` répare automatiquement les anomalies bloquantes d'un audit (champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé), re-audite puis liste en instructions les points non réparables |
+| FR-032 | `liorian dev`, `build`, `start` et `check` proxient les scripts `package.json` du projet et exécutent l'`audit` de conformité des modules en pre-flight (`dev`/`build`/`start`) — spécifié dans `docs/specs/liorian-toolchain.md` (TFC-001 → TFC-017) |
 
 ### Exigences non-fonctionnelles
 
@@ -151,7 +159,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | ID | Description |
 |----|-------------|
 | SEC-001 | Credentials stockés dans le keychain système (macOS Keychain, Linux secret-service, Windows Credential Manager) |
-| SEC-002 | Jamais de credentials en clair sur disque (pas de `.env`, pas de fichier texte) |
+| SEC-002 | Jamais de credentials CLI (tokens, mots de passe) en clair sur disque (keychain ou vault chiffré uniquement) ; le `.env` généré par `init` ne contient que des secrets **applicatifs** (clé de chiffrement, paire VAPID), jamais de credentials de développeur |
 | SEC-003 | Tokens d'accès avec durée de vie limitée, rotation automatique |
 | SEC-004 | Chiffrement des données sensibles au repos (AES-256-GCM pour les caches) |
 | SEC-005 | Validation stricte des inputs (UUID, noms de module, URLs) |
@@ -185,8 +193,10 @@ lior-cli/
 ├── main.go                        # Point d'entrée (variables version/commit/date + //go:embed app.config.json)
 ├── cmd/                           # Commandes CLI (couche présentation, Cobra)
 │   ├── root.go                    # Commande racine (flags --verbose, --no-color, --lang, update check)
-│   ├── init.go                    # liorian init (--channel alpha|beta|rc|stable)
+│   ├── init.go                    # liorian init (--channel alpha|beta|rc|stable, --auto-env)
+│   ├── init_env.go                # Génération du .env depuis l'exemple du template (FR-028/-029)
 │   ├── create.go                  # liorian create module
+│   ├── create_view.go             # liorian create view (FR-030)
 │   ├── connect.go                 # liorian connect
 │   ├── auth.go                    # liorian auth (OAuth2 code + PKCE)
 │   ├── disconnect.go              # liorian disconnect
@@ -194,8 +204,13 @@ lior-cli/
 │   ├── sign.go                    # liorian sign (keygen / sign / verify)
 │   ├── publish.go                 # liorian publish
 │   ├── link.go                    # liorian link + unlink (--sync-remote)
+│   ├── marketplace.go             # liorian marketplace search|install
 │   ├── debug.go                   # liorian debug
+│   ├── test.go                    # liorian test
 │   ├── audit.go                   # liorian audit (--output table|json)
+│   ├── repair.go                  # liorian repair (--dry-run, --warnings, --no-install, …)
+│   ├── toolchain.go               # liorian dev|build|start|check
+│   ├── gate.go                    # Porte de santé des modules (pre-flight audit)
 │   ├── modules.go                 # Helpers de résolution projet/module (code 3)
 │   └── localize.go                # Helpers i18n (MessageKey, résolution langue)
 ├── internal/
@@ -215,45 +230,63 @@ lior-cli/
 │   │   └── session.go             # Session locale (token cache, refresh)
 │   ├── module/                    # Logique module
 │   │   ├── creator.go             # Création de module
+│   │   ├── view.go                # Création d'une vue de présentation (ViewCreator)
 │   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence)
-│   │   ├── mockups/               # hello-world/ + page.tsx (mockups embarqués)
+│   │   ├── mockups/               # hello-world/ + page.tsx + view.tsx (mockups embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
 │   │   ├── packer.go              # Compression .SenMod (limite 50 MB)
 │   │   ├── linker.go              # Liaison local ↔ distant + état .lorian/links.json
 │   │   ├── validator.go           # Validation module
 │   │   └── module_test.go         # Tests unitaires
+│   ├── repair/                    # Réparation automatique des anomalies d'audit (FR-031)
+│   │   └── repair.go              # Repairer (dry-run, warnings, no-install, rename)
+│   ├── toolchain/                 # Outillage dev/build/start/check (docs/specs/liorian-toolchain.md)
+│   │   └── toolchain.go           # Résolution de script, hooks, exécution passthrough
+│   ├── moduletest/                # Exécution des tests de module (liorian test)
+│   │   ├── testrunner.go          # Détection runner + streaming des logs
+│   │   └── catalog.go             # Catalogue de packages de test
+│   ├── catalog/                   # Catalogue public (liorian marketplace)
+│   │   ├── catalog.go             # Recherche dans le storefront
+│   │   └── install.go             # Installation vérifiée/signée d'un module
+│   ├── runner/                    # Exécution de processus (groupes POSIX/Windows)
+│   │   ├── runner.go              # Lancement/streaming des commandes
+│   │   ├── proc_unix.go           # Groupe de process POSIX (arrêt de l'arbre)
+│   │   └── proc_windows.go        # Arrêt de process Windows
 │   ├── signing/                   # Signature numérique Ed25519
 │   │   ├── signer.go              # Génération clés, signature, vérification
 │   │   └── keystore.go            # Stockage clés (keychain + fallback chiffré signing.enc)
 │   ├── audit/                     # Audit de conformité
 │   │   └── auditor.go             # Orchestrateur d'audit (règles manifest/bootstrap/deps)
 │   ├── debug/                     # Debug de module
-│   │   ├── debugger.go            # Étapes de debug, résolution du build, streaming, timeout
-│   │   ├── proc_unix.go           # Groupe de process POSIX (arrêt de l'arbre du build)
-│   │   └── proc_windows.go        # Arrêt de process Windows
+│   │   └── debugger.go            # Étapes de debug, résolution du build, streaming, timeout
 │   ├── store/                     # Publication store
 │   │   ├── builder.go             # Construction archive
 │   │   └── publisher.go           # Publication via API developer-store (produit → version → artefact)
 │   ├── tui/                       # Composants Bubbletea
 │   │   ├── components.go          # SummaryCard, Wordmark, StepsList, LogsBlock (lipgloss)
 │   │   ├── styles.go              # Palette brand sage/olive + thème dark/light
-│   │   ├── prompts.go             # AskText, Confirm, Select (degradation non-interactive)
+│   │   ├── prompts.go             # AskText/AskTextAuto, Confirm, Select (degradation non-interactive)
 │   │   ├── spinner.go             # RunWithSpinner (indicateur de progression)
-│   │   ├── progress.go            # RunWithProgress (barre de progression, téléchargements)
+│   │   ├── progress.go            # RunWithProgress/RunWithProgressDetail (barre + ligne de détail)
+│   │   ├── report.go              # ReportHeading, StatusChip, CountsLine (rapports audit/repair)
 │   │   ├── step.go                # RunWithSteps + vocabulaire d'étapes (statuts, résumé)
 │   │   └── table.go               # Tableau arrondi custom (lipgloss)
 │   └── pkg/                       # Utilitaires
 │       ├── errors.go              # Erreurs catégorisées + codes de sortie §11.1
 │       ├── fs.go                  # Opérations fichiers
 │       ├── git.go                 # Exécution de commandes externes
-│       ├── github.go              # FetchReleaseZip (téléchargement release init)
+│       ├── github.go              # ResolveRelease/FetchReleaseZip (release init)
 │       ├── http.go                # Client HTTP + enveloppe Raiton + APIError
+│       ├── env.go                 # Parseur dotenv + génération (clé, VAPID) pour init
+│       ├── nodepackage.go         # Lecture package.json + dépendances latest
+│       ├── pm.go                  # Gestionnaires de paquets (détection, args, installation)
+│       ├── semver.go              # Comparaison/incrément de versions
 │       ├── uuid.go                # Génération UUID
 │       ├── crypto.go              # MachineSecret (PBKDF2), EncryptVault/DecryptVault (AES-256-GCM)
 │       ├── open.go                # Ouverture du navigateur (open / rundll32 / xdg-open)
 │       └── update.go              # Détection de mises à jour (NFR-006, cache 24 h)
 ├── e2e/                           # Tests E2E
-│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-029 vs mock API)
+│   ├── e2e_test.go                # Générateur testscript (TC-001 → TC-040 vs mock API)
 │   └── testdata/                  # scripts/*.txtar + fixtures/ (bun, node, npm, tsc, mock API)
 ├── app.config.json                # Registre embarqué des applications (surchargeable localement)
 ├── go.mod
@@ -317,12 +350,14 @@ Utilisateur
 Initialiser un nouveau projet Liorian en téléchargeant la release (ZIP) du template
 `protorians/liorian-socle` et en installant les dépendances. La source est `--channel`
 ("stable" par défaut) ; `LIORIAN_CLI_TEMPLATE_REPO` peut la remplacer par une URL GitHub,
-une URL ZIP directe ou un répertoire local (tests/miroirs).
+une URL ZIP directe ou un répertoire local (tests/miroirs). Le `.env` du projet est généré
+depuis l'exemple livré par le template.
 
 #### Comportement
 
 1. **Déterminer le nom du projet** : argument positionnel optionnel, sinon input Bubbletea
-   (défaut : nom du dossier courant)
+   (défaut : nom du dossier courant). Avec `--auto-env` (ou `LIORIAN_CLI_ENV_AUTO`), le nom est
+   déduit du dossier courant sans question.
 2. **Résoudre le canal de release** (`--channel alpha|beta|rc|stable`, défaut `stable`) :
    la release la plus récente du canal est téléchargée en ZIP via l'API GitHub ; la ligne de
    téléchargement affiche la version (tag), le canal, la branche cible et le commit de la release
@@ -334,12 +369,30 @@ une URL ZIP directe ou un répertoire local (tests/miroirs).
    - `pnpm` → disponible ?
    - `yarn` → disponible ?
    - `npm` → disponible ?
-5. **Proposer le choix** via un sélecteur Bubbletea (liste filtrée aux disponibles)
+5. **Proposer le choix** via un sélecteur Bubbletea (liste filtrée aux disponibles) ; ignoré en
+   mode `--auto-env` (le premier disponible, bun recommandé, est retenu)
 6. **Télécharger la release** avec barre de progression `RunWithProgress` (extraction dans la
    destination ; en cas de fusion, téléchargement dans un dossier temporaire puis copie)
-7. **Installer les dépendances** avec le gestionnaire sélectionné (échec → warning non bloquant)
+7. **Installer les dépendances** avec le gestionnaire sélectionné (échec → warning non bloquant) ;
+   les dépendances explicitement pinnées `latest` sont réinstallées (`<pm> add <pkg>@latest`)
 8. **Écrire `lorian.config.json`** (racine `project.name` + `project.packageManager`)
-9. **Afficher le résumé** : projet initialisé, gestionnaire utilisé, prochaines étapes
+9. **Générer le `.env`** depuis l'exemple du template (FR-028) :
+   - un `.env` existant n'est **jamais écrasé** ; sans exemple, l'étape est ignorée
+   - les variables connues sont synthétisées : clé applicative (`APP_KEY` / `*ENCRYPTION_KEY`),
+     nom et slug (`*APP_NAME`, `*APP_SLUG`), paire VAPID (`*VAPID_PUBLIC_KEY` + clé privée)
+   - les autres variables sont proposées avec leur valeur suggérée en placeholder (Tab pour
+     remplir) ; `Échap` conserve la valeur courante et accepte le reste des suggestions
+   - `--auto-env` / `LIORIAN_CLI_ENV_AUTO` accepte toutes les suggestions sans question ; sans
+     cela, une confirmation globale est d'abord proposée, puis un prompt par variable
+   - fichier écrit en `0600`, commentaires/ordre/guillemets de l'exemple préservés
+10. **Afficher le résumé** : projet initialisé, gestionnaire utilisé, `.env` généré, prochaines étapes
+
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--channel string` | canal de release (`alpha`, `beta`, `rc`, `stable` ; défaut `stable`) |
+| `--auto-env` | auto-configurer tout avec les valeurs par défaut : ignorer les questions du nom du projet, du gestionnaire de paquets et du `.env` |
 
 #### Contraintes
 
@@ -347,21 +400,26 @@ une URL ZIP directe ou un répertoire local (tests/miroirs).
 - `--channel` doit être l'un des canaux valides (erreur listant les choix sinon)
 - Pas de clone git : téléchargement de l'archive de release (rapide, sans historique git)
 - En mode non-interactif, un dossier existant est vidé uniquement si `LIORIAN_CLI_YES` est défini, sinon refus explicite
+- Le `.env` généré n'est jamais un doublon : un fichier existant est conservé tel quel
+- Les invites du `.env` s'exécutent **hors** du spinner (une invite Bubbletea ne peut pas posséder le terminal pendant le spinner)
 
 #### Sortie TUI
 
 ```
 Destination : /chemin/vers/mon-projet
 ? Nom du projet : mon-projet
-? Canal de release : stable
 ? Gestionnaire de paquets : bun (recommandé)
   ⠋ Téléchargement de la release de liorian-socle
   [================--------------------] 45%
-  release v0.19.0 · canal stable · branche alpha · commit 0567861
+  release v0.20.0 · canal stable · branche alpha · commit e7cbd2f
   ⠋ Installation des dépendances...
+  ⠋ Configuration de l'environnement
+? Auto-configurer le .env avec les valeurs suggérées ? (Y/n)
+? Valeur pour App Name : mon-projet [tab: fill] [esc: auto-fill the rest]
 
   ✓ Projet initialisé avec succès
-    Gestionnaire : bun
+    Gestionnaire de paquets : bun
+    Environnement : .env
 
   Prochaines étapes :
     cd mon-projet
@@ -1131,19 +1189,27 @@ Usage:
   liorian [command]
 
 Available Commands:
-  audit         Audit a module's conformance
-  auth          Authenticate via OAuth2 (browser)
-  connect       Connect to Liorian Connect
-  create        Create a new module
-  debug         Debug a module
-  disconnect    Disconnect from Liorian Connect
-  init          Initialize a new Liorian project
-  link          Link a local module to a remote module
-  pack          Pack a module
-  publish       Publish a module to the store
-  sign          Sign a module archive
-  unlink        Unlink a local module from liorian-connect
-  help          Help about any command
+  audit       Audit a module's conformance
+  auth        Authenticate via OAuth2 (browser)
+  build       Build the application for production (project `build` script)
+  check       Run the project checks (project `lint` script)
+  completion  Generate the autocompletion script for the specified shell
+  connect     Connect to Liorian Connect
+  create      Create a new module
+  debug       Debug a module or all modules
+  dev         Start the development server (project `dev` script)
+  disconnect  Disconnect
+  help        Help about any command
+  init        Initialize a new Liorian project
+  link        Link a local module to a remote module
+  marketplace Search and install modules from the public catalog
+  pack        Build a module archive (.SenMod)
+  publish     Publish a module to the store
+  repair      Repair a module's audit failures
+  sign        Sign .SenMod archives (Ed25519)
+  start       Start the built application (project `start` script)
+  test        Run the tests of a module or all modules
+  unlink      Unlink a local module from liorian-connect
 
 Flags:
       --help     help for liorian
@@ -1185,7 +1251,7 @@ Afficher la version actuelle de la CLI.
 #### Sortie
 
 ```
-liorian v0.18.0 (darwin/arm64) alpha (52d0b9a)
+liorian v0.20.0 (darwin/arm64) alpha (e7cbd2f)
 ```
 
 ---
@@ -1492,6 +1558,116 @@ avec mise à jour en place des étapes portant un identifiant.
 > Une suite en échec s'affiche en `ERROR` :
 > `✗ Test execution — exit status 1` (nouvelle ligne du détail), puis la carte de statut montre
 > `Status : ✗ ERROR` et la commande se termine avec le code de sortie **`13`**.
+
+---
+
+### 5.16 `liorian create view <module> [name]`
+
+#### Purpose
+
+Générer une nouvelle **vue de présentation** dans un module existant, à
+`library/modules/<module>/presentation/views/<name>.view.tsx`, à partir du mockup de vue
+embarqué (`view.tsx`) renommé : composant React (`<Name>View`), titre affiché et description.
+FR-030.
+
+#### Comportement
+
+1. **Vérifier le contexte** : être à la racine d'un projet Liorian
+2. **Résoudre le module cible** : argument positionnel `[module]`, sinon sélection interactive
+   parmi les modules de `library/modules/`
+3. **Résoudre l'identifiant de vue** : `--name`, ou second argument positionnel, sinon prompt
+   (défaut `my-view`) ; validé en **kebab-case** (`ValidateName`)
+4. **Compléter les métadonnées** : titre (`--label`, défaut : identifiant en Title Case) et
+   description (`--description`, optionnelle)
+5. **Scaffolder** depuis le mockup embarqué (surchargeable par `--mockup` ou
+   `LIORIAN_VIEW_MOCKUP`) : le corps est réécrit pour renommer le composant et ses libellés
+6. **Afficher** le chemin relatif créé et le nom du composant
+
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--mockup string` | fichier de vue de référence (défaut : mockup embarqué) |
+| `--name string` | identifiant de la vue (kebab-case) |
+| `--label string` | titre affiché par la vue (défaut : identifiant en Title Case) |
+| `--description string` | description affichée par la vue (optionnelle) |
+
+#### Contraintes
+
+- Le module doit exister dans `library/modules/` (sinon erreur catégorisée)
+- Une vue existante au même nom n'est **jamais écrasée** (erreur explicite)
+- En mode non-interactif, `--name` (ou l'argument positionnel) est obligatoire
+
+#### Sortie TUI
+
+```
+  ✓ Created library/modules/com.example.blog-manager/presentation/views/user-profile.view.tsx
+  ✓ Component: UserProfileView
+```
+
+---
+
+### 5.17 `liorian repair [module]`
+
+#### Purpose
+
+Réparer automatiquement les anomalies **bloquantes** signalées par `liorian audit` sur un module
+(ou tous), puis re-auditer ; les points qui exigent une modification de code sont restitués en
+**instructions pas à pas**. FR-031.
+
+#### Comportement
+
+1. **Vérifier le contexte** : être à la racine d'un projet Liorian
+2. **Analyser** le(s) module(s) via le pipeline d'audit
+3. **Appliquer les correctifs automatiques** :
+   - champs de manifeste (`id`, `name`, `version`, `token`, `entry`, `permissions`, `platforms`,
+     `compatibility`, `capabilities`, `category`, `domain`)
+   - JSON malformé
+   - dépendances npm manquantes (installation via le gestionnaire, sauf `--no-install`)
+   - nom du dossier du module : proposé via un prompt `tab`-pour-remplir, appliqué directement
+     avec `--no-interaction`
+4. **Re-auditer** le module et restituer les points non réparables en instructions
+5. **Afficher le rapport** : en-tête de verdict, tableau des correctifs appliqués, instructions
+   manuelles, puis carte de synthèse ; code de sortie non nul s'il reste des erreurs bloquantes
+
+#### Flags
+
+| Flag | Défaut | Description |
+|------|--------|-------------|
+| `--dry-run` | `false` | montrer les correctifs sans les écrire |
+| `--warnings` | `false` | réparer aussi les avertissements (non bloquants) |
+| `--no-install` | `false` | ne pas lancer le gestionnaire de paquets pour les dépendances manquantes |
+| `--no-interaction` | `false` | ne poser aucune question (les noms de dossier suggérés sont appliqués) |
+| `--output` | `table` | format de sortie (`table` ou `json`) |
+
+#### Sortie TUI
+
+```
+  Repair: com.example.blog-manager                                    ✓ fixed
+  Fixes
+  ┌──────────┬──────────────────┬─────────────────────────────┐
+  │ Category │ Rule             │ Fix                         │
+  ├──────────┼──────────────────┼─────────────────────────────┤
+  │ manifest │ version          │ ✓ set version to "0.0.0"    │
+  │ manifest │ token            │ ✓ generated a new UUID token│
+  └──────────┴──────────────────┴─────────────────────────────┘
+
+  ┌──────────────────────────────────────────┐
+  │ Summary                                  │
+  │ ✓ 2 automatic fix(es) applied            │
+  └──────────────────────────────────────────┘
+```
+
+---
+
+### 5.18 `liorian dev|build|start|check`
+
+L'outillage applicatif (`dev`, `build`, `start`, `check`) proxie les scripts `package.json` du
+projet via le gestionnaire de paquets choisi à l'installation, avec hooks `before`/`after` et une
+**porte de santé** (audit des modules) en pre-flight pour `dev`/`build`/`start`. La spécification
+complète (correspondance commandes → scripts, résolution, passthrough d'arguments, codes de
+sortie, configuration `toolchain`) est dans **`docs/specs/liorian-toolchain.md`** (TFC-001 →
+TFC-017).
 
 ---
 
@@ -1974,13 +2150,13 @@ fixtures portables `bun/npm/tsc/node` et donne un `HOME` isolé writable par scr
 
 ### 12.2 Scénarios de test critiques
 
-Suite E2E réelle (13 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
+Suite E2E réelle (16 scripts txtar) : `01_help_version`, `02_init`, `02b_init_busy`,
 `03_create`, `04_pack`, `05_sign`, `06_debug`, `07_audit`, `08_network`, `09_mfa`,
-`10_link_unlink`, `11_auth`, `12_test`.
+`10_link_unlink`, `11_auth`, `12_test`, `13_marketplace`, `14_toolchain`, `15_repair`.
 
 | ID | Scénario |
 |----|----------|
-| TC-001 | `liorian init` avec bun détecté |
+| TC-001 | `liorian init` avec bun détecté (et génération du `.env` depuis l'exemple) |
 | TC-002 | `liorian init` avec aucun gestionnaire détecté |
 | TC-003 | `liorian create module` avec nom invalide |
 | TC-004 | `liorian create module` avec nom valide |
@@ -2009,6 +2185,26 @@ Suite E2E réelle (13 scripts txtar) : `01_help_version`, `02_init`, `02b_init_b
 | TC-027 | `liorian auth` en mode non-interactif sans `LIORIAN_CLI_AUTH_CODE` → erreur catégorisée (exit 2) |
 | TC-028 | `liorian test` module unique (script `test` → OK) |
 | TC-029 | `liorian test` tous les modules ; suite en échec → exit 13 |
+
+Scénarios des scripts récents (identifiants préfixés par le numéro du script, `13_` → `15_`) :
+
+| ID | Scénario |
+|----|----------|
+| 13/TC-030 | `liorian marketplace search` liste le catalogue |
+| 13/TC-031 | `liorian marketplace install` d'un module non signé |
+| 13/TC-032 | Installation d'un module signé : vérification Ed25519 |
+| 14/TC-031 | `liorian dev` résout le script `dev` et diffuse la sortie (porte ignorée sans module) |
+| 14/TC-031b | `liorian dev -p 5010` transmet les flags sans `--` |
+| 14/TC-031c | `liorian dev -- --port 3000` retire le séparateur `--` |
+| 14/TC-032 | `liorian check` mappe sur le script `lint` par défaut |
+| 14/TC-033 | `liorian build` exécute les hooks `before`/`after` autour du script |
+| 14/TC-034 | `liorian start` résout le script `start` |
+| 14/TC-035 | Script absent du `package.json` → échec de résolution (exit 1) |
+| 14/TC-036 | Le code de sortie de la commande moteur est propagé (passthrough) |
+| 14/TC-037 | La porte de santé (audit) annule `dev` sur module en erreur |
+| 15/TC-038 | `liorian repair` corrige automatiquement les anomalies bloquantes |
+| 15/TC-039 | `liorian repair` restitue les points non réparables en instructions (exit non nul) |
+| 15/TC-040 | `liorian repair --no-interaction` renomme le dossier sur le domaine du manifeste |
 
 ---
 
