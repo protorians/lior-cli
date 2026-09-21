@@ -1,0 +1,92 @@
+# TC-030 — `liorian module` exposes the Developer Store module-lifecycle
+# sub-commands (spec module-lifecycle §CLI, epic E-008).
+exec $LIORIAN --no-color help module
+stdout 'Inspects the Developer Store resources'
+
+mkdir project
+cd project
+mkdir -p library/modules
+exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > lorian.config.json'
+exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+
+env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+exec $LIORIAN --no-color connect
+exec $LIORIAN --no-color publish com.example.blog-manager
+stdout 'Published successfully'
+
+# list — account-scoped product listing.
+exec $LIORIAN --no-color module list
+stdout 'Modules'
+
+# knowledge — list, create (--publish), then flip to draft.
+exec $LIORIAN --no-color module knowledge list com.example.blog-manager
+stdout 'D.marrage'
+exec sh -c '"$LIORIAN" --no-color module knowledge add "Guide de démarrage" --kind GUIDE --reading-minutes 4 --publish'
+stdout 'PUBLISHED'
+exec $LIORIAN --no-color module knowledge publish com.example.blog-manager --id art-1 --draft
+stdout 'PUBLISHED'
+
+# workflow — list, run and delete (non-interactive needs --id).
+exec $LIORIAN --no-color module workflow list com.example.blog-manager
+stdout 'CI'
+exec $LIORIAN --no-color module workflow run com.example.blog-manager --id wf-1
+stdout 'RUNNING'
+exec $LIORIAN --no-color module workflow delete com.example.blog-manager --id wf-1 --force
+stdout 'deleted|supprim'
+
+# channels — list, publish a SemVer, rollback and pause.
+exec $LIORIAN --no-color module channels list com.example.blog-manager
+stdout 'RELEASE'
+exec $LIORIAN --no-color module channels publish BETA 1.1.0
+stdout '1.1.0'
+exec $LIORIAN --no-color module channels rollback RELEASE
+stdout 'PAUSED'
+exec $LIORIAN --no-color module channels pause NIGHTLY
+stdout 'PAUSED'
+
+# platforms — get (default unsupported) then set --web.
+exec $LIORIAN --no-color module platforms com.example.blog-manager
+stdout 'non support'
+exec $LIORIAN --no-color module platforms set com.example.blog-manager --web
+stdout 'WEB'
+
+# requirements — list then add.
+exec $LIORIAN --no-color module requirements list com.example.blog-manager
+stdout 'OPTIONAL'
+exec sh -c '"$LIORIAN" --no-color module requirements add "CRM" --module-id core.crm --version ">=1.0.0"'
+stdout 'core.crm'
+
+# signing keys — account-scoped list, then rotate.
+exec $LIORIAN --no-color module signing-keys
+stdout 'sign_abc'
+exec $LIORIAN --no-color module signing-keys rotate sign_abc
+stdout 'sign_def'
+
+# accreditations — list then add.
+exec $LIORIAN --no-color module accreditations list
+stdout 'GitHub Actions'
+exec sh -c '"$LIORIAN" --no-color module accreditations add "Release key" --kind SIGNING_KEY'
+stdout 'PENDING'
+
+# environment variables — set (create), list, then unset.
+exec $LIORIAN --no-color module variables set API_KEY --value secret123
+stdout 'MASKED'
+exec $LIORIAN --no-color module variables list
+stdout 'API_URL'
+exec $LIORIAN --no-color module variables unset API_KEY --force
+stdout 'deleted|supprim'
+
+# github — status, link (--repository), then unlink.
+exec $LIORIAN --no-color module github
+stdout 'acme/app'
+exec $LIORIAN --no-color module github link --repository acme/app
+stdout 'acme/app'
+exec $LIORIAN --no-color module github unlink
+stdout 'deleted|supprim'
+
+# observer & usage — aggregated metrics and weekly series.
+exec $LIORIAN --no-color module observer com.example.blog-manager
+stdout 'Erreurs'
+exec $LIORIAN --no-color module usage com.example.blog-manager
+stdout 'Totaux'

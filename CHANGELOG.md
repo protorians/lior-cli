@@ -3,6 +3,40 @@
 All notable changes to this project will be documented in this file.
 
 
+## [Unreleased]
+
+### Added
+- **Commande `liorian module` (cycle de vie Developer Store)** — sous-commandes `knowledge`,
+  `workflows`, `channels`, `platforms`, `requirements`, `signing-keys`, `accreditations`,
+  `variables`, `github` (option `--connect`) et `observer`/`usage`, adossées aux endpoints
+  `/api/developer-store/*` de `liorian-api-connect` (client `internal/store/platform.go`). Le
+  module local est résolu par son token de manifeste, l'authentification réutilise la session
+  `liorian connect`, et la sortie est restituée en tableaux `tui`.
+- **Contrat CLI complet du cycle de vie (E-008)** — les commandes deviennent opérationnelles et
+  plus seulement en lecture : `module list`, `knowledge list|add|publish [--draft]`,
+  `workflow list|run|delete`, `channels list|publish|rollback|pause`,
+  `platforms [get]|set --web/--desktop/--mobile`, `requirements list|add`,
+  `signing-keys [list]|rotate`, `accreditations list|add`, `variables list|set|unset`,
+  `github [status]|link|unlink`, `observer` et `usage`. Les identifiants (workflow, article)
+  peuvent être passés via `--id` pour un usage non interactif ; les suppressions demandent une
+  confirmation sauf `--force`. `variables set` crée la variable si absente, la met à jour sinon.
+- **Validation SemVer des canaux** — `module channels publish <canal> <version>` rejette toute
+  version non-SemVer (`pkg.IsSemver`) et tout canal inconnu parmi `ALPHA|BETA|NIGHTLY|RC|RELEASE`.
+
+### Technical Details
+- `internal/store/platform.go` : opérations d'écriture du cycle de vie (`CreateKnowledgeArticle`,
+  `PublishKnowledgeArticle`, `DeleteWorkflow`, `RollbackChannel`/`PauseChannel`,
+  `SaveModulePlatforms`, `CreateRequirement`, `RotateSigningKey`, `CreateAccreditation`,
+  `Create`/`Update`/`DeleteEnvironmentVariable`).
+- `cmd/module.go` : arborescence de sous-commandes, helpers `normalizeChannel`, `platformRows`,
+  `findVariable`, `workflowLabel`, sélections interactives (`selectKnowledgeArticle`,
+  `selectWorkflow`), réutilisation de `slugify` (`cmd/init_env.go`).
+- `internal/pkg/semver.go` : ajout de `IsSemver` (tolérant au préfixe `v`).
+- `e2e/mockapi` : endpoints du cycle de vie pris en charge (knowledge, workflows, channels,
+  platforms, requirements, signing-keys, accreditations, environment-variables — étatful —
+  github, observer, usage) ; nouveau scénario `16_module.txtar` (TC-030).
+- `internal/i18n/locales` : clés FR/EN des nouvelles commandes et messages.
+
 ## [v0.21.0] - 2026-09-21
 
 ### Added

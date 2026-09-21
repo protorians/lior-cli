@@ -51,6 +51,7 @@ func TestScripts(t *testing.T) {
 			// marketplace commands reach through LIORIAN_STORE_API.
 			server := httptest.NewServer(mockapi.New().Handler())
 			env.Setenv("LIORIAN_AUTH_API", server.URL)
+			env.Setenv("LIORIAN_CONNECT_API", server.URL)
 			env.Setenv("LIORIAN_STORE_API", server.URL)
 			// Deterministic, isolated state: force the encrypted-file vault
 			// and skip the update check.

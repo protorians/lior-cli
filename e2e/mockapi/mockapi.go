@@ -60,6 +60,20 @@ type Server struct {
 	// artifact blobs, keyed by slug.
 	catalog          []CatalogModule
 	catalogArtifacts map[string][]byte
+
+	// Module-lifecycle state: environment variables keyed by id.
+	envVars  map[string]*envVar
+	envVarID int
+}
+
+// envVar is a stateful environment variable served by the mock.
+type envVar struct {
+	ID           string   `json:"id"`
+	Key          string   `json:"key"`
+	Value        string   `json:"value,omitempty"`
+	Environments []string `json:"environments"`
+	Visibility   string   `json:"visibility"`
+	ProductID    string   `json:"productId"`
 }
 
 // New builds a fresh mock server with no state, seeded with the public
@@ -72,6 +86,10 @@ func New() *Server {
 		knownToks:        map[string]string{},
 		tokens:           map[string]string{},
 		catalogArtifacts: map[string][]byte{},
+		envVars: map[string]*envVar{
+			"var-1": {ID: "var-1", Key: "API_URL", Environments: []string{"PRODUCTION"}, Visibility: "MASKED"},
+		},
+		envVarID: 1,
 	}
 	s.seedCatalog()
 	return s
@@ -92,6 +110,15 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("/api/developer-store/modules/", s.storeModules)
 	mux.HandleFunc("/api/developer-store/modules", s.storeModules)
+
+	mux.HandleFunc("/api/developer-store/signing-keys", s.signingKeys)
+	mux.HandleFunc("/api/developer-store/signing-keys/", s.signingKeys)
+	mux.HandleFunc("/api/developer-store/accreditations", s.accreditations)
+	mux.HandleFunc("/api/developer-store/accreditations/", s.accreditations)
+	mux.HandleFunc("/api/developer-store/environment-variables", s.environmentVariables)
+	mux.HandleFunc("/api/developer-store/environment-variables/", s.environmentVariables)
+	mux.HandleFunc("/api/developer-store/github", s.github)
+	mux.HandleFunc("/api/developer-store/github/", s.github)
 
 	mux.HandleFunc("/api/catalog/modules", s.catalogSearch)
 	mux.HandleFunc("/api/catalog/modules/", s.catalogGet)
@@ -310,7 +337,7 @@ func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
 		s.handleModulesRoot(w, r)
 		return
 	}
-	// /:id, /:id/versions, /:id/versions/:vid/artifact
+	// /:id, /:id/versions, /:id/versions/:vid/artifact, /:id/<lifecycle>
 	parts := strings.Split(strings.Trim(p, "/"), "/")
 	id := parts[0]
 	switch {
@@ -320,6 +347,363 @@ func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
 		s.handleVersions(w, r, id)
 	case len(parts) == 4 && parts[1] == "versions" && parts[3] == "artifact":
 		s.handleArtifact(w, r, id, parts[2])
+	case len(parts) >= 2 && isLifecyclePath(parts[1]):
+		s.handleLifecycle(w, r, parts)
+	default:
+		writeError(w, 404, "Unknown route")
+	}
+}
+
+// isLifecyclePath reports whether the path segment heads a module-lifecycle
+// resource served by liorian-api-connect (spec module-lifecycle).
+func isLifecyclePath(segment string) bool {
+	switch segment {
+	case "knowledge", "workflows", "channels", "platforms", "requirements", "observer", "usage":
+		return true
+	default:
+		return false
+	}
+}
+
+// handleLifecycle serves the module-lifecycle read/write routes.
+func (s *Server) handleLifecycle(w http.ResponseWriter, r *http.Request, parts []string) {
+	resource := parts[1]
+	switch resource {
+	case "knowledge":
+		s.knowledge(w, r, parts)
+	case "workflows":
+		s.workflows(w, r, parts)
+	case "channels":
+		s.channels(w, r, parts)
+	case "platforms":
+		s.platforms(w, r, parts)
+	case "requirements":
+		s.requirements(w, r, parts)
+	case "observer":
+		writeData(w, http.StatusOK, map[string]any{
+			"productId": parts[0],
+			"metrics": []map[string]any{
+				{"id": "errors", "label": "Erreurs (7 jours)", "value": "1", "trend": "stable", "hint": "1 crash / 1 k requêtes"},
+			},
+			"crashes": []any{},
+		})
+	case "usage":
+		writeData(w, http.StatusOK, map[string]any{
+			"productId": parts[0],
+			"series":    []map[string]any{{"label": "S28", "installations": 3, "activations": 2}},
+			"totals":    map[string]int{"installations": 3, "activations": 2, "activeOrganizations": 1},
+		})
+	default:
+		writeError(w, 404, "Unknown lifecycle resource")
+	}
+}
+
+func (s *Server) knowledge(w http.ResponseWriter, r *http.Request, parts []string) {
+	// parts: [moduleId, knowledge] or [moduleId, knowledge, articleId]
+	if len(parts) == 2 {
+		switch r.Method {
+		case http.MethodGet:
+			writeData(w, http.StatusOK, []map[string]any{
+				{"id": "art-1", "title": "Démarrage", "slug": "demarrage", "kind": "GUIDE", "status": "PUBLISHED", "readingMinutes": 4},
+			})
+		case http.MethodPost:
+			var req struct {
+				Title          string `json:"title"`
+				Slug           string `json:"slug"`
+				Kind           string `json:"kind"`
+				Summary        string `json:"summary"`
+				ReadingMinutes int    `json:"readingMinutes"`
+				Publish        bool   `json:"publish"`
+			}
+			if !decodeBody(w, r, &req) {
+				return
+			}
+			status := "DRAFT"
+			if req.Publish {
+				status = "PUBLISHED"
+			}
+			writeData(w, http.StatusCreated, map[string]any{
+				"id": "art-2", "title": req.Title, "slug": req.Slug, "kind": req.Kind,
+				"summary": req.Summary, "readingMinutes": req.ReadingMinutes, "status": status,
+			})
+		default:
+			writeError(w, 405, "Method not allowed")
+		}
+		return
+	}
+	// len(parts) == 3
+	articleID := parts[2]
+	switch r.Method {
+	case http.MethodPut:
+		writeData(w, http.StatusOK, map[string]any{
+			"id": articleID, "title": "Démarrage", "slug": "demarrage", "kind": "GUIDE",
+			"status": "PUBLISHED", "readingMinutes": 4,
+		})
+	case http.MethodDelete:
+		writeData(w, http.StatusOK, nil)
+	default:
+		writeError(w, 405, "Method not allowed")
+	}
+}
+
+func (s *Server) workflows(w http.ResponseWriter, r *http.Request, parts []string) {
+	// parts: [moduleId, workflows] / [moduleId, workflows, id] / [moduleId, workflows, id, run]
+	if len(parts) == 2 {
+		if r.Method != http.MethodGet {
+			writeError(w, 405, "Method not allowed")
+			return
+		}
+		writeData(w, http.StatusOK, []map[string]any{
+			{"id": "wf-1", "name": "CI", "source": "acme/app", "trigger": "push", "status": "IDLE", "runCount": 2},
+		})
+		return
+	}
+	workflowID := parts[2]
+	switch {
+	case len(parts) == 4 && parts[3] == "run" && r.Method == http.MethodPost:
+		writeData(w, http.StatusOK, map[string]any{
+			"id": workflowID, "name": "CI", "source": "acme/app", "trigger": "push", "status": "RUNNING", "runCount": 3,
+		})
+	case len(parts) == 3 && r.Method == http.MethodDelete:
+		writeData(w, http.StatusOK, nil)
+	default:
+		writeError(w, 405, "Method not allowed")
+	}
+}
+
+func (s *Server) channels(w http.ResponseWriter, r *http.Request, parts []string) {
+	// parts: [moduleId, channels] / [moduleId, channels, channel] / [moduleId, channels, channel, action]
+	if len(parts) == 2 {
+		writeData(w, http.StatusOK, []map[string]any{
+			{"id": "ch-release", "name": "RELEASE", "versionString": "1.0.0", "status": "ACTIVE", "updateCount": 1, "rollbackAllowed": true},
+		})
+		return
+	}
+	channel := parts[2]
+	if len(parts) == 4 && r.Method == http.MethodPost {
+		switch parts[3] {
+		case "publish":
+			writeData(w, http.StatusOK, map[string]any{
+				"id": "ch-" + strings.ToLower(channel), "name": channel, "versionString": "1.1.0", "status": "ACTIVE", "updateCount": 2, "rollbackAllowed": true,
+			})
+		case "rollback", "pause":
+			writeData(w, http.StatusOK, map[string]any{
+				"id": "ch-" + strings.ToLower(channel), "name": channel, "versionString": "1.0.0", "status": "PAUSED", "updateCount": 1, "rollbackAllowed": false,
+			})
+		default:
+			writeError(w, 404, "Unknown channel action")
+		}
+		return
+	}
+	writeError(w, 405, "Method not allowed")
+}
+
+func (s *Server) platforms(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) != 2 {
+		writeError(w, 404, "Unknown route")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeData(w, http.StatusOK, []map[string]any{
+			{"platform": "WEB", "supported": false, "modes": []string{}, "os": []string{}},
+			{"platform": "DESKTOP", "supported": false, "modes": []string{}, "os": []string{}},
+			{"platform": "MOBILE", "supported": false, "modes": []string{}, "os": []string{}},
+		})
+	case http.MethodPut:
+		var req struct {
+			Platforms []map[string]any `json:"platforms"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		writeData(w, http.StatusOK, req.Platforms)
+	default:
+		writeError(w, 405, "Method not allowed")
+	}
+}
+
+func (s *Server) requirements(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) == 2 {
+		switch r.Method {
+		case http.MethodGet:
+			writeData(w, http.StatusOK, []map[string]any{
+				{"id": "req-1", "moduleId": "core.crm", "name": "CRM", "versionRange": ">=1.0.0", "kind": "OPTIONAL"},
+			})
+		case http.MethodPost:
+			var req struct {
+				ModuleID     string `json:"moduleId"`
+				Name         string `json:"name"`
+				VersionRange string `json:"versionRange"`
+				Kind         string `json:"kind"`
+			}
+			if !decodeBody(w, r, &req) {
+				return
+			}
+			writeData(w, http.StatusCreated, map[string]any{
+				"id": "req-2", "moduleId": req.ModuleID, "name": req.Name, "versionRange": req.VersionRange, "kind": req.Kind,
+			})
+		default:
+			writeError(w, 405, "Method not allowed")
+		}
+		return
+	}
+	if len(parts) == 3 && r.Method == http.MethodDelete {
+		writeData(w, http.StatusOK, nil)
+		return
+	}
+	writeError(w, 405, "Method not allowed")
+}
+
+func (s *Server) signingKeys(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/developer-store/signing-keys")
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		if r.Method != http.MethodGet {
+			writeError(w, 405, "Method not allowed")
+			return
+		}
+		writeData(w, http.StatusOK, []map[string]any{
+			{"id": "k1", "keyId": "sign_abc", "algorithm": "Ed25519", "status": "ACTIVE"},
+		})
+		return
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) == 2 && parts[1] == "rotate" && r.Method == http.MethodPost {
+		writeData(w, http.StatusOK, map[string]any{
+			"id": "k2", "keyId": "sign_def", "algorithm": "Ed25519", "status": "ACTIVE",
+		})
+		return
+	}
+	writeError(w, 404, "Unknown route")
+}
+
+func (s *Server) accreditations(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/developer-store/accreditations")
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		switch r.Method {
+		case http.MethodGet:
+			writeData(w, http.StatusOK, []map[string]any{
+				{"id": "acc-1", "kind": "CI_CD_TOKEN", "name": "GitHub Actions", "status": "LINKED"},
+			})
+		case http.MethodPost:
+			var req struct {
+				Kind string `json:"kind"`
+				Name string `json:"name"`
+			}
+			if !decodeBody(w, r, &req) {
+				return
+			}
+			writeData(w, http.StatusCreated, map[string]any{
+				"id": "acc-2", "kind": req.Kind, "name": req.Name, "status": "PENDING",
+			})
+		default:
+			writeError(w, 405, "Method not allowed")
+		}
+		return
+	}
+	if r.Method == http.MethodDelete {
+		writeData(w, http.StatusOK, nil)
+		return
+	}
+	writeError(w, 405, "Method not allowed")
+}
+
+func (s *Server) environmentVariables(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/developer-store/environment-variables")
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		switch r.Method {
+		case http.MethodGet:
+			s.mu.Lock()
+			out := make([]*envVar, 0, len(s.envVars))
+			for _, v := range s.envVars {
+				out = append(out, v)
+			}
+			s.mu.Unlock()
+			writeData(w, http.StatusOK, out)
+		case http.MethodPost:
+			var req struct {
+				Key          string   `json:"key"`
+				Value        string   `json:"value"`
+				Environments []string `json:"environments"`
+				Visibility   string   `json:"visibility"`
+				ProductID    string   `json:"productId"`
+			}
+			if !decodeBody(w, r, &req) {
+				return
+			}
+			s.mu.Lock()
+			s.envVarID++
+			id := "var-" + strconv.Itoa(s.envVarID)
+			v := &envVar{ID: id, Key: req.Key, Environments: req.Environments, Visibility: req.Visibility, ProductID: req.ProductID}
+			s.envVars[id] = v
+			s.mu.Unlock()
+			writeData(w, http.StatusCreated, v)
+		default:
+			writeError(w, 405, "Method not allowed")
+		}
+		return
+	}
+	variableID := rest
+	s.mu.Lock()
+	current, ok := s.envVars[variableID]
+	s.mu.Unlock()
+	if !ok {
+		writeError(w, 404, "Variable not found")
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var req struct {
+			Key          string   `json:"key"`
+			Environments []string `json:"environments"`
+			Visibility   string   `json:"visibility"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		current.Key = orDefault(req.Key, current.Key)
+		if len(req.Environments) > 0 {
+			current.Environments = req.Environments
+		}
+		current.Visibility = orDefault(req.Visibility, current.Visibility)
+		writeData(w, http.StatusOK, current)
+	case http.MethodDelete:
+		s.mu.Lock()
+		delete(s.envVars, variableID)
+		s.mu.Unlock()
+		writeData(w, http.StatusOK, nil)
+	default:
+		writeError(w, 405, "Method not allowed")
+	}
+}
+
+func (s *Server) github(w http.ResponseWriter, r *http.Request) {
+	rest := strings.TrimPrefix(r.URL.Path, "/api/developer-store/github")
+	rest = strings.Trim(rest, "/")
+	switch {
+	case rest == "" && r.Method == http.MethodGet:
+		writeData(w, http.StatusOK, map[string]any{
+			"id": "gh-1", "repository": "acme/app", "defaultBranch": "main", "workflowPath": ".github/workflows/ci.yml", "connected": true,
+		})
+	case rest == "" && r.Method == http.MethodDelete:
+		writeData(w, http.StatusOK, nil)
+	case rest == "connect" && r.Method == http.MethodPost:
+		var req struct {
+			Repository    string `json:"repository"`
+			DefaultBranch string `json:"defaultBranch"`
+			WorkflowPath  string `json:"workflowPath"`
+			ProductID     string `json:"productId"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		writeData(w, http.StatusOK, map[string]any{
+			"id": "gh-2", "repository": req.Repository, "defaultBranch": orDefault(req.DefaultBranch, "main"),
+			"workflowPath": orDefault(req.WorkflowPath, ".github/workflows/ci.yml"), "connected": true,
+		})
 	default:
 		writeError(w, 404, "Unknown route")
 	}

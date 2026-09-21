@@ -119,6 +119,7 @@ func init() {
 		repairCmd,
 		testCmd,
 		marketplaceCmd,
+		moduleCmd,
 		devCmd,
 		buildCmd,
 		startCmd,

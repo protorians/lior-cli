@@ -35,3 +35,10 @@ func BumpPatch(version string) (string, error) {
 
 // semverStrictRE matches a strict SemVer 2.0.0 version (without a leading `v`).
 var semverStrictRE = regexp.MustCompile(`^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$`)
+
+// IsSemver reports whether version is a strict SemVer 2.0.0 string, tolerating
+// an optional leading `v` prefix.
+func IsSemver(version string) bool {
+	v := strings.TrimPrefix(strings.TrimSpace(version), "v")
+	return semverStrictRE.MatchString(v)
+}
