@@ -8,7 +8,7 @@ exec sh -c 'mkdir -p node_modules/@liorian/sdk node_modules/@tanstack/react-quer
 # TC-017 — conforming module: audit succeeds, no errors.
 exec $LIORIAN --no-color audit mod.liorian.blog-manager
 stdout '✓ Audit passed — no errors, no warnings'
-stdout 'valid UUID token'
+stdout 'check\(s\) passed'
 
 # JSON output (spec §5.10): machine-usable form.
 exec $LIORIAN --no-color audit --output json

@@ -79,7 +79,8 @@ développer, construire, démarrer ou vérifier le socle lui-même.
 | TFC-004 | `liorian check` exécute le script `package.json` `lint` via le même gestionnaire |
 | TFC-005 | `liorian dev`/`start` exécute une commande **longue** (serveur) : sans plafond, arrêtée à la sortie du processus ou à l'annulation utilisateur (Ctrl+C / Esc) |
 | TFC-006 | `liorian build`/`check` exécute une commande **one-shot** : terminée quand le processus se termine |
-| TFC-007 | Les arguments après `--` sont transmis tels quels à la commande (ex. `liorian dev -- --port 3000`) |
+| TFC-007 | Les arguments positionnels sont transmis **tels quels** à la commande, sans exiger le séparateur `--` (ex. `liorian dev -p 5010 --experimental-https` et `liorian dev -- -p 5010` sont équivalents) ; un `--` optionnel est retiré |
+| TFC-007b | Les flags du script (ex. `-p`, `--experimental-https`) ne sont **jamais** parsés par la CLI : seule la commande les revendique (analyse de flags désactivée, TFC-014) |
 | TFC-008 | Le code de sortie de la CLI reflète le code de sortie de la commande sous-jacente (passthrough fidèle) ; l'annulation renvoie `130` |
 | TFC-009 | La sortie standard et d'erreur est **mise en flux temps réel** (étape `RUNNING` avec queue de sortie) |
 | TFC-010 | Les hooks `before` listés pour la commande s'exécutent (scripts `package.json` via le gestionnaire) **avant** la commande du moteur ; l'échec d'un hook annule la commande |
@@ -87,8 +88,8 @@ développer, construire, démarrer ou vérifier le socle lui-même.
 | TFC-012 | `toolchain.commands.<cmd>` permet de surcharger le nom du script `package.json` qui sauvegarde chaque commande (ex. `"check": "typecheck"`) |
 | TFC-013 | Si un script requis est absent du `package.json` du projet, la CLI rend une erreur catégorisée avec indice de correction (code de sortie `1`) |
 | TFC-014 | Aucun mot-clé du moteur applicatif n'apparaît dans les commandes, flags, aide ou messages (CI-TOOL-01) |
-| TFC-015 | `liorian dev` exécute d'abord les contrôles `debug` + `test` sur tous les modules (`library/modules/`), puis le script `dev` ; un contrôle en erreur annule la commande |
-| TFC-016 | `liorian build`/`start` exécutent d'abord les contrôles `debug` + `test` + `audit` sur tous les modules, puis le script ; un contrôle en erreur annule la commande |
+| TFC-015 | `liorian dev` exécute d'abord l'**audit** de conformité sur tous les modules (`library/modules/`), puis le script `dev` ; un audit en erreur annule la commande |
+| TFC-016 | `liorian build`/`start` exécutent d'abord l'**audit** de conformité sur tous les modules, puis le script ; un audit en erreur annule la commande |
 | TFC-017 | Les contrôles de santé sont ignorés quand le projet ne contient aucun module ; les **warnings** d'un contrôle ne bloquent jamais (seules les **erreurs** annulent) |
 
 ### Exigences non-fonctionnelles
@@ -150,8 +151,16 @@ La CLI **ne crée, ni ne modifie aucun fichier** lors de la résolution (TNF-04)
 
 ### 5.3 Passthrough d'arguments
 
-- Tous les arguments positionnels passés à la commande sont transmis au script.
-- Séparateur `--` : `liorian build -- --no-lint` → `<pm> run build [--] --no-lint`.
+- Tous les arguments positionnels passés à la commande sont transmis au script, **tels quels**,
+  sans exiger le séparateur `--` : l'analyse de flags de la CLI est désactivée sur `dev`, `build`,
+  `start` et `check`, donc `liorian dev -p 5010 --experimental-https` transmet bien
+  `-p 5010 --experimental-https` au script (les flags du moteur ne sont jamais interprétés ni
+  rejetés par la CLI).
+- Séparateur `--` : `liorian build -- --no-lint` → `<pm> run build [--] --no-lint` (le `--`
+  optionnel est retiré avant transmission ; `liorian build --no-lint` est équivalent).
+- Les flags **globaux** de la CLI restent utilisables avant la commande
+  (`liorian --no-color dev`, `liorian --lang fr-FR build`) : l'analyse des flags racine précède la
+  descente dans la sous-commande.
 - Pour `npm`, un séparateur `--` est interposé avant les arguments (convention npm) ;
   `bun`, `pnpm`, `yarn` reçoivent les arguments tels quels.
 
@@ -193,36 +202,31 @@ Ordre global : `before` → commande moteur → `after`.
 | Échec de résolution (gestionnaire / script absent) | `1` (erreur catégorisée) |
 | Échec de la commande moteur | code de sortie du processus (passthrough) |
 | Échec d'un hook | code de sortie du hook |
-| Échec d'un contrôle de santé des modules (TFC-015/-016) | code du contrôle (debug `10`, test `13`, audit `1`) |
+| Échec du contrôle d'audit des modules (TFC-015/-016) | `1` (audit) |
 | Annulation utilisateur | `130` |
 
 ### 5.7 Porte de santé des modules (pre-flight)
 
-Avant de proxier un cycle d'application, la CLI **garantit que les modules sont sains** :
-les modules sont vérifiés une première fois, et la commande est abandonnée au premier
-contrôle en erreur (TFC-015/-016, TFC-017).
+Avant de proxier un cycle d'application, la CLI **garantit que les modules sont conformes** :
+la porte se limite à un **audit** (TFC-015/-016, TFC-017) — elle ne lance plus les contrôles
+`debug` et `test`, qui restent des commandes dédiées.
 
-| Commande | Contrôles exécutés avant |
-|----------|--------------------------|
-| `liorian dev` | `debug` + `test` |
-| `liorian build` | `debug` + `test` + `audit` |
-| `liorian start` | `debug` + `test` + `audit` |
+| Commande | Contrôle exécuté avant |
+|----------|------------------------|
+| `liorian dev` | `audit` |
+| `liorian build` | `audit` |
+| `liorian start` | `audit` |
 | `liorian check` | aucun |
 
 Comportement :
 
-- Les contrôles reprennent la **sémantique des commandes modules** : une étape en `ERROR`
-  (debug, test) bloque ; pour `audit`, seules les **erreurs** (`TotalErrors() > 0`) bloquent.
-  Les **warnings** (`WARNING`, `SKIPPED` — modules sans tests, sans script de build, sans
-  gestionnaire) n'annulent pas la commande.
+- L'audit reprend la **sémantique de la commande module** : seules les **erreurs**
+  (`TotalErrors() > 0`) bloquent. Les **warnings** n'annulent jamais la commande.
 - Un projet **sans module** (`library/modules/` absent ou vide) est exempté de contrôle :
   il n'y a rien à vérifier, la commande s'exécute normalement.
-- La porte est **non interactive** : elle n'ouvre aucune sélection de package de test
-  (`prepareRunners`), contrairement à `liorian test` lancé seul ; un module sans runner
-  configuré est simplement sautée en `WARNING`.
-- Un contrôle en erreur affiche ses détails (logs des modules en erreur pour `debug`/`test`,
-  tableau d'audit pour `audit`), puis la CLI renvoie une erreur catégorisée `Toolchain` avec
-  indice menant vers la commande standalone (`liorian debug`, `liorian test`, `liorian audit`).
+- La porte est **non interactive**.
+- Un audit en erreur affiche ses détails (tableau d'audit), puis la CLI renvoie une erreur
+  catégorisée `Toolchain` avec indice menant vers la commande standalone (`liorian audit`).
 - L'annulation (Ctrl+C / Esc) pendant un contrôle renvoie `130` (même flux que la commande).
 
 > Les éventuels hooks `before` de la commande (`toolchain.before`) s'exécutent **après** la
@@ -287,10 +291,8 @@ Nouvel ensemble de clés (catalogues `fr-FR`/`en-US`) :
 | `toolchain.cancelled` | « Commande interrompue » | « Command interrupted » |
 | `toolchain.error.pm_none` | « Aucun gestionnaire de paquets disponible » (+ fix) | « No package manager found » (+ fix) |
 | `toolchain.error.no_script` | « Aucun script « %s » dans package.json » (+ fix) | « No "%s" script in package.json » (+ fix) |
-| `gate.spinner.debug` | « Contrôle des modules (debug) » | « Checking modules for build errors (debug) » |
-| `gate.spinner.test` | « Tests des modules (test) » | « Running module tests (test) » |
 | `gate.spinner.audit` | « Audit de conformité des modules (audit) » | « Checking module conformance (audit) » |
-| `gate.failed.debug/test/audit` | « le contrôle … a échoué : %d … » | « module … check failed: %d … » |
+| `gate.failed.audit` | « le contrôle audit … a échoué : %d erreur(s) » | « module audit check failed: %d error(s) » |
 | `gate.failed.fix` | « Corrigez … ou exécutez `liorian %s` » | « fix …, or run `liorian %s` » |
 | `gate.cancelled` | « Contrôles des modules interrompus » | « Module checks interrupted » |
 
@@ -321,9 +323,9 @@ Nouvel ensemble de clés (catalogues `fr-FR`/`en-US`) :
 - Hooks : ordre `before → cmd → after`, échec `before` annule, `after` exécuté après échec
   de la commande mais pas après annulation, code de sortie propagé.
 - Complexité passthrough : arguments `--` transmis.
-- Porte de santé : `dev` demande `debug`+`test`, `build`/`start` demandent `debug`+`test`+`audit`,
-  sans module le contrôle est ignoré, un module sain passe, un module en erreur (validation /
-  test / dépendance d'audit) annule avec le code du contrôle, `check` n'est jamais contrôlé.
+- Porte de conformité : `dev`, `build`/`start` demandent l'`audit`, sans module le contrôle est
+  ignoré, un module sain passe, un module en erreur (validation / dépendance d'audit) annule
+  avec le code `1`, `check` n'est jamais contrôlé.
 
 ### Tests E2E (testscript)
 

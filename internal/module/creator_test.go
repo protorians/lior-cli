@@ -73,7 +73,7 @@ func TestResolveDependenciesNoPackageManager(t *testing.T) {
 	creator := &Creator{Root: t.TempDir()}
 	t.Setenv("PATH", "/nonexistent")
 
-	pm, err := creator.ResolveDependencies()
+	pm, err := creator.ResolveDependencies("")
 	if err != nil {
 		t.Fatalf("ResolveDependencies without a package manager must not error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestResolveDependenciesRunsInstall(t *testing.T) {
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	pm, err := creator.ResolveDependencies()
+	pm, err := creator.ResolveDependencies("")
 	if err != nil {
 		t.Fatalf("ResolveDependencies: %v", err)
 	}

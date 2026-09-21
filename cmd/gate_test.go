@@ -24,9 +24,10 @@ const moduleConfig = {
 };
 `
 
-// gateManifest builds a valid manifest for the test module. deps is injected
-// verbatim as the manifest `dependencies` object.
-func gateManifest(deps string) string {
+// gateManifest builds a valid manifest for the test module. npm dependencies
+// are no longer carried by the manifest: they live in the module package.json
+// (see writeGatePackageJSON).
+func gateManifest() string {
 	return fmt.Sprintf(`{
   "id": "hello-world",
   "domain": "mod.liorian.hello-world",
@@ -41,8 +42,6 @@ func gateManifest(deps string) string {
   "permissions": [],
   "optionalRequirements": {},
   "requirements": {},
-  "dependencies": %s,
-  "devDependencies": {},
   "widgets": [],
   "routines": [],
   "platforms": {
@@ -53,7 +52,7 @@ func gateManifest(deps string) string {
   "managerCompatibility": {"min": "0.0.0"},
   "apiCompatibility": {"min": "0.0.0"},
   "capabilities": {"needsNetwork": true, "supportsOffline": false, "requiresOrganization": false, "requiresAuthenticatedUser": true}
-}`, pkg.NewUUID(), deps)
+}`, pkg.NewUUID())
 }
 
 // writeGateModule writes a module directory with a manifest and index.tsx.
@@ -67,6 +66,17 @@ func writeGateModule(t *testing.T, root, name, manifest string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, config.ModuleEntryFileName), []byte(gateIndex), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// writeGatePackageJSON writes the module package.json declaring the given
+// dependencies (npm deps now live there, not in the manifest).
+func writeGatePackageJSON(t *testing.T, root, name, deps string) {
+	t.Helper()
+	dir := filepath.Join(root, config.ExternalModulesDir, name)
+	content := fmt.Sprintf(`{"name":"@liorian/module-hello-world","dependencies":%s}`, deps)
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -93,7 +103,7 @@ func TestRunToolchainGateSkippedWithoutModules(t *testing.T) {
 func TestRunToolchainGateNoChecksForCheck(t *testing.T) {
 	hermeticPATH(t)
 	root := t.TempDir()
-	writeGateModule(t, root, "hello-world", gateManifest("{}"))
+	writeGateModule(t, root, "hello-world", gateManifest())
 	cfg := config.Default()
 
 	if err := runToolchainGate(root, cfg, "check"); err != nil {
@@ -104,7 +114,7 @@ func TestRunToolchainGateNoChecksForCheck(t *testing.T) {
 func TestRunToolchainGatePassesOnHealthyModules(t *testing.T) {
 	hermeticPATH(t)
 	root := t.TempDir()
-	writeGateModule(t, root, "hello-world", gateManifest("{}"))
+	writeGateModule(t, root, "hello-world", gateManifest())
 	cfg := config.Default()
 
 	for _, name := range []string{"dev", "build", "start"} {
@@ -117,7 +127,7 @@ func TestRunToolchainGatePassesOnHealthyModules(t *testing.T) {
 func TestRunToolchainGateBlocksOnInvalidModule(t *testing.T) {
 	hermeticPATH(t)
 	root := t.TempDir()
-	broken := strings.Replace(gateManifest("{}"), `"version": "0.0.0"`, `"version": "broken"`, 1)
+	broken := strings.Replace(gateManifest(), `"version": "0.0.0"`, `"version": "broken"`, 1)
 	writeGateModule(t, root, "hello-world", broken)
 	cfg := config.Default()
 
@@ -129,20 +139,21 @@ func TestRunToolchainGateBlocksOnInvalidModule(t *testing.T) {
 	if !ok {
 		t.Fatalf("err type = %T, want *pkg.Error", err)
 	}
-	if pe.ExitCode() != pkg.ExitBuild {
-		t.Errorf("ExitCode = %d, want %d (debug gate failure)", pe.ExitCode(), pkg.ExitBuild)
+	if pe.ExitCode() != pkg.ExitError {
+		t.Errorf("ExitCode = %d, want %d (audit gate failure)", pe.ExitCode(), pkg.ExitError)
 	}
-	if !strings.Contains(pe.Message, "debug") {
-		t.Errorf("Message = %q, want it to name the debug check", pe.Message)
+	if !strings.Contains(pe.Message, "audit") {
+		t.Errorf("Message = %q, want it to name the audit check", pe.Message)
 	}
 }
 
 func TestRunToolchainGateBlocksOnAuditFailure(t *testing.T) {
 	hermeticPATH(t)
 	root := t.TempDir()
-	// The module passes debug and test, but lists a dependency that is not
-	// installed: only the audit gate (build/start) can catch it.
-	writeGateModule(t, root, "hello-world", gateManifest(`{"some-pkg": "1.0.0"}`))
+	// The module package.json lists a dependency that is not installed: only
+	// the audit gate can catch it.
+	writeGateModule(t, root, "hello-world", gateManifest())
+	writeGatePackageJSON(t, root, "hello-world", `{"some-pkg": "1.0.0"}`)
 	cfg := config.Default()
 
 	err := runToolchainGate(root, cfg, "build")
@@ -166,7 +177,7 @@ func TestHasModules(t *testing.T) {
 	if hasModules(root) {
 		t.Error("hasModules = true, want false without library/modules")
 	}
-	writeGateModule(t, root, "hello-world", gateManifest("{}"))
+	writeGateModule(t, root, "hello-world", gateManifest())
 	if !hasModules(root) {
 		t.Error("hasModules = false, want true with a module")
 	}

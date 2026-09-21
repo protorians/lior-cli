@@ -35,3 +35,18 @@ func DevDependencyArgs(pm string, packages ...string) []string {
 	}
 	return append(flag, packages...)
 }
+
+// DependencyArgs returns the package-manager-specific arguments to add runtime
+// dependencies. It returns nil for an unsupported package manager.
+func DependencyArgs(pm string, packages ...string) []string {
+	var flag []string
+	switch pm {
+	case "bun", "pnpm", "yarn":
+		flag = []string{"add"}
+	case "npm":
+		flag = []string{"install"}
+	default:
+		return nil
+	}
+	return append(flag, packages...)
+}

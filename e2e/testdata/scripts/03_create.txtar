@@ -38,7 +38,8 @@ exec grep -q '"name": "Blog Manager"' manifest.json
 exec grep -q '"id": "blog-manager"' manifest.json
 exec grep -q '"domain": "com.example.blog-manager"' manifest.json
 exec grep -q '"token": "[0-9a-f-]*"' manifest.json
-exec grep -q '"devDependencies"' manifest.json
+exec grep -q '"dependencies"' package.json
+! exec grep -q '"dependencies"' manifest.json
 exec grep -q '"$schema"' manifest.json
 exec grep -q '"optionalRequirements": {}' manifest.json
 exec grep -q '"platforms"' manifest.json
@@ -52,3 +53,16 @@ exec grep -q '"category": "SYSTEM"' manifest.json
 # The declaration declares a uri → the page is scaffolded in src/app.
 cd ../../../src/app/blog-manager
 exists page.tsx
+
+# TC-004b — `create view` scaffolds a presentation view inside the module.
+cd ../../../library/modules/com.example.blog-manager
+exec $LIORIAN --no-color create view com.example.blog-manager user-profile --label 'User Profile' --description 'Profil utilisateur'
+stdout 'View created'
+stdout 'Exported component: UserProfile'
+exists presentation/views/user-profile.view.tsx
+exec grep -q 'export function UserProfileView()' presentation/views/user-profile.view.tsx
+exec grep -q 'label="User Profile"' presentation/views/user-profile.view.tsx
+
+# TC-004c — an existing view cannot be created twice.
+! exec $LIORIAN --no-color create view com.example.blog-manager user-profile --name user-profile
+stderr 'already exists'

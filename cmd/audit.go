@@ -99,53 +99,102 @@ func printAuditResult(result *audit.AuditResult) {
 	fmt.Println()
 
 	for _, mod := range result.Modules {
-		fmt.Println(s.Heading(i18n.Tf("audit.header", mod.Module)))
-
-		t := tui.NewTable([]string{i18n.T("label.category"), i18n.T("label.rule"), i18n.T("label.status")})
-		for _, f := range mod.Findings {
-			status := s.Success.Render("✓ " + f.Message)
-			switch f.Severity {
-			case module.LevelError:
-				status = s.Error.Render("✗ " + f.Message)
-			case module.LevelWarning:
-				status = s.Warning.Render("⚠ " + f.Message)
-			}
-			t.AddRow(f.Category, f.Rule, status)
-		}
-
-		if len(mod.Findings) > 0 {
-			fmt.Println(t.Render())
-		} else {
-			fmt.Println(s.Muted.Render(i18n.T("audit.none")))
-		}
-		fmt.Println()
+		printAuditModule(s, mod)
 	}
 
+	printAuditSummary(s, result)
+}
+
+// printAuditModule renders one module report: a verdict header, the table of
+// actionable findings (errors and warnings only) and a compact tally of the
+// checks that passed. Hiding the OK rows keeps the report focused on what the
+// developer must act on.
+func printAuditModule(s *tui.Styles, mod module.Result) {
+	errors := mod.ErrorCount()
+	warnings := mod.WarningCount()
+
+	severity := tui.StatusSuccess
+	verdict := i18n.T("audit.verdict.ok")
+	if errors > 0 {
+		severity = tui.StatusError
+		verdict = i18n.T("audit.verdict.ko")
+	} else if warnings > 0 {
+		severity = tui.StatusWarning
+		verdict = i18n.T("audit.verdict.warn")
+	}
+
+	fmt.Println(s.ReportHeading(i18n.Tf("audit.header", mod.Module), verdict, severity))
+
+	t := tui.NewTable([]string{i18n.T("label.category"), i18n.T("label.rule"), i18n.T("label.issue")})
+	problems := 0
+	for _, f := range mod.Findings {
+		if f.Severity == module.LevelOK {
+			continue
+		}
+		mark, style := "⚠", s.Warning
+		if f.Severity == module.LevelError {
+			mark, style = "✗", s.Error
+		}
+		t.AddRow(f.Category, f.Rule, style.Render(mark+" "+f.Message))
+		problems++
+	}
+	if problems > 0 {
+		fmt.Println(t.Render())
+	}
+
+	fmt.Println(s.CountsLine(auditCounts(s, mod)...))
+	fmt.Println()
+}
+
+// auditCounts builds the compact "N checks passed · N warnings · N errors"
+// tally of a module, in severity order.
+func auditCounts(s *tui.Styles, mod module.Result) []string {
+	parts := []string{}
+	if passed := mod.OKCount(); passed > 0 {
+		parts = append(parts, s.Success.Render("✓ "+i18n.Tf("audit.checks", passed)))
+	}
+	if warnings := mod.WarningCount(); warnings > 0 {
+		parts = append(parts, s.Warning.Render("⚠ "+i18n.Tf("audit.warnings", warnings)))
+	}
+	if errors := mod.ErrorCount(); errors > 0 {
+		parts = append(parts, s.Error.Render("✗ "+i18n.Tf("audit.errors", errors)))
+	}
+	if len(parts) == 0 {
+		parts = append(parts, s.Muted.Render(i18n.T("audit.none")))
+	}
+	return parts
+}
+
+// printAuditSummary renders the closing recap of the whole run. Blocking errors
+// go to stderr so a scripted run can grep them; a fully clean run closes on a
+// success card.
+func printAuditSummary(s *tui.Styles, result *audit.AuditResult) {
 	errors := result.TotalErrors()
 	warnings := result.TotalWarnings()
 
 	if errors == 0 && warnings == 0 {
 		fmt.Println(s.SuccessPanel(s.Success.Render(i18n.T("audit.passed"))))
 		fmt.Println()
+		return
+	}
+
+	parts := []string{}
+	if errors > 0 {
+		parts = append(parts, i18n.Tf("audit.errors", errors))
+	}
+	if warnings > 0 {
+		parts = append(parts, i18n.Tf("audit.warnings", warnings))
+	}
+	header := i18n.T("audit.summary")
+	for i, p := range parts {
+		if i > 0 {
+			header += ", "
+		}
+		header += p
+	}
+	if errors > 0 {
+		fmt.Fprintln(os.Stderr, s.Error.Render(header))
 	} else {
-		parts := []string{}
-		if errors > 0 {
-			parts = append(parts, i18n.Tf("audit.errors", errors))
-		}
-		if warnings > 0 {
-			parts = append(parts, i18n.Tf("audit.warnings", warnings))
-		}
-		header := i18n.T("audit.summary")
-		for i, p := range parts {
-			if i > 0 {
-				header += ", "
-			}
-			header += p
-		}
-		if errors > 0 {
-			fmt.Fprintln(os.Stderr, s.Error.Render(header))
-		} else {
-			fmt.Println(s.Warning.Render(header))
-		}
+		fmt.Println(s.Warning.Render(header))
 	}
 }

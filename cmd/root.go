@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -41,6 +42,33 @@ Full lifecycle: init → create → develop → debug → audit → pack → sig
   liorian audit`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
+	// TraverseChildren parses the root (global) flags before descending into a
+	// subcommand. Combined with DisableFlagParsing on the toolchain commands,
+	// this keeps `liorian --no-color dev` valid while forwarding everything
+	// after `dev` verbatim to the backing script.
+	TraverseChildren: true,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return nil
+		}
+		msg := fmt.Sprintf("unknown command %q for %q", args[0], cmd.CommandPath())
+		if cmd.DisableSuggestions {
+			return errors.New(msg)
+		}
+		if cmd.SuggestionsMinimumDistance <= 0 {
+			cmd.SuggestionsMinimumDistance = 2
+		}
+		if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+			var sb strings.Builder
+			sb.WriteString(msg)
+			sb.WriteString("\n\nDid you mean this?\n")
+			for _, s := range suggestions {
+				fmt.Fprintf(&sb, "\t%v\n", s)
+			}
+			return errors.New(sb.String())
+		}
+		return errors.New(msg)
+	},
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// The --lang flag is parsed after Execute resolved the language, so it
 		// has the last word for command runs.
@@ -88,6 +116,7 @@ func init() {
 		unlinkCmd,
 		debugCmd,
 		auditCmd,
+		repairCmd,
 		testCmd,
 		marketplaceCmd,
 		devCmd,

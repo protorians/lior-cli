@@ -6,7 +6,7 @@ if [ "$1" = "run" ]; then
   shift
   case "$name" in
     debug|dev|build|start|lint|test|pre-build|post-build)
-      echo "[fixture] bun run $name (ok)"
+      echo "[fixture] bun run $name (ok) args=$*"
       exit 0
       ;;
     broken)

@@ -146,12 +146,14 @@ func runCreate(cmd *cobra.Command, args []string) error {
 			i18n.T("create.error.requirements_missing.fix"), pkg.ExitError)
 	}
 
-	// Resolve the dependencies/devDependencies declared in the manifest with
-	// the first available package manager (bun → pnpm → yarn → npm).
+	// Resolve the dependencies declared in the module package.json with the
+	// first available package manager (bun → pnpm → yarn → npm).
 	depsPM := ""
 	if !createSkipInstall && os.Getenv(createSkipInstallEnv) == "" {
 		var err error
-		depsPM, err = tui.RunWithSpinner(i18n.T("create.spinner.deps"), creator.ResolveDependencies)
+		depsPM, err = tui.RunWithSpinner(i18n.T("create.spinner.deps"), func() (string, error) {
+			return creator.ResolveDependencies(result.Dir)
+		})
 		if err != nil {
 			warn(i18n.Tf("create.warn.install", err.Error()))
 			depsPM = ""
@@ -161,13 +163,13 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	}
 
 	s := tui.NewStyles()
-	panel := s.Success.Render(i18n.Tf("create.success.dir", result.Dir)) + "\n" +
+	panel := s.Success.Render(i18n.Tf("create.success.dir", relToRoot(root, result.Dir))) + "\n" +
 		s.Success.Render(i18n.Tf("create.success.token", result.Token)) + "\n" +
 		s.Success.Render(i18n.T("create.success.manifest")) + "\n" +
 		s.Success.Render(i18n.T("create.success.entry")) + "\n" +
 		s.Success.Render(i18n.T("create.success.requirements"))
 	if result.Page != "" {
-		panel += "\n" + s.Success.Render(i18n.Tf("create.success.page", result.Page))
+		panel += "\n" + s.Success.Render(i18n.Tf("create.success.page", relToRoot(root, result.Page)))
 	}
 	if depsPM != "" {
 		panel += "\n" + s.Success.Render(i18n.Tf("create.success.deps", depsPM))

@@ -188,6 +188,44 @@ func TestRunInitInCWDWithExistingContentAndApproval(t *testing.T) {
 	}
 }
 
+func TestRunInitForcesLatestDependencies(t *testing.T) {
+	repo := setupTemplateRepo(t, map[string]string{
+		"package.json":       `{"name":"liorian-socle","dependencies":{"@liorian/sdk":"latest","react":"^19.0.0"}}`,
+		"lorian.config.toml": "app = \"template\"\n",
+	})
+
+	bin := t.TempDir()
+	logPath := filepath.Join(bin, "calls.log")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + logPath + "\"\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "bun"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	t.Chdir(root)
+	t.Setenv("LIORIAN_CLI_TEMPLATE_REPO", repo)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	if err := runInit(&cobra.Command{}, []string{"latest-app"}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("the fake bun must have been called: %v", err)
+	}
+	calls := string(data)
+	if !strings.Contains(calls, "install") {
+		t.Errorf("bun install must run, got:\n%s", calls)
+	}
+	if !strings.Contains(calls, "add @liorian/sdk@latest") {
+		t.Errorf("the explicit latest dependency must be force-installed, got:\n%s", calls)
+	}
+	if strings.Contains(calls, "react@latest") {
+		t.Errorf("a ranged dependency must not be forced, got:\n%s", calls)
+	}
+}
+
 func TestMergeTemplateInto(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
 		"package.json": `{"name":"liorian-socle"}`,
@@ -231,12 +269,42 @@ func TestI18nInitDestKeysExist(t *testing.T) {
 		"init.choice.merge",
 		"init.error.clear",
 		"init.spinner.merge",
+		"init.spinner.clone",
+		"init.release.meta",
+		"init.release.unknown",
 		"init.flag.channel",
 		"init.error.channel_invalid",
 	} {
 		if i18n.T(key) == key {
 			t.Errorf("i18n key %q must resolve to a message", key)
 		}
+	}
+}
+
+func TestReleaseDetailShowsMetadata(t *testing.T) {
+	i18n.Use("en-US")
+	defer i18n.Use("en-US")
+
+	detail := releaseDetail(pkg.ReleaseInfo{
+		Version: "v0.23.0-alpha.1",
+		Channel: "alpha",
+		Branch:  "71892a5a3620f6187dd63d9320eb0247710c1acd",
+		Commit:  "71892a5a3620f6187dd63d9320eb0247710c1acd",
+	})
+	for _, want := range []string{"release", "v0.23.0-alpha.1", "channel", "alpha", "branch", "commit", "71892a5a"} {
+		if !strings.Contains(detail, want) {
+			t.Errorf("releaseDetail() = %q, must contain %q", detail, want)
+		}
+	}
+}
+
+func TestReleaseDetailFallsBackOnMissingFields(t *testing.T) {
+	i18n.Use("en-US")
+	defer i18n.Use("en-US")
+
+	detail := releaseDetail(pkg.ReleaseInfo{Version: "v0.23.0", Channel: "stable"})
+	if !strings.Contains(detail, "unknown") {
+		t.Errorf("releaseDetail() = %q, must flag missing branch/commit", detail)
 	}
 }
 
@@ -266,7 +334,11 @@ func TestGithubOwnerRepo(t *testing.T) {
 		{"https://github.com/protorians/liorian-socle", "protorians", "liorian-socle"},
 		{"https://github.com/protorians/liorian-socle.git", "protorians", "liorian-socle"},
 		{"https://github.com/protorians/liorian-socle/", "protorians", "liorian-socle"},
+		{"github.com/protorians/liorian-socle", "protorians", "liorian-socle"},
+		{"protorians/liorian-socle", "protorians", "liorian-socle"},
 		{"not-a-github-url", "", ""},
+		{"https://example.com/template.zip", "", ""},
+		{"https://github.com/protorians", "", ""},
 		{"", "", ""},
 	}
 	for _, c := range cases {

@@ -1,0 +1,42 @@
+mkdir project
+cd project
+mkdir -p library/modules
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
+exec $LIORIAN --no-color create module blog-manager --domain mod.liorian.blog-manager --version 1.0.0
+exec sh -c 'mkdir -p node_modules/@liorian/sdk node_modules/@tanstack/react-query node_modules/@tanstack/react-table node_modules/date-fns node_modules/lucide-react node_modules/next node_modules/react node_modules/react-dom node_modules/sonner node_modules/@types/node node_modules/@types/react node_modules/@types/react-dom node_modules/typescript'
+
+# Break the manifest: invalid version and missing token (blocking findings).
+exec sh -c 'printf "{\n  \"id\": \"blog-manager\",\n  \"domain\": \"mod.liorian.blog-manager\",\n  \"name\": \"Blog Manager\",\n  \"version\": \"not-semver\",\n  \"entry\": \"index.tsx\"\n}\n" > library/modules/mod.liorian.blog-manager/manifest.json'
+
+# TC-038 — `repair` automatically fixes the blocking manifest findings.
+exec $LIORIAN --no-color repair mod.liorian.blog-manager
+stdout 'Repair: mod.liorian.blog-manager'
+stdout 'set version to "0.0.0"'
+stdout 'generated a new UUID token'
+stdout 'automatic fix\(es\) applied'
+
+# The repaired module has no blocking error left.
+exec $LIORIAN --no-color audit mod.liorian.blog-manager
+! stderr 'error\(s\)'
+
+# JSON output is machine-usable.
+exec $LIORIAN --no-color repair --output json
+stdout '"modules"'
+stdout '"actions"'
+
+# TC-039 — a complex finding yields manual instructions and a non-zero exit.
+exec sh -c 'printf "export const x = 1;\n" > library/modules/mod.liorian.blog-manager/index.tsx'
+exec sh -c '$LIORIAN --no-color repair mod.liorian.blog-manager; echo "exit=$?"'
+stdout 'Manual actions required'
+stdout 'Export the module declaration as default'
+stdout 'exit=1'
+
+# TC-040 — the manifest domain no longer has to use the `mod.liorian.` prefix.
+exec sh -c 'printf "{\n  \"id\": \"blog-manager\",\n  \"domain\": \"com.example.blog-manager\",\n  \"name\": \"Blog Manager\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\"\n}\n" > library/modules/mod.liorian.blog-manager/manifest.json'
+
+# `--no-interaction` renames the module directory to its manifest domain
+# without prompting.
+exec sh -c '$LIORIAN --no-color repair mod.liorian.blog-manager --no-interaction; echo "exit=$?"'
+stdout 'renamed the module directory to "com.example.blog-manager"'
+exists library/modules/com.example.blog-manager/manifest.json
+! exists library/modules/mod.liorian.blog-manager/manifest.json

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func sendKeyMsg(t *testing.T, m tea.Model, msg tea.Msg) tea.Model {
@@ -233,6 +234,15 @@ func TestRunWithProgressNonInteractive(t *testing.T) {
 	if err == nil || err.Error() != "boom" {
 		t.Errorf("unexpected error: %v", err)
 	}
+
+	// The detail variant must also degrade gracefully and still return fn's
+	// result.
+	value, err = RunWithProgressDetail("Download", "release v1.0.0", func(report ReportFunc) (int, error) {
+		return 9, nil
+	})
+	if err != nil || value != 9 {
+		t.Errorf("RunWithProgressDetail = (%d, %v), want (9, nil)", value, err)
+	}
 }
 
 func TestRunWithStepsNonInteractive(t *testing.T) {
@@ -373,6 +383,7 @@ func TestProgressTaskView(t *testing.T) {
 	m := progressTask[int]{
 		progress: pg,
 		label:    "Downloading template",
+		detail:   "release v1.0.0 · channel stable",
 		pct:      0.5,
 	}
 	view := m.View()
@@ -382,11 +393,114 @@ func TestProgressTaskView(t *testing.T) {
 	if n := strings.Count(view, "%"); n != 1 {
 		t.Errorf("the percentage must be rendered once, got %d in: %q", n, view)
 	}
+	if !strings.Contains(view, "release v1.0.0") {
+		t.Errorf("view must show the detail line, got: %q", view)
+	}
+	if strings.Index(view, "release v1.0.0") < strings.Index(view, "50%") {
+		t.Errorf("the detail must be rendered below the progress bar, got: %q", view)
+	}
 
 	m.done = true
 	m.err = errors.New("boom")
 	if v := m.View(); !strings.Contains(v, "✗") {
 		t.Errorf("error view must show ✗, got: %q", v)
+	}
+}
+
+func TestProgressTaskIndeterminateWithoutTotal(t *testing.T) {
+	pg := NewStyles().ProgressBar(10)
+	m := progressTask[int]{
+		progress: pg,
+		label:    "Downloading template",
+		progCh:   make(chan progressMsg, 1),
+		resCh:    make(chan resultMsg[int], 1),
+	}
+	updated, _ := m.Update(progressMsg{done: 1024, total: 0})
+	got, ok := updated.(progressTask[int])
+	if !ok {
+		t.Fatalf("unexpected model type %T", updated)
+	}
+	if !got.indeterminate {
+		t.Fatal("a report without a total must switch to indeterminate mode")
+	}
+	if got.bytes != 1024 {
+		t.Errorf("bytes = %d, want 1024", got.bytes)
+	}
+	view := got.View()
+	if strings.Contains(view, "%") {
+		t.Errorf("indeterminate view must not show a percentage, got: %q", view)
+	}
+	if !strings.Contains(view, "1.0 KB") {
+		t.Errorf("indeterminate view must report the downloaded size, got: %q", view)
+	}
+}
+
+func TestProgressTaskIndeterminateNeverDecreases(t *testing.T) {
+	pg := NewStyles().ProgressBar(10)
+	m := progressTask[int]{
+		progress: pg,
+		label:    "Downloading template",
+		progCh:   make(chan progressMsg, 1),
+		resCh:    make(chan resultMsg[int], 1),
+	}
+	prev := 0.0
+	for i := 0; i < 500; i++ {
+		updated, _ := m.Update(progressMsg{done: int64(i+1) * 1024, total: 0})
+		got, ok := updated.(progressTask[int])
+		if !ok {
+			t.Fatalf("unexpected model type %T", updated)
+		}
+		m = got
+		if m.sweep < prev {
+			t.Fatalf("indeterminate sweep decreased on update %d: %v -> %v", i, prev, m.sweep)
+		}
+		prev = m.sweep
+	}
+	if prev <= 0 {
+		t.Errorf("sweep = %v, the bar must have advanced", prev)
+	}
+	if prev > indeterminateCeiling {
+		t.Errorf("sweep = %v, must not exceed the ceiling %v", prev, indeterminateCeiling)
+	}
+}
+
+func TestProgressTaskStaysDeterminateWithTotal(t *testing.T) {
+	pg := NewStyles().ProgressBar(10)
+	m := progressTask[int]{
+		progress: pg,
+		label:    "Downloading template",
+		progCh:   make(chan progressMsg, 1),
+		resCh:    make(chan resultMsg[int], 1),
+	}
+	updated, _ := m.Update(progressMsg{done: 512, total: 1024})
+	got, ok := updated.(progressTask[int])
+	if !ok {
+		t.Fatalf("unexpected model type %T", updated)
+	}
+	if got.indeterminate {
+		t.Fatal("a report with a total must remain determinate")
+	}
+	if !strings.Contains(got.View(), "50%") {
+		t.Errorf("determinate view must show 50%%, got: %q", got.View())
+	}
+}
+
+func TestFormatBytes(t *testing.T) {
+	cases := []struct {
+		in   int64
+		want string
+	}{
+		{0, "0 B"},
+		{512, "512 B"},
+		{1024, "1.0 KB"},
+		{1536, "1.5 KB"},
+		{1024 * 1024, "1.0 MB"},
+		{3 * 1024 * 1024 * 1024, "3.0 GB"},
+	}
+	for _, c := range cases {
+		if got := formatBytes(c.in); got != c.want {
+			t.Errorf("formatBytes(%d) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 
@@ -408,5 +522,40 @@ func TestProgressBarClampsWidth(t *testing.T) {
 	}
 	if w := s.ProgressBar(12).Width; w != 12 {
 		t.Errorf("explicit width must be honoured, got %d", w)
+	}
+}
+
+func TestReportHeadingAlignsVerdict(t *testing.T) {
+	s := NewStyles()
+	heading := s.ReportHeading("Audit: mod.liorian.blog-manager", "failed", StatusError)
+	lines := strings.Split(heading, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("heading must render a title and a rule, got %q", heading)
+	}
+	if !strings.Contains(lines[0], "Audit: mod.liorian.blog-manager") {
+		t.Errorf("heading must show the title, got %q", lines[0])
+	}
+	if !strings.Contains(lines[0], "✗ failed") {
+		t.Errorf("heading must show the verdict chip, got %q", lines[0])
+	}
+	if got := lipgloss.Width(lines[0]); got != s.reportWidth() {
+		t.Errorf("heading width = %d, want %d: %q", got, s.reportWidth(), lines[0])
+	}
+	if got := lipgloss.Width(lines[1]); got != s.reportWidth() {
+		t.Errorf("rule width = %d, want %d", got, s.reportWidth())
+	}
+}
+
+func TestStatusChipAndCountsLine(t *testing.T) {
+	s := NewStyles()
+	if chip := s.StatusChip("passed", StatusSuccess); !strings.Contains(chip, "✓ passed") {
+		t.Errorf("chip = %q, want it to carry the mark and label", chip)
+	}
+	line := s.CountsLine(s.Success.Render("✓ 3 check(s) passed"), s.Error.Render("✗ 1 error(s)"))
+	if !strings.Contains(line, "3 check(s) passed") || !strings.Contains(line, "1 error(s)") {
+		t.Errorf("counts line must join both buckets, got %q", line)
+	}
+	if !strings.Contains(line, "·") {
+		t.Errorf("counts line must separate buckets with a dot, got %q", line)
 	}
 }

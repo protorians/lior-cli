@@ -123,7 +123,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-015 | `liorian unlink` délie un module local de `liorian-connect` (option `--sync-remote` pour synchroniser les métadonnées locales) |
 | FR-016 | `liorian debug` lance le debug d'un module ou de tous les modules |
 | FR-017 | `liorian audit` vérifie la conformité Clean Architecture, `manifest.json` et `index.tsx` |
-| FR-018 | `liorian audit` vérifie que les `requirements` et `dependencies` existent |
+| FR-018 | `liorian audit` vérifie que les `requirements` existent et que les `dependencies` du `package.json` sont installées |
 | FR-019 | `liorian help` affiche l'aide contextuelle des commandes |
 | FR-020 | `liorian -v` / `liorian --version` affiche la version actuelle |
 | FR-021 | `liorian sign keygen` génère une paire de clés Ed25519 et la stocke dans le keychain système |
@@ -324,7 +324,9 @@ une URL ZIP directe ou un répertoire local (tests/miroirs).
 1. **Déterminer le nom du projet** : argument positionnel optionnel, sinon input Bubbletea
    (défaut : nom du dossier courant)
 2. **Résoudre le canal de release** (`--channel alpha|beta|rc|stable`, défaut `stable`) :
-   la release la plus récente du canal est téléchargée en ZIP via l'API GitHub
+   la release la plus récente du canal est téléchargée en ZIP via l'API GitHub ; la ligne de
+   téléchargement affiche la version (tag), le canal, la branche cible et le commit de la release
+   (branche/commit best-effort, `inconnu` si indisponibles)
 3. **Gérer la destination existante** : dossier non vide → proposer *Annuler* / *Fusionner* /
    *Vider* (cwd) / *Supprimer* ; jamais effacé sans approbation
 4. **Détection automatique** des gestionnaires de paquets disponibles sur la machine :
@@ -353,8 +355,9 @@ Destination : /chemin/vers/mon-projet
 ? Nom du projet : mon-projet
 ? Canal de release : stable
 ? Gestionnaire de paquets : bun (recommandé)
-  ⠋ Téléchargement de la release liorian-socle...
+  ⠋ Téléchargement de la release de liorian-socle
   [================--------------------] 45%
+  release v0.19.0 · canal stable · branche alpha · commit 0567861
   ⠋ Installation des dépendances...
 
   ✓ Projet initialisé avec succès
@@ -412,13 +415,15 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
    le répertoire scaffoldé ainsi que la page éventuelle sont **supprimés** (rollback) et une
    erreur catégorisée listant les modules manquants est renvoyée
    (`create.error.requirements_missing` + `create.error.requirements_missing.fix`)
-6. **Installer les dépendances** : les `dependencies` et `devDependencies` du manifest sont
-   résolues via le gestionnaire de paquets détecté (`bun` → `pnpm` → `yarn` → `npm`, voir
-   `config.DetectPackageManager`) exécuté à la racine du projet. Si aucun gestionnaire n'est
-   détecté, un avertissement est affiché (les dépendances ne sont pas installées). Un échec
-   d'installation est non-bloquant (simple avertissement `create.warn.install`). L'installation
-   peut être désactivée avec le drapeau `--skip-install` (ou l'environnement
-   `LIORIAN_CLI_SKIP_INSTALL=1`).
+6. **Installer les dépendances** : les `dependencies` et `devDependencies` du `package.json` du
+   module (le manifeste ne les porte plus) sont résolues via le gestionnaire de paquets détecté
+   (`bun` → `pnpm` → `yarn` → `npm`, voir `config.DetectPackageManager`) exécuté à la racine du
+   projet. Les dépendances explicitement versionnées `latest` sont ensuite réinstallées
+   explicitement (`<pm> add <pkg>@latest`) car un simple `install` les ignore souvent. Si aucun
+   gestionnaire n'est détecté, un avertissement est affiché (les dépendances ne sont pas
+   installées). Un échec d'installation est non-bloquant (simple avertissement
+   `create.warn.install`). L'installation peut être désactivée avec le drapeau `--skip-install`
+   (ou l'environnement `LIORIAN_CLI_SKIP_INSTALL=1`).
 7. **Patcher l'identité** (le mockup fournit les valeurs par défaut) :
    - `manifest.json` : injection d'un **token UUID v4 unique** si absent, puis réécriture de
      `id`, `domain`, `key` (UPPER_SNAKE de l'identifiant), `name`, `description`, `version`,
@@ -499,8 +504,6 @@ du socle `liorian-socle`, conforme au contrat canonique du workspace) et réécr
   "isDefault": false,
   "requirements": { "organization": ">=1.0.0", "identity": ">=1.0.0" },
   "optionalRequirements": {},
-  "dependencies": { "@liorian/sdk": "workspace:*", "react": "^19.0.0", "react-dom": "^19.0.0" },
-  "devDependencies": { "typescript": "^6.0.3" },
   "widgets": ["analytics"],
   "routines": ["<camelId>AnalyticsRoutine"],
   "providers": ["layout"],
@@ -509,12 +512,12 @@ du socle `liorian-socle`, conforme au contrat canonique du workspace) et réécr
 ```
 
 > **Contrat canonique** : la référence des champs (identité, plateformes, compatibilité,
-> permissions, capacités, activation, prérequis, dépendances, interface) et les conventions de
-> nommage sont dans `docs/modules/module-manifest.md`. Le schéma JSON
-> (`module-manifest.schema.json`, `schemaVersion: 1`) est publié avec le SDK
-> (`@liorian/sdk`) et sert de référence à la validation CI. Les champs `requirements`,
-> `optionalRequirements`, `dependencies` et `devDependencies` sont **strictement** gérés par le
-> manifeste (jamais dupliqués dans `index.tsx`).
+> permissions, capacités, activation, prérequis, interface) et les conventions de nommage sont
+> dans `docs/modules/module-manifest.md`. Le schéma JSON (`module-manifest.schema.json`,
+> `schemaVersion: 1`) est publié avec le SDK (`@liorian/sdk`) et sert de référence à la validation
+> CI. Les champs `requirements` et `optionalRequirements` sont **strictement** gérés par le
+> manifeste (jamais dupliqués dans `index.tsx`) ; les dépendances npm (`dependencies` /
+> `devDependencies`) sont portées par le `package.json` du module.
 
 `index.tsx` (déclaration déclarative, pas de `render` asynchrone) :
 
@@ -543,10 +546,11 @@ const <camelId>Module: ModuleDeclarationInterface = {
 export default <camelId>Module;
 ```
 
-> **Séparation manifeste / déclaration** : `requirements`, `optionalRequirements`, `dependencies`
-> et `devDependencies` sont **uniquement** déclarés dans `manifest.json` (voir
-> `docs/modules/module-manifest.md` § 3) — ils ne figurent plus dans `index.tsx`. Le manifeste est
-> la source de vérité ; la déclaration React en est la projection runtime.
+> **Séparation manifeste / déclaration** : `requirements` et `optionalRequirements` sont
+> **uniquement** déclarés dans `manifest.json` (voir `docs/modules/module-manifest.md` § 3) — ils
+> ne figurent plus dans `index.tsx`. Les dépendances npm sont déclarées dans le `package.json` du
+> module. Le manifeste est la source de vérité ; la déclaration React en est la projection
+> runtime.
 
 `src/app/<url>/page.tsx` (scaffoldé quand la déclaration porte un `uri`/`url`) :
 
@@ -566,8 +570,8 @@ export default function <PascalId>Page() {
 - Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
 - Le manifeste est conforme au schéma canonique (24 champs requis, `schemaVersion: 1`) ;
   `entry` pointe vers `index.tsx` et `domain` correspond au dossier du module
-- Les champs `requirements` / `optionalRequirements` / `dependencies` / `devDependencies` ne sont
-  présents que dans `manifest.json` (jamais dans `index.tsx`)
+- Les champs `requirements` / `optionalRequirements` ne sont présents que dans `manifest.json`
+  (jamais dans `index.tsx`) ; les dépendances npm vivent dans le `package.json` du module
 - `--mockup` / `--page-mockup` (et `LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) permettent
   de remplacer les mockups (tests, templates d'équipe) — voir `internal/module/scaffold.go`
 
@@ -1043,7 +1047,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **manifest.json** | Champ `version` au format SemVer valide | ERROR |
 | **manifest.json** | Champ `token` UUID valide | ERROR |
 | **manifest.json** | Champ `entry` pointe vers un fichier existant | ERROR |
-| **manifest.json** | Champ `domain` au format `mod.liorian.<name>` | WARNING |
+| **manifest.json** | Champ `domain` au format reverse-DNS (`com.organization.domain` ; le préfixe `mod.liorian.` n'est plus requis) | WARNING |
 | **manifest.json** | Le `domain` correspond au dossier du module (`library/modules/<domain>`) | WARNING |
 | **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
 | **manifest.json** | `optionalRequirements` est présent (objet, `{}` admis) | WARNING |
@@ -1057,7 +1061,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **Clean Architecture** | Les composants n'importent pas directement les services (`../services`, `application/service`) | ERROR |
 | **Clean Architecture** | Les services ne contiennent pas de JSX (`services/` et `application/service/`, heuristique regex JSX) | ERROR |
 | **requirements** | Les requirements listées existent dans `library/modules/` **ou** `src/modules/` (exceptions : modules core plateforme `organization`, `identity`) | ERROR |
-| **dependencies** | Les dépendances npm listées sont installées dans `node_modules` | ERROR |
+| **dependencies** | Les dépendances npm déclarées dans le `package.json` du module sont installées dans `node_modules` | ERROR |
 | **assets** | `public/assets/<module>/` contient des fichiers (si le dossier existe) | WARNING |
 
 > Les champs contrôlés (`id`, `name`, `version`, `token`, `entry`, `domain`, `permissions`) font
@@ -1078,25 +1082,28 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 
 #### Sortie TUI
 
-```
-  Audit : blog-manager
-  ┌──────────────────────┬──────────┬──────────────────────────┐
-  │ Catégorie            │ Règle    │ Statut                   │
-  ├──────────────────────┼──────────┼──────────────────────────┤
-  │ manifest.json        │ id       │ ✓ Présent                │
-  │ manifest.json        │ name     │ ✓ Présent                │
-  │ manifest.json        │ version  │ ✓ SemValide              │
-  │ manifest.json        │ token    │ ✓ UUID valide            │
-  │ manifest.json        │ entry    │ ✓ Fichier existe         │
-  │ index.tsx            │ export   │ ✓ Défaut exporté         │
-  │ index.tsx            │ decl     │ ✓ Déclaration présente   │
-  │ requirements         │ exist    │ ⚠ organization non trouvé│
-  │ dependencies         │ install  │ ✓ Toutes installées      │
-  │ Clean Architecture   │ services→JSX │ ✓ Conforme           │
-  └──────────────────────┴──────────┴──────────────────────────┘
+Chaque module est introduit par un en-tête avec un verdict aligné à droite
+(`✓ passed` / `✗ failed`), suivi du tableau des **points d'action** (ERROR /
+WARNING uniquement, colorés par sévérité) puis d'un décompte compact. Les
+contrôles réussis sont résumés (« N check(s) passed ») au lieu d'encombrer le
+tableau. Un module sans aucun point d'action se termine par la carte de succès.
 
-  Résumé : 0 erreurs, 1 warning
 ```
+  Audit: mod.liorian.blog-manager                          ✗ failed
+  ────────────────────────────────────────────────────────────────
+  ┌────────────────┬─────────────┬──────────────────────────────┐
+  │ Catégorie      │ Règle       │ Problème                     │
+  ├────────────────┼─────────────┼──────────────────────────────┤
+  │ index.tsx      │ export      │ ✗ export not compliant       │
+  │ requirements   │ organization│ ⚠ organization not compliant │
+  └────────────────┴─────────────┴──────────────────────────────┘
+  ✓ 25 check(s) passed · ⚠ 1 warning(s) · ✗ 1 error(s)
+
+  Résumé : 1 erreur(s), 1 avertissement(s)
+```
+
+Un module conforme affiche l'en-tête `✓ passed`, la ligne des contrôles
+réussis, puis la carte `✓ Audit passed — no errors, no warnings`.
 
 ---
 
@@ -1541,9 +1548,9 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
 ### 6.2 Fichier `manifest.json` (par module)
 
 Le `manifest.json` est le **contrat technique déclaratif** de chaque module (identité, plateformes,
-compatibilité, permissions/scopes, capacités, activation, prérequis, dépendances npm, interface).
-C'est la source de vérité dont découlent la déclaration React (`index.tsx`,
-`ModuleDeclarationInterface`) et le catalogue backend.
+compatibilité, permissions/scopes, capacités, activation, prérequis, interface). C'est la source
+de vérité dont découlent la déclaration React (`index.tsx`, `ModuleDeclarationInterface`) et le
+catalogue backend. Les dépendances npm sont portées par le `package.json` du module.
 
 - **Schéma canonique** : `schemaVersion: 1`, publié avec le SDK
   (`@liorian/sdk`, `docs/modules/module-manifest.md`), validé en CI. La structure complète
@@ -1551,8 +1558,8 @@ C'est la source de vérité dont découlent la déclaration React (`index.tsx`,
 - **Identité stable** : `id`, `domain`, `key`, `name`, `permissions` ne changent jamais (le
   catalogue, les activations et les contrôles d'accès en dépendent) ; `version` ne bouge que par
   incrément SemVer.
-- **Séparation** : `requirements`, `optionalRequirements`, `dependencies`, `devDependencies` sont
-  déclarés **uniquement** ici (jamais dans `index.tsx`).
+- **Séparation** : `requirements` et `optionalRequirements` sont déclarés **uniquement** ici
+  (jamais dans `index.tsx`) ; les dépendances npm sont déclarées dans le `package.json` du module.
 - **`token`** : identifiant public de liaison produit (UUID local régénéré au `unlink`, remplacé
   par l'id produit distant au `link`) — ce n'est pas un secret.
 

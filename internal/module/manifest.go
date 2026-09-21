@@ -48,8 +48,6 @@ type Manifest struct {
 	IsDefault            bool              `json:"isDefault"`
 	Requirements         map[string]any    `json:"requirements"`
 	OptionalRequirements map[string]string `json:"optionalRequirements"`
-	Dependencies         map[string]string `json:"dependencies"`
-	DevDependencies      map[string]string `json:"devDependencies,omitempty"`
 	Widgets              []string          `json:"widgets"`
 	Routines             []string          `json:"routines"`
 	Providers            []string          `json:"providers,omitempty"`
@@ -254,8 +252,6 @@ func NewManifest(name, description string) Manifest {
 		IsDefault:            false,
 		Requirements:         map[string]any{},
 		OptionalRequirements: map[string]string{},
-		Dependencies:         map[string]string{"@liorian/sdk": "workspace:*"},
-		DevDependencies:      map[string]string{},
 		Widgets:              []string{},
 		Routines:             []string{},
 		Providers:            []string{},

@@ -3,6 +3,79 @@
 All notable changes to this project will be documented in this file.
 
 
+## [v0.20.0] - 2026-09-21
+
+### Added
+- **Commande `repair`** — `liorian repair` corrige automatiquement les anomalies réparables d'un
+  module (champs de manifeste, dépendances npm manquantes, JSON malformé) en réutilisant le
+  pipeline d'audit, puis re-audite le module ; les points non réparables deviennent des
+  instructions pas à pas. Options `--dry-run`, `--warnings`, `--no-install`,
+  `--no-interaction`, `--output table|json`.
+- **Commande `create view`** — `liorian create view <module> [name]` génère une vue de
+  présentation (`presentation/views/<name>.view.tsx`) à partir du mockup embarqué, avec le
+  composant, le titre et la description renommés (`--mockup`, `--name`, `--label`,
+  `--description`).
+- **Métadonnées de release pendant le téléchargement du socle** — `liorian init` affiche
+  désormais la version (tag), le canal, la branche cible et le commit de la release téléchargée
+  sur une ligne atténuée **sous** la barre de progression
+  (`release v0.23.0-alpha.1 · channel alpha · branch 71892a5a… · commit 71892a5a…`).
+  Les métadonnées sont résolues via l'API GitHub avant le téléchargement (branche/commit
+  best-effort : `inconnu` si indisponibles) puis réutilisées pour éviter un second appel réseau.
+
+### Changed
+- **Dépendances npm portées par le `package.json`** — les champs `dependencies` et
+  `devDependencies` sont retirés du `manifest.json` (struct Go, mockup `hello-world` et
+  manifestes générés) : le `package.json` du module devient la source unique. L'audit vérifie
+  désormais l'installation des dépendances runtime déclarées dans ce `package.json`.
+- **Installation forcée des dépendances `latest`** — après le téléchargement du socle
+  (`liorian init`) comme à la création d'un module, les dépendances explicitement versionnées
+  `latest` sont réinstallées explicitement (`<pm> add <pkg>@latest`) car un simple `install`
+  les ignore souvent (lockfile / paquet déjà présent).
+- **Porte de santé de l'outillage limitée à l'audit** — `liorian dev`, `build` et `start`
+  n'exécutent plus les contrôles `debug` et `test` avant le script ; seule la conformité
+  (`audit`) est vérifiée (TFC-015/-016). Les contrôles `debug`/`test` restent des commandes
+  dédiées (`liorian debug`, `liorian test`).
+- **Domaine de module libre** — le champ `domain` du manifeste n'a plus à respecter le préfixe
+  `mod.liorian.<name>` : tout domaine reverse-DNS valide (`com.organization.domain`) est accepté
+  par l'audit et la validation.
+- **`repair` corrige le nom du dossier du module** — quand le dossier ne correspond pas au
+  domaine du manifeste, `repair` propose le nouveau nom dans un prompt (touche `tab` pour le
+  remplir automatiquement), puis renomme le dossier. Avec `--no-interaction`, la proposition est
+  appliquée sans question ; hors terminal, elle est reportée en instruction manuelle.
+- **Présentation des rapports `audit` et `repair`** — les deux commandes partagent désormais le
+  même rendu : en-tête avec verdict aligné à droite (`✓ passed` / `✗ failed`), tableau des
+  **points d'action** uniquement (les contrôles réussis sont résumés en « N check(s) passed »),
+  décompte compact par sévérité et carte de synthèse. Les instructions manuelles de `repair`
+  affichent la catégorie · la règle, le message puis les étapes.
+
+### Technical Details
+- `internal/pkg/nodepackage.go` : type `NodePackage` + `LoadNodePackage`,
+  `DependencyNames`/`RuntimeDependencyNames`/`LatestDependencies` et `ForceInstallLatest` ;
+  `internal/pkg/pm.go` : `DependencyArgs` (bun/pnpm/yarn `add`, npm `install`).
+- `internal/module/manifest.go` : suppression des champs `Dependencies`/`DevDependencies` ;
+  `internal/audit/auditor.go` : dépendances lues depuis `library/modules/<module>/package.json` ;
+  `internal/module/creator.go` : `ResolveDependencies(moduleDir)` + forçage des `latest`.
+- `internal/pkg/github.go` : type `ReleaseInfo` + `ResolveRelease`/`DownloadReleaseZip` ;
+  `resolveTagCommit` déréférence les tags annotés via `git/ref/tags` + `git/tags`.
+- `internal/tui/progress.go` : `RunWithProgressDetail` rend une ligne de détail atténuée
+  (`Styles.Muted`) sous la barre (et sous la coche une fois terminé).
+- `cmd/init.go` : helper `releaseDetail` et résolution en amont ; `githubOwnerRepo` restreint aux
+  URLs `github.com` (les URLs ZIP directes retombent sur le téléchargement direct).
+- `internal/tui/report.go` : nouveaux helpers `ReportHeading`, `StatusChip` et `CountsLine` ;
+  `internal/module/validator.go` : `Result.OKCount()`.
+- `cmd/gate.go` : `gateChecks` réduit à `audit` pour `dev`/`build`/`start` ; `gateDebug` et
+  `gateTest` conservés pour d'éventuels usages.
+- `internal/module/validator.go` : règle `domain` validée par `isDomainName` (reverse-DNS) ;
+  suppression de `isLiorianDomain`.
+- `internal/repair/repair.go` : `Repairer.NoInteraction` et `Repairer.Rename` (callback de
+  prompt) ; `applyRename`/`renameModuleDir` renomment le dossier, remappent le résultat et les
+  installations de dépendances en attente.
+- `cmd/repair.go` : flag `--no-interaction` et helper `repairRenamePrompt` (placeholder =
+  suggestion, `tab` pour remplir).
+- `internal/module/view.go` + `cmd/create_view.go` : `ViewCreator`/`ViewSpec` et commande
+  `create view`.
+
+
 ## [v0.19.0] - 2026-09-20
 
 ### Added

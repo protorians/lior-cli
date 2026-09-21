@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,12 +135,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 3 — package manager detection (spec FR-001)
-	available := make([]string, 0, len(packageManagers))
-	for _, pm := range packageManagers {
-		if pkg.HasCommand(pm.name) {
-			available = append(available, pm.name)
+	available, _ := tui.RunWithSpinner(i18n.T("init.spinner.pm"), func() ([]string, error) {
+		found := make([]string, 0, len(packageManagers))
+		for _, pm := range packageManagers {
+			if pkg.HasCommand(pm.name) {
+				found = append(found, pm.name)
+			}
 		}
-	}
+		return found, nil
+	})
 	if len(available) == 0 {
 		return pkg.NewErrorWithFix(
 			i18n.T("cat.package_manager"),
@@ -190,18 +194,39 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if mergeClone {
 		cloneLabel = i18n.T("init.spinner.merge")
 	}
-	if _, err := tui.RunWithProgress(cloneLabel, func(report tui.ReportFunc) (struct{}, error) {
-		return struct{}{}, fetchTemplate(templateRepo(), initChannel, targetDir, report)
+
+	// Resolve the release metadata (version, channel, branch, commit) up front
+	// so the download line names exactly which build is installed, then reuse
+	// the resolved release to avoid a second GitHub API round-trip. The metadata
+	// is rendered as a muted line below the progress bar.
+	var resolvedRelease *pkg.ReleaseInfo
+	detail := ""
+	if owner, name := githubOwnerRepo(templateRepo()); owner != "" && name != "" {
+		info, err := pkg.ResolveRelease(owner, name, initChannel)
+		if err != nil {
+			debugf("resolving release metadata: %v", err)
+		} else {
+			resolvedRelease = &info
+			detail = releaseDetail(info)
+		}
+	}
+
+	if _, err := tui.RunWithProgressDetail(cloneLabel, detail, func(report tui.ReportFunc) (struct{}, error) {
+		return struct{}{}, fetchTemplate(templateRepo(), initChannel, targetDir, resolvedRelease, report)
 	}); err != nil {
 		return pkg.NewErrorWithFix(i18n.T("cat.network"), err.Error(),
 			i18n.T("init.error.clone.fix"), pkg.ExitNetwork)
 	}
 
-	// Step 5 — install dependencies
+	// Step 5 — install dependencies. Dependencies pinned to the explicit
+	// `latest` specifier in package.json are frequently ignored by a plain
+	// install, so they are forced afterwards.
 	if _, err := tui.RunWithSpinner(i18n.T("init.spinner.install"), func() (struct{}, error) {
 		return struct{}{}, runInstall(targetDir, installCmd)
 	}); err != nil {
 		warn(i18n.Tf("init.warn.install", err.Error()))
+	} else if _, err := pkg.ForceInstallLatest(targetDir, pmName); err != nil {
+		warn(i18n.Tf("init.warn.install_latest", err.Error()))
 	}
 
 	// Step 6 — write lorian.config.json
@@ -305,6 +330,21 @@ func confirmExistingDir(dir string, isCWD bool) (destAction, error) {
 	}
 }
 
+// releaseDetail builds the muted metadata line rendered below the download
+// progress bar: version, channel, branch and commit. Missing branch/commit
+// fields are reported with a localized placeholder.
+func releaseDetail(info pkg.ReleaseInfo) string {
+	branch := info.Branch
+	if branch == "" {
+		branch = i18n.T("init.release.unknown")
+	}
+	commit := info.Commit
+	if commit == "" {
+		commit = i18n.T("init.release.unknown")
+	}
+	return i18n.Tf("init.release.meta", info.Version, info.Channel, branch, commit)
+}
+
 // fetchTemplate populates dest with the template source for the given
 // channel. The repo argument accepts, in order of precedence:
 //
@@ -313,31 +353,48 @@ func confirmExistingDir(dir string, isCWD bool) (destAction, error) {
 //     resolved through the GitHub API and extracted;
 //   - any other value: treated as a direct ZIP download URL.
 //
-// report forwards download progress (bytes done/total) to the caller; it must
-// be safe to call from the network I/O goroutine.
-func fetchTemplate(repo, channel, dest string, report func(done, total int64)) error {
+// resolved, when non-nil, is a release already resolved by the caller (avoids a
+// second GitHub API round-trip). report forwards download progress (bytes
+// done/total) to the caller; it must be safe to call from the network I/O
+// goroutine.
+func fetchTemplate(repo, channel, dest string, resolved *pkg.ReleaseInfo, report func(done, total int64)) error {
 	if pkg.DirExists(repo) {
 		return pkg.CopyDir(repo, dest)
 	}
 	if owner, name := githubOwnerRepo(repo); owner != "" && name != "" {
+		if resolved != nil && resolved.Valid() {
+			return pkg.DownloadReleaseZip(*resolved, dest, report)
+		}
 		return pkg.FetchReleaseZip(owner, name, channel, "", dest, report)
 	}
 	return pkg.FetchReleaseZip("", "", channel, repo, dest, report)
 }
 
-// githubOwnerRepo parses a GitHub repository URL such as
-// `https://github.com/{owner}/{repo}` (with or without a trailing `.git`) into
-// its owner and repository name. Returns empty strings when not a GitHub URL.
+// githubOwnerRepo parses a GitHub repository reference such as
+// `https://github.com/{owner}/{repo}`, `github.com/{owner}/{repo}` or the
+// `{owner}/{repo}` shorthand (with or without a trailing `.git`) into its owner
+// and repository name. Returns empty strings when not a GitHub reference.
 func githubOwnerRepo(repo string) (owner, name string) {
 	repo = strings.TrimSuffix(strings.TrimSpace(repo), "/")
 	repo = strings.TrimSuffix(repo, ".git")
-	parts := strings.Split(repo, "/")
-	if len(parts) < 2 {
+	parsed, err := url.Parse(repo)
+	if err != nil {
 		return "", ""
 	}
-	owner = parts[len(parts)-2]
-	name = parts[len(parts)-1]
-	if owner == "" || name == "" || name == "github.com" {
+	if parsed.Scheme != "" {
+		if !strings.EqualFold(parsed.Host, "github.com") {
+			return "", ""
+		}
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	if parsed.Scheme == "" && len(parts) == 3 && strings.EqualFold(parts[0], "github.com") {
+		parts = parts[1:]
+	}
+	if len(parts) != 2 {
+		return "", ""
+	}
+	owner, name = parts[0], parts[1]
+	if owner == "" || name == "" {
 		return "", ""
 	}
 	return owner, name
@@ -357,7 +414,7 @@ func mergeTemplateInto(repo, channel, dest string, report func(done, total int64
 		return fmt.Errorf("failed to create a temporary directory: %w", err)
 	}
 	defer os.RemoveAll(tmp)
-	if err := fetchTemplate(repo, channel, tmp, report); err != nil {
+	if err := fetchTemplate(repo, channel, tmp, nil, report); err != nil {
 		return err
 	}
 	return pkg.CopyDir(tmp, dest)

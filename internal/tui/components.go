@@ -49,6 +49,31 @@ func (s *Styles) ProgressLine(label, bar string, pct float64) string {
 		bar + " " + s.Muted.Render(fmt.Sprintf("%3.0f%%", pct*100))
 }
 
+// ProgressLineBytes is the indeterminate counterpart of ProgressLine. It is
+// used when the download size is unknown: the bar sweeps and the right-hand
+// value reports the number of bytes streamed so far instead of a percentage.
+//
+//	Downloading the release
+//	████████████░░░░░░░░░░░░  12.4 MB
+func (s *Styles) ProgressLineBytes(label, bar string, bytes int64) string {
+	return s.Value.Render(label) + "\n" +
+		bar + " " + s.Muted.Render(formatBytes(bytes))
+}
+
+// formatBytes renders a byte count in a compact, human-readable form.
+func formatBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for v := n / unit; v >= unit; v /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
 // progressWidth returns the bar width that best fits the current terminal,
 // clamped to a comfortable range.
 func (s *Styles) progressWidth() int {

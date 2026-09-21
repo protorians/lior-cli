@@ -19,6 +19,15 @@ exec $LIORIAN --no-color check
 stderr 'Running static checks'
 stderr '\[fixture\] bun run lint \(ok\)'
 
+# TC-031b — script flags are forwarded verbatim, without requiring the `--`
+# separator: `-p` is not parsed (nor rejected) by the CLI (TFC-007/007b).
+exec $LIORIAN --no-color dev -p 5010 --experimental-https
+stderr '\[fixture\] bun run dev \(ok\) args=-p 5010 --experimental-https'
+
+# TC-031c — the optional `--` separator is dropped before forwarding.
+exec $LIORIAN --no-color dev -- --port 3000
+stderr '\[fixture\] bun run dev \(ok\) args=--port 3000'
+
 # TC-033 — `build` runs the pre-actions, then the command, then the post-actions.
 exec $LIORIAN --no-color build
 stderr '\[fixture\] bun run pre-build \(ok\)'
@@ -44,10 +53,10 @@ stderr '\[fixture\] bun run broken \(ko\)'
 stdout 'exit=42'
 
 # TC-037 — the pre-flight gate aborts `dev` when a module is in error:
-# the debug check runs first and, on error, cancels the command with its code.
+# the audit runs first and, on error, cancels the command with its code.
 mkdir -p library/modules/com.example.bad
 exec sh -c 'printf "{\"name\":\"bad\",\"version\":\"0.0.0\",\"entry\":\"index.tsx\"}\n" > library/modules/com.example.bad/manifest.json'
 exec sh -c '$LIORIAN --no-color dev; echo "exit=$?"'
-stderr 'Checking modules for build errors \(debug\)'
-stderr 'module debug check failed: 1 module\(s\) in error'
-stdout 'exit=10'
+stderr 'Checking module conformance \(audit\)'
+stderr 'module audit check failed:'
+stdout 'exit=1'

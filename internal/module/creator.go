@@ -184,16 +184,27 @@ func (c *Creator) MissingRequirements(manifest *Manifest) []string {
 	return missing
 }
 
-// ResolveDependencies installs the module dependencies (dependencies +
-// devDependencies) declared in the manifest by running the first available
-// package manager (bun → pnpm → yarn → npm) in the project root. It returns
-// the package manager name used, or "" (with no error) when none is available.
-func (c *Creator) ResolveDependencies() (string, error) {
+// ResolveDependencies installs the module dependencies declared in its
+// `package.json` (the manifest no longer carries `dependencies`/
+// `devDependencies`) by running the first available package manager
+// (bun → pnpm → yarn → npm) in the project root. Dependencies pinned to the
+// explicit `latest` specifier are then re-installed explicitly from the module
+// directory, since a plain install often ignores them. It returns the package
+// manager name used, or "" (with no error) when none is available.
+func (c *Creator) ResolveDependencies(moduleDir string) (string, error) {
 	pm := pkg.DetectPackageManager()
 	if pm == "" {
 		return "", nil
 	}
-	return pm, pkg.StreamCommandIn(c.Root, pm, "install")
+	if err := pkg.StreamCommandIn(c.Root, pm, "install"); err != nil {
+		return pm, err
+	}
+	if moduleDir != "" {
+		if _, err := pkg.ForceInstallLatest(moduleDir, pm); err != nil {
+			return pm, err
+		}
+	}
+	return pm, nil
 }
 
 // Create generates a module from the provided spec inside

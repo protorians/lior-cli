@@ -24,6 +24,7 @@ var embeddedTemplates embed.FS
 const (
 	embeddedModulePrefix = "mockups/hello-world"
 	embeddedPageFile     = "mockups/page.tsx"
+	embeddedViewFile     = "mockups/view.tsx"
 )
 
 // Environment variables overriding the embedded reference mockups.
@@ -34,6 +35,9 @@ const (
 	// EnvPageMockup points to a custom `src/app/<name>/page.tsx` template used
 	// when the module declaration declares a `uri`/`url`.
 	EnvPageMockup = "LIORIAN_PAGE_MOCKUP"
+	// EnvViewMockup points to a custom `<name>.view.tsx` template used by
+	// `liorian create view`.
+	EnvViewMockup = "LIORIAN_VIEW_MOCKUP"
 )
 
 // moduleMockupSource returns the custom module mockup directory to scaffold

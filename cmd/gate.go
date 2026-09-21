@@ -26,14 +26,16 @@ const (
 
 // gateChecks maps an application lifecycle command to the module health checks
 // required before it is proxied (spec docs/specs/liorian-toolchain.md, §5.7):
-// the modules must be healthy before the application starts or is built.
-//   - dev   → debug + test
-//   - build → debug + test + audit
-//   - start → debug + test + audit
+// the modules must be conformant before the application starts or is built.
+// The gate only audits conformance — the costly debug/test checks are left to
+// their dedicated commands.
+//   - dev   → audit
+//   - build → audit
+//   - start → audit
 var gateChecks = map[string][]string{
-	toolchain.Dev:   {gateDebug, gateTest},
-	toolchain.Build: {gateDebug, gateTest, gateAudit},
-	toolchain.Start: {gateDebug, gateTest, gateAudit},
+	toolchain.Dev:   {gateAudit},
+	toolchain.Build: {gateAudit},
+	toolchain.Start: {gateAudit},
 }
 
 // runToolchainGate runs the module health checks required before an

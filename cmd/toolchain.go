@@ -15,18 +15,45 @@ import (
 
 // toolchainCmd builds a passthrough command that proxies the package.json
 // script backing the given application lifecycle command (spec
-// docs/specs/liorian-toolchain.md). Arguments after "--" are forwarded to the
-// script; hooks configured in `lorian.config.json` run before/after it.
+// docs/specs/liorian-toolchain.md). Every argument — including flags such as
+// `-p` or `--experimental-https` — is forwarded verbatim to the script (an
+// optional `--` separator is accepted and dropped); hooks configured in
+// `lorian.config.json` run before/after it.
 func toolchainCmd(name string) *cobra.Command {
 	return &cobra.Command{
 		Use:   name + " [--] [args...]",
 		Short: i18n.T("cmd." + name + ".short"),
 		Long:  i18n.T("cmd." + name + ".long"),
 		Args:  cobra.ArbitraryArgs,
+		// The backing script owns these arguments: flags such as `-p` or
+		// `--experimental-https` must be forwarded verbatim instead of being
+		// parsed (and rejected) by the CLI. Global flags placed before the
+		// command (`liorian --no-color dev …`) are still parsed by Cobra
+		// because the root command traverses its children first.
+		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+				return cmd.Help()
+			}
 			return runToolchain(cmd, name, args)
 		},
 	}
+}
+
+// forwardArgs normalises the raw arguments of a passthrough command: an
+// optional `--` separator is dropped so the remaining tokens are forwarded
+// verbatim to the underlying script (`liorian dev -- --port 3000` and
+// `liorian dev --port 3000` are equivalent).
+func forwardArgs(args []string) []string {
+	for i, a := range args {
+		if a == "--" {
+			out := make([]string, 0, len(args)-1)
+			out = append(out, args[:i]...)
+			out = append(out, args[i+1:]...)
+			return out
+		}
+	}
+	return args
 }
 
 var (
@@ -69,7 +96,7 @@ func runToolchain(cmd *cobra.Command, name string, args []string) error {
 
 	_, runErr := tui.RunWithSteps(i18n.Tf("toolchain.spinner."+name), func(ctx context.Context, report func(tui.Step)) (struct{}, error) {
 		r.Reporter = report
-		return struct{}{}, r.Execute(ctx, name, args)
+		return struct{}{}, r.Execute(ctx, name, forwardArgs(args))
 	})
 	if errors.Is(runErr, tui.ErrCancelled) {
 		return pkg.NewError(i18n.T("cat.toolchain"), i18n.T("toolchain.cancelled"), pkg.ExitCancelled)

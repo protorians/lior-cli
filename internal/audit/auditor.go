@@ -217,11 +217,13 @@ func (a *Auditor) auditDependencies(name string, res *module.Result) {
 			fmt.Sprintf("requirement %q exists", req), module.LevelError)
 	}
 
-	// Check that listed npm dependencies are installed (spec rule
-	// « Toutes les dépendances npm sont installées »). The previous duplicate
-	// check iterated a map — duplicate keys are impossible by construction, so
-	// it could never trigger. Installed-ness is the real, verifiable rule.
-	for dep := range manifest.Dependencies {
+	// Check that the npm dependencies declared in the module `package.json`
+	// are installed (spec rule « Toutes les dépendances npm sont installées »).
+	// The manifest no longer carries `dependencies`/`devDependencies`: the
+	// module's `package.json` is the single source of truth.
+	moduleDir := filepath.Join(a.Root, config.ExternalModulesDir, name)
+	nodePkg := pkg.LoadNodePackage(filepath.Join(moduleDir, "package.json"))
+	for _, dep := range nodePkg.RuntimeDependencyNames() {
 		depDir := filepath.Join(a.Root, "node_modules", filepath.FromSlash(dep))
 		addLevel(res, "dependencies", dep, pkg.DirExists(depDir),
 			fmt.Sprintf("dependency %q installed", dep), module.LevelError)

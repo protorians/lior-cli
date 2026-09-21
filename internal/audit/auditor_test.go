@@ -19,13 +19,11 @@ func createTestModule(t *testing.T, root, id string) {
 	if _, err := creator.Create(module.ModuleSpec{Domain: "mod.liorian." + id, ID: id, Description: "Test module"}); err != nil {
 		t.Fatalf("Creator.Create(%q): %v", id, err)
 	}
-	// Stub every declared dependency in node_modules/ so the module audits
-	// cleanly, mirroring an installed project.
-	manifest, err := module.LoadManifest(filepath.Join(root, config.ExternalModulesDir, "mod.liorian."+id, config.ManifestFileName))
-	if err != nil {
-		t.Fatalf("LoadManifest: %v", err)
-	}
-	for dep := range manifest.Dependencies {
+	// Stub every dependency declared in the module package.json in
+	// node_modules/ so the module audits cleanly, mirroring an installed
+	// project.
+	nodePkg := pkg.LoadNodePackage(filepath.Join(root, config.ExternalModulesDir, "mod.liorian."+id, "package.json"))
+	for _, dep := range nodePkg.DependencyNames() {
 		depDir := filepath.Join(root, "node_modules", filepath.FromSlash(dep))
 		if err := os.MkdirAll(depDir, 0o755); err != nil {
 			t.Fatalf("création de node_modules/%s: %v", dep, err)

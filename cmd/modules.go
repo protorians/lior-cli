@@ -32,6 +32,18 @@ func requireProjectRoot() (string, error) {
 	return root, nil
 }
 
+// relToRoot returns path relative to the project root for display purposes,
+// falling back to the original path when it cannot be made relative.
+func relToRoot(root, path string) string {
+	if path == "" {
+		return path
+	}
+	if rel, err := filepath.Rel(root, path); err == nil {
+		return rel
+	}
+	return path
+}
+
 // listModules returns the module names present in `library/modules/`.
 func listModules(root string) ([]string, error) {
 	dir := filepath.Join(root, config.ExternalModulesDir)
