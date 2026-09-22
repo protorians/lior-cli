@@ -22,20 +22,59 @@ All notable changes to this project will be documented in this file.
   confirmation sauf `--force`. `variables set` crée la variable si absente, la met à jour sinon.
 - **Validation SemVer des canaux** — `module channels publish <canal> <version>` rejette toute
   version non-SemVer (`pkg.IsSemver`) et tout canal inconnu parmi `ALPHA|BETA|NIGHTLY|RC|RELEASE`.
+- **Cycle de vie complété (spec `module-lifecycle` §1–14)** — les ressources restantes de la spec
+  disposent désormais d'une commande CLI : `dev-builds list|add|delete`, `fingerprints
+  list|add|delete`, `caches list|purge|delete`, ainsi que les mutations manquantes
+  `knowledge delete`, `workflow add|update`, `requirements delete`,
+  `signing-keys create|delete` et `accreditations delete` (avec `--status`/`--expires-at`).
+  Les identifiants sont passés via `--id` (non interactif) et les suppressions/purges exigent
+  `--force`.
+- **Signature des archives à la publication** — `liorian publish` signe désormais l'archive
+  `.SenMod` avec la clé de signature locale avant l'envoi et vérifie la signature produite ; en
+  l'absence de clé, la publication se poursuit non signée avec un avertissement (spec §5.6 /
+  SEC-009).
+- **Flag `--color`** — force l'activation des couleurs (profil le plus riche supporté par le
+  terminal), y compris lorsque la sortie est redirigée ou que `NO_COLOR` est défini. `--no-color`
+  reste prioritaire lorsque les deux flags sont fournis ; la préférence est persistée dans
+  `lorian.config.json` sous `cli.noColor`.
+- **Révocation OAuth2 à la déconnexion** — `liorian disconnect` révoque les jetons d'accès et de
+  rafraîchissement auprès de l'endpoint `/oauth/revoke` (RFC 7009), en meilleur effort
+  (spec §8.1 / §6.3).
+- **Developer Store adossé à `liorian-connect`** — le store résout sa base URL depuis
+  `app.config.json` (`liorian-connect`) ou la variable `LIORIAN_CONNECT_API`, et expose des
+  métadonnées enrichies : statut du produit, développeur et dernière version publiée par module.
+
+### Fixed
+- **Erreurs applicatives Raiton en HTTP 200** — une enveloppe Raiton `error: true` (validation
+  DTO, erreur métier) renvoyée avec un statut HTTP 200 est désormais remontée comme `APIError`
+  avec son code et son message, au lieu de produire un `data: null` silencieux et une 404
+  trompeuse en aval.
 
 ### Technical Details
-- `internal/store/platform.go` : opérations d'écriture du cycle de vie (`CreateKnowledgeArticle`,
-  `PublishKnowledgeArticle`, `DeleteWorkflow`, `RollbackChannel`/`PauseChannel`,
-  `SaveModulePlatforms`, `CreateRequirement`, `RotateSigningKey`, `CreateAccreditation`,
-  `Create`/`Update`/`DeleteEnvironmentVariable`).
+- `internal/store/platform.go` : modèles `DevBuild`, `Fingerprint`, `CacheEntry` et opérations
+  d'écriture du cycle de vie (`CreateKnowledgeArticle`, `PublishKnowledgeArticle`,
+  `DeleteKnowledgeArticle`, `Create`/`Update`/`DeleteWorkflow`, `Create`/`DeleteDevBuild`,
+  `Create`/`DeleteFingerprint`, `Purge`/`DeleteCache`, `RollbackChannel`/`PauseChannel`,
+  `SaveModulePlatforms`, `Create`/`DeleteRequirement`, `Create`/`Rotate`/`DeleteSigningKey`,
+  `Create`/`DeleteAccreditation`, `Create`/`Update`/`DeleteEnvironmentVariable`).
 - `cmd/module.go` : arborescence de sous-commandes, helpers `normalizeChannel`, `platformRows`,
-  `findVariable`, `workflowLabel`, sélections interactives (`selectKnowledgeArticle`,
-  `selectWorkflow`), réutilisation de `slugify` (`cmd/init_env.go`).
+  `findVariable`, `workflowLabel`, `articleTitle`, `requirementLabel`, `upperAll`, sélections
+  interactives (`selectKnowledgeArticle`, `selectWorkflow`), réutilisation de `slugify`
+  (`cmd/init_env.go`).
 - `internal/pkg/semver.go` : ajout de `IsSemver` (tolérant au préfixe `v`).
-- `e2e/mockapi` : endpoints du cycle de vie pris en charge (knowledge, workflows, channels,
-  platforms, requirements, signing-keys, accreditations, environment-variables — étatful —
-  github, observer, usage) ; nouveau scénario `16_module.txtar` (TC-030).
+- `e2e/mockapi` : endpoints du cycle de vie pris en charge (knowledge, workflows, dev-builds,
+  channels, fingerprints, caches, platforms, requirements, signing-keys, accreditations,
+  environment-variables — étatful — github, observer, usage) ; scénario `16_module.txtar` (TC-030).
 - `internal/i18n/locales` : clés FR/EN des nouvelles commandes et messages.
+- `internal/auth/oauth.go` : `RevokeToken` (RFC 7009, tolérant au HTTP 400).
+- `cmd/publish.go` : `signForPublish` (signature + vérification via `internal/signing`).
+- `cmd/root.go` / `cmd/localize.go` : flag `--color`, `colorFromArgs` /
+  `colorPreferenceFromArgs`, `forcedColorProfile`.
+- `internal/pkg/http.go` : champs `error` / `code` de l'enveloppe Raiton pris en compte sur les
+  réponses 2xx.
+- `internal/store/publisher.go` : client Developer Store dédié (`liorian-connect`),
+  `LIORIAN_CONNECT_API`, métadonnées produit enrichies.
+- `internal/appconfig/appconfig.go` : constante `ConnectAppID`.
 
 ## [v0.21.0] - 2026-09-21
 

@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/protorians/lior-cli/internal/appconfig"
 	"github.com/protorians/lior-cli/internal/auth"
 	"github.com/protorians/lior-cli/internal/module"
 	"github.com/protorians/lior-cli/internal/pkg"
@@ -18,6 +20,9 @@ import (
 
 // Developer store API paths (Raiton envelope, `/api` prefix).
 const modulesPath = "/api/developer-store/modules"
+
+// EnvConnectAPI overrides the resolved Developer Store (liorian-connect) base URL.
+const EnvConnectAPI = "LIORIAN_CONNECT_API"
 
 // DeveloperModuleType enum values exposed by the store.
 const (
@@ -45,6 +50,9 @@ type Product struct {
 	Icon              string  `json:"icon,omitempty"`
 	PrimaryCategory   string  `json:"primaryCategory"`
 	SecondaryCategory string  `json:"secondaryCategory,omitempty"`
+	Status            string  `json:"status,omitempty"`
+	DeveloperSlug     string  `json:"developerSlug,omitempty"`
+	DeveloperName     string  `json:"developerName,omitempty"`
 	IsDeprecated      bool    `json:"isDeprecated"`
 	RemovedAt         *string `json:"removedAt,omitempty"`
 }
@@ -101,28 +109,71 @@ type PublishResponse struct {
 
 // Client talks to the developer-store API.
 type Client struct {
+	// Connector authenticates against liorian-api-core (sign-in, refresh).
 	Connector *auth.Connector
+	// HTTP is the Developer Store (liorian-api-connect) client. When nil it
+	// falls back to the connector client (legacy behaviour).
+	HTTP *pkg.Client
 }
 
-// NewClient builds a store client with the current session token.
+// NewClient builds a store client with the current session token. The Developer
+// Store lives on `liorian-api-connect` (spec §8.2): its base URL is resolved
+// from `app.config.json` (`liorian-connect`) or `LIORIAN_CONNECT_API`, falling
+// back to the auth connector when unconfigured.
 func NewClient() *Client {
-	return &Client{Connector: auth.NewConnector()}
+	connector := auth.NewConnector()
+	client := &Client{Connector: connector}
+	if base := connectBaseURL(); base != "" {
+		client.HTTP = pkg.NewClientWithTimeout(base, connectTimeout())
+		client.HTTP.Token = connector.Client.Token
+	}
+	return client
+}
+
+// connectBaseURL resolves the Developer Store base URL (env override, then the
+// `liorian-connect` entry of the workspace registry).
+func connectBaseURL() string {
+	if v := strings.TrimSpace(os.Getenv(EnvConnectAPI)); v != "" {
+		return v
+	}
+	base, _ := appconfig.Resolved("").BaseURL(appconfig.ConnectAppID)
+	return strings.TrimSpace(base)
+}
+
+// connectTimeout resolves the Developer Store API timeout.
+func connectTimeout() time.Duration {
+	return appconfig.Resolved("").Timeout(appconfig.ConnectAppID)
+}
+
+// http returns the client used for Developer Store calls.
+func (c *Client) http() *pkg.Client {
+	if c.HTTP != nil {
+		return c.HTTP
+	}
+	return c.Connector.Client
 }
 
 // SetToken sets the bearer token for API calls.
 func (c *Client) SetToken(token string) {
 	c.Connector.Client.Token = token
+	if c.HTTP != nil {
+		c.HTTP.Token = token
+	}
 }
 
 // WithAutoRefresh wires automatic 401-retry token refresh to the underlying
 // HTTP client. When an API call returns HTTP 401, the session is refreshed
 // via POST /api/auth/sessions/refresh and the request is retried once.
 func (c *Client) WithAutoRefresh(sess *auth.Session) {
-	c.Connector.Client.TokenRefreshFunc = func() (string, error) {
+	refresh := func() (string, error) {
 		if err := sess.Refresh(context.Background(), c.Connector); err != nil {
 			return "", err
 		}
 		return sess.AccessToken, nil
+	}
+	c.Connector.Client.TokenRefreshFunc = refresh
+	if c.HTTP != nil {
+		c.HTTP.TokenRefreshFunc = refresh
 	}
 }
 
@@ -130,14 +181,16 @@ func (c *Client) WithAutoRefresh(sess *auth.Session) {
 // The response may be a bare array or the paginated envelope `{items, total, …}`.
 func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 	var raw json.RawMessage
-	if err := c.Connector.Client.Do(ctx, "GET", modulesPath, nil, &raw); err != nil {
+	if err := c.http().Do(ctx, "GET", modulesPath, nil, &raw); err != nil {
 		return nil, fmt.Errorf("failed to fetch modules: %w", err)
 	}
 	var products []Product
 	if err := json.Unmarshal(raw, &products); err == nil {
 		modules := make([]RemoteModule, 0, len(products))
 		for _, p := range products {
-			modules = append(modules, remoteFromProduct(p))
+			mod := remoteFromProduct(p)
+			mod.Version = c.latestVersion(ctx, p.ID)
+			modules = append(modules, mod)
 		}
 		return modules, nil
 	}
@@ -149,7 +202,9 @@ func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 	}
 	modules := make([]RemoteModule, 0, len(page.Items))
 	for _, p := range page.Items {
-		modules = append(modules, remoteFromProduct(p))
+		mod := remoteFromProduct(p)
+		mod.Version = c.latestVersion(ctx, p.ID)
+		modules = append(modules, mod)
 	}
 	return modules, nil
 }
@@ -157,23 +212,27 @@ func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 // GetModule returns a remote module by its id (product id).
 func (c *Client) GetModule(ctx context.Context, id string) (*RemoteModuleResponse, error) {
 	var product Product
-	if err := c.Connector.Client.Do(ctx, "GET", modulesPath+"/"+url.PathEscape(id), nil, &product); err != nil {
+	if err := c.http().Do(ctx, "GET", modulesPath+"/"+url.PathEscape(id), nil, &product); err != nil {
 		return nil, fmt.Errorf("failed to fetch module %q: %w", id, err)
 	}
 	mod := remoteFromProduct(product)
 	mod.Version = c.latestVersion(ctx, product.ID)
-	return &RemoteModuleResponse{
-		Token:   mod.Token,
-		Name:    mod.Name,
-		Version: mod.Version,
-		Status:  mod.Status,
-	}, nil
+	response := &RemoteModuleResponse{
+		Token:       mod.Token,
+		Name:        mod.Name,
+		Description: mod.Description,
+		Version:     mod.Version,
+		Status:      mod.Status,
+	}
+	response.Publisher.ID = product.AccountID
+	response.Publisher.Name = product.DeveloperName
+	return response, nil
 }
 
 // fetchVersions returns the published versions of a product (best-effort).
 func (c *Client) fetchVersions(ctx context.Context, productID string) []Version {
 	var raw json.RawMessage
-	if err := c.Connector.Client.Do(ctx, "GET", modulesPath+"/"+productID+"/versions", nil, &raw); err != nil {
+	if err := c.http().Do(ctx, "GET", modulesPath+"/"+productID+"/versions", nil, &raw); err != nil {
 		return nil
 	}
 	var versions []Version
@@ -217,7 +276,7 @@ func (c *Client) nextBuildNumber(ctx context.Context, productID string) int {
 
 // UpdateModule syncs a module's remote metadata via PUT /api/developer-store/modules/:id.
 func (c *Client) UpdateModule(ctx context.Context, id string, m *module.Manifest) error {
-	if err := c.Connector.Client.Do(ctx, "PUT", modulesPath+"/"+url.PathEscape(id), updateProductRequest(m), nil); err != nil {
+	if err := c.http().Do(ctx, "PUT", modulesPath+"/"+url.PathEscape(id), updateProductRequest(m), nil); err != nil {
 		return fmt.Errorf("failed to update module %q: %w", id, err)
 	}
 	return nil
@@ -255,7 +314,7 @@ func (c *Client) Publish(ctx context.Context, archivePath string, manifest *modu
 
 func (c *Client) createProduct(ctx context.Context, m *module.Manifest) (*Product, error) {
 	var out Product
-	if err := c.Connector.Client.Do(ctx, "POST", modulesPath, createProductRequest(m), &out); err != nil {
+	if err := c.http().Do(ctx, "POST", modulesPath, createProductRequest(m), &out); err != nil {
 		return nil, fmt.Errorf("failed to create the remote module: %w", err)
 	}
 	return &out, nil
@@ -269,7 +328,7 @@ func (c *Client) resolveProduct(ctx context.Context, m *module.Manifest) (string
 	id := strings.TrimSpace(m.Token)
 	if id != "" {
 		var product Product
-		err := c.Connector.Client.Do(ctx, "GET", modulesPath+"/"+url.PathEscape(id), nil, &product)
+		err := c.http().Do(ctx, "GET", modulesPath+"/"+url.PathEscape(id), nil, &product)
 		if err == nil {
 			return product.ID, nil
 		}
@@ -303,7 +362,7 @@ func (c *Client) createVersion(ctx context.Context, productID string, m *module.
 		SupportedRuntimes: supportedRuntimes(m),
 	}
 	var out Version
-	if err := c.Connector.Client.Do(ctx, "POST", modulesPath+"/"+productID+"/versions", body, &out); err != nil {
+	if err := c.http().Do(ctx, "POST", modulesPath+"/"+productID+"/versions", body, &out); err != nil {
 		return nil, fmt.Errorf("failed to create the version: %w", err)
 	}
 	return &out, nil
@@ -327,7 +386,7 @@ func (c *Client) declareArtifact(ctx context.Context, productID, versionID, arch
 		SizeBytes: int64(len(data)),
 	}
 	var out Artifact
-	if err := c.Connector.Client.Do(ctx, "POST",
+	if err := c.http().Do(ctx, "POST",
 		modulesPath+"/"+productID+"/versions/"+versionID+"/artifact", body, &out); err != nil {
 		return nil, fmt.Errorf("failed to declare the artifact: %w", err)
 	}
@@ -477,9 +536,9 @@ func supportedRuntimes(m *module.Manifest) []string {
 
 // remoteFromProduct maps a Product entity to the lightweight RemoteModule shape.
 func remoteFromProduct(p Product) RemoteModule {
-	status := ""
-	if p.IsDeprecated {
+	status := strings.TrimSpace(p.Status)
+	if status == "" && p.IsDeprecated {
 		status = "DEPRECATED"
 	}
-	return RemoteModule{Token: p.ID, Name: p.Name, Status: status}
+	return RemoteModule{Token: p.ID, Name: p.Name, Description: p.Description, Status: status}
 }

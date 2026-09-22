@@ -36,7 +36,10 @@ func init() {
 		moduleListCmd,
 		moduleKnowledgeCmd,
 		moduleWorkflowsCmd,
+		moduleDevBuildsCmd,
 		moduleChannelsCmd,
+		moduleFingerprintsCmd,
+		moduleCachesCmd,
 		modulePlatformsCmd,
 		moduleRequirementsCmd,
 		moduleSigningKeysCmd,
@@ -143,6 +146,7 @@ var (
 	flagKnowledgePublish   bool
 	flagKnowledgeAsDraft   bool
 	flagKnowledgeArticleID string
+	flagKnowledgeForce     bool
 )
 
 var moduleKnowledgeCmd = &cobra.Command{
@@ -231,6 +235,61 @@ offered (non-interactive shells require --id).`,
 	},
 }
 
+var moduleKnowledgeDeleteCmd = &cobra.Command{
+	Use:   "delete [module]",
+	Short: "Delete a documentation article",
+	Long: `Deletes a documentation article. When no article id is supplied, an
+interactive selection is offered (use --id in non-interactive shells).`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		articleID := strings.TrimSpace(flagKnowledgeArticleID)
+		name := articleID
+		if articleID == "" {
+			articles, err := client.ListKnowledgeArticles(context.Background(), token)
+			if err != nil {
+				return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+			}
+			selected, err := selectKnowledgeArticle(articles)
+			if err != nil {
+				return err
+			}
+			articleID = selected
+			name = articleTitle(articles, selected)
+		}
+		if !flagKnowledgeForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), name), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		if err := client.DeleteKnowledgeArticle(context.Background(), token, articleID); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Connaissances", [][2]string{{name, i18n.T("module.deleted")}})
+		return nil
+	},
+}
+
+func articleTitle(articles []store.KnowledgeArticle, id string) string {
+	for _, a := range articles {
+		if a.ID == id {
+			return a.Title
+		}
+	}
+	return id
+}
+
 func runModuleKnowledgeList(cmd *cobra.Command, args []string) error {
 	token, err := requireModuleToken(args)
 	if err != nil {
@@ -279,8 +338,14 @@ func selectKnowledgeArticle(articles []store.KnowledgeArticle) (string, error) {
 // --- workflows -------------------------------------------------------------
 
 var (
-	flagWorkflowRunID string
-	flagWorkflowForce bool
+	flagWorkflowRunID    string
+	flagWorkflowForce    bool
+	flagWorkflowName     string
+	flagWorkflowSource   string
+	flagWorkflowTrigger  string
+	flagWorkflowStatus   string
+	flagWorkflowPath     string
+	flagWorkflowUpdateID string
 )
 
 var moduleWorkflowsCmd = &cobra.Command{
@@ -329,6 +394,73 @@ an interactive selection is offered (use --id in non-interactive shells).`,
 		}
 		printRows("Workflows", [][2]string{
 			{workflow.Name, fmt.Sprintf("%s · %d exécutions", workflow.Status, workflow.RunCount)},
+		})
+		return nil
+	},
+}
+
+var moduleWorkflowAddCmd = &cobra.Command{
+	Use:   "add <name>",
+	Short: "Declare a CI/CD workflow",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		source := strings.TrimSpace(flagWorkflowSource)
+		if source == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.workflow_source"),
+				i18n.T("module.error.workflow_source.fix"), pkg.ExitError)
+		}
+		token, err := requireModuleToken(nil)
+		if err != nil {
+			return err
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		body := store.SaveWorkflowRequest{
+			Name:         strings.TrimSpace(args[0]),
+			Source:       source,
+			Trigger:      strings.TrimSpace(flagWorkflowTrigger),
+			Status:       strings.ToUpper(strings.TrimSpace(flagWorkflowStatus)),
+			WorkflowPath: strings.TrimSpace(flagWorkflowPath),
+		}
+		workflow, err := client.CreateWorkflow(context.Background(), token, body)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Workflows", [][2]string{
+			{workflow.Name, fmt.Sprintf("%s · %s · %d exécutions", workflow.Source, workflow.Status, workflow.RunCount)},
+		})
+		return nil
+	},
+}
+
+var moduleWorkflowUpdateCmd = &cobra.Command{
+	Use:   "update <workflowId>",
+	Short: "Update a CI/CD workflow declaration",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		token, err := requireModuleToken(nil)
+		if err != nil {
+			return err
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		body := store.SaveWorkflowRequest{
+			Name:         strings.TrimSpace(flagWorkflowName),
+			Source:       strings.TrimSpace(flagWorkflowSource),
+			Trigger:      strings.TrimSpace(flagWorkflowTrigger),
+			Status:       strings.ToUpper(strings.TrimSpace(flagWorkflowStatus)),
+			WorkflowPath: strings.TrimSpace(flagWorkflowPath),
+		}
+		workflow, err := client.UpdateWorkflow(context.Background(), token, strings.TrimSpace(args[0]), body)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Workflows", [][2]string{
+			{workflow.Name, fmt.Sprintf("%s · %s · %d exécutions", workflow.Source, workflow.Status, workflow.RunCount)},
 		})
 		return nil
 	},
@@ -673,6 +805,8 @@ var (
 	flagRequirementVersion string
 	flagRequirementKind    string
 	flagRequirementReason  string
+	flagRequirementID      string
+	flagRequirementForce   bool
 )
 
 var moduleRequirementsCmd = &cobra.Command{
@@ -733,6 +867,56 @@ var moduleRequirementsAddCmd = &cobra.Command{
 	},
 }
 
+var moduleRequirementsDeleteCmd = &cobra.Command{
+	Use:   "delete [module]",
+	Short: "Delete a module dependency declaration",
+	Long: `Deletes a required or optional dependency. The dependency id is passed via
+--id (or selected from an interactive list).`,
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		requirementID := strings.TrimSpace(flagRequirementID)
+		if requirementID == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.requirement_id"),
+				i18n.T("module.error.requirement_id.fix"), pkg.ExitError)
+		}
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		name := requirementID
+		if requirements, err := client.ListRequirements(context.Background(), token); err == nil {
+			name = requirementLabel(requirements, requirementID)
+		}
+		if !flagRequirementForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), name), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		if err := client.DeleteRequirement(context.Background(), token, requirementID); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Modules requis & optionnels", [][2]string{{name, i18n.T("module.deleted")}})
+		return nil
+	},
+}
+
+func requirementLabel(requirements []store.ModuleRequirement, id string) string {
+	for _, r := range requirements {
+		if r.ID == id {
+			return fmt.Sprintf("%s (%s)", r.Name, r.ModuleID)
+		}
+	}
+	return id
+}
+
 func runModuleRequirementsList(cmd *cobra.Command, args []string) error {
 	token, err := requireModuleToken(args)
 	if err != nil {
@@ -756,7 +940,12 @@ func runModuleRequirementsList(cmd *cobra.Command, args []string) error {
 
 // --- signing keys ----------------------------------------------------------
 
-var flagSigningKeyForce bool
+var (
+	flagSigningKeyForce     bool
+	flagSigningKeyAlgorithm string
+	flagSigningKeyPublicKey string
+	flagSigningKeyModule    string
+)
 
 var moduleSigningKeysCmd = &cobra.Command{
 	Use:   "signing-keys",
@@ -776,6 +965,70 @@ var moduleSigningKeysCmd = &cobra.Command{
 			rows = append(rows, [2]string{k.KeyID, fmt.Sprintf("%s · %s", k.Algorithm, k.Status)})
 		}
 		printRows("Clés de signature", rows)
+		return nil
+	},
+}
+
+var moduleSigningKeyCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Issue a new signing key",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		algorithm := strings.TrimSpace(flagSigningKeyAlgorithm)
+		if algorithm == "" {
+			algorithm = "Ed25519"
+		}
+		moduleToken := ""
+		if len(flagSigningKeyModule) > 0 {
+			token, err := requireModuleToken([]string{flagSigningKeyModule})
+			if err != nil {
+				return err
+			}
+			moduleToken = token
+		}
+		body := store.CreateSigningKeyRequest{
+			Algorithm: algorithm,
+			ProductID: moduleToken,
+			PublicKey: strings.TrimSpace(flagSigningKeyPublicKey),
+		}
+		key, err := client.CreateSigningKey(context.Background(), body)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Clés de signature", [][2]string{
+			{key.KeyID, fmt.Sprintf("%s · %s", key.Algorithm, key.Status)},
+		})
+		return nil
+	},
+}
+
+var moduleSigningKeyDeleteCmd = &cobra.Command{
+	Use:   "delete <keyId>",
+	Short: "Revoke a signing key",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		keyID := strings.TrimSpace(args[0])
+		if !flagSigningKeyForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), keyID), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		if err := client.DeleteSigningKey(context.Background(), keyID); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Clés de signature", [][2]string{{keyID, i18n.T("module.deleted")}})
 		return nil
 	},
 }
@@ -805,6 +1058,9 @@ var moduleSigningKeyRotateCmd = &cobra.Command{
 var (
 	flagAccreditationKind      string
 	flagAccreditationReference string
+	flagAccreditationStatus    string
+	flagAccreditationExpiresAt string
+	flagAccreditationForce     bool
 )
 
 var moduleAccreditationsCmd = &cobra.Command{
@@ -837,7 +1093,9 @@ var moduleAccreditationsAddCmd = &cobra.Command{
 		body := store.CreateAccreditationRequest{
 			Kind:      kind,
 			Name:      strings.TrimSpace(args[0]),
+			Status:    strings.ToUpper(strings.TrimSpace(flagAccreditationStatus)),
 			Reference: strings.TrimSpace(flagAccreditationReference),
+			ExpiresAt: strings.TrimSpace(flagAccreditationExpiresAt),
 		}
 		accreditation, err := client.CreateAccreditation(context.Background(), body)
 		if err != nil {
@@ -846,6 +1104,33 @@ var moduleAccreditationsAddCmd = &cobra.Command{
 		printRows("Accréditations", [][2]string{
 			{accreditation.Name, fmt.Sprintf("%s · %s", accreditation.Kind, accreditation.Status)},
 		})
+		return nil
+	},
+}
+
+var moduleAccreditationsDeleteCmd = &cobra.Command{
+	Use:   "delete <accreditationId>",
+	Short: "Remove an account accreditation",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		id := strings.TrimSpace(args[0])
+		if !flagAccreditationForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), id), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		if err := client.DeleteAccreditation(context.Background(), id); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Accréditations", [][2]string{{id, i18n.T("module.deleted")}})
 		return nil
 	},
 }
@@ -1148,6 +1433,364 @@ func linkGithub(client *store.Client, moduleToken string) error {
 	return nil
 }
 
+// --- dev builds ------------------------------------------------------------
+
+var (
+	flagDevBuildRuntime  string
+	flagDevBuildPlatform string
+	flagDevBuildState    string
+	flagDevBuildID       string
+	flagDevBuildForce    bool
+)
+
+var moduleDevBuildsCmd = &cobra.Command{
+	Use:   "dev-builds [module]",
+	Short: "Manage a module's development builds",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runModuleDevBuildsList,
+}
+
+var moduleDevBuildsListCmd = &cobra.Command{
+	Use:   "list [module]",
+	Short: "List a module's development builds",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runModuleDevBuildsList,
+}
+
+var moduleDevBuildsAddCmd = &cobra.Command{
+	Use:   "add [module]",
+	Short: "Declare a development build",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		runtimeVersion := strings.TrimSpace(flagDevBuildRuntime)
+		if runtimeVersion == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.devbuild_runtime"),
+				i18n.T("module.error.devbuild_runtime.fix"), pkg.ExitError)
+		}
+		if !pkg.IsSemver(runtimeVersion) {
+			return pkg.NewError(i18n.T("cat.input"), i18n.Tf("module.error.semver", runtimeVersion), pkg.ExitError)
+		}
+		platform := strings.ToUpper(strings.TrimSpace(flagDevBuildPlatform))
+		if platform == "" {
+			platform = "BUN"
+		}
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		body := store.SaveDevBuildRequest{
+			RuntimeVersion: runtimeVersion,
+			Platform:       platform,
+			ArtifactState:  strings.ToUpper(strings.TrimSpace(flagDevBuildState)),
+		}
+		build, err := client.CreateDevBuild(context.Background(), token, body)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Builds de développement", [][2]string{
+			{build.RuntimeVersion, fmt.Sprintf("%s · %s", build.Platform, build.ArtifactState)},
+		})
+		return nil
+	},
+}
+
+var moduleDevBuildsDeleteCmd = &cobra.Command{
+	Use:   "delete [module]",
+	Short: "Delete a development build",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		buildID := strings.TrimSpace(flagDevBuildID)
+		if buildID == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.devbuild_id"),
+				i18n.T("module.error.devbuild_id.fix"), pkg.ExitError)
+		}
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		if !flagDevBuildForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), buildID), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		if err := client.DeleteDevBuild(context.Background(), token, buildID); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Builds de développement", [][2]string{{buildID, i18n.T("module.deleted")}})
+		return nil
+	},
+}
+
+func runModuleDevBuildsList(cmd *cobra.Command, args []string) error {
+	token, err := requireModuleToken(args)
+	if err != nil {
+		return err
+	}
+	client, err := connectedClient()
+	if err != nil {
+		return err
+	}
+	builds, err := client.ListDevBuilds(context.Background(), token)
+	if err != nil {
+		return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+	}
+	rows := make([][2]string, 0, len(builds))
+	for _, b := range builds {
+		rows = append(rows, [2]string{b.RuntimeVersion, fmt.Sprintf("%s · %s", b.Platform, b.ArtifactState)})
+	}
+	printRows("Builds de développement", rows)
+	return nil
+}
+
+// --- fingerprints ----------------------------------------------------------
+
+var (
+	flagFingerprintHash     string
+	flagFingerprintRuntimes []string
+	flagFingerprintChannels []string
+	flagFingerprintID       string
+	flagFingerprintForce    bool
+)
+
+var moduleFingerprintsCmd = &cobra.Command{
+	Use:   "fingerprints [module]",
+	Short: "Manage a module's runtime fingerprints",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runModuleFingerprintsList,
+}
+
+var moduleFingerprintsListCmd = &cobra.Command{
+	Use:   "list [module]",
+	Short: "List a module's runtime fingerprints",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runModuleFingerprintsList,
+}
+
+var moduleFingerprintsAddCmd = &cobra.Command{
+	Use:   "add [module]",
+	Short: "Declare a runtime fingerprint",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		hash := strings.TrimSpace(flagFingerprintHash)
+		if hash == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.fingerprint_hash"),
+				i18n.T("module.error.fingerprint_hash.fix"), pkg.ExitError)
+		}
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		body := store.SaveFingerprintRequest{
+			Hash:            hash,
+			RuntimeVersions: flagFingerprintRuntimes,
+			Channels:        upperAll(flagFingerprintChannels),
+		}
+		fingerprint, err := client.CreateFingerprint(context.Background(), token, body)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Empreintes", [][2]string{
+			{fingerprint.Hash, strings.Join(fingerprint.Channels, ", ")},
+		})
+		return nil
+	},
+}
+
+var moduleFingerprintsDeleteCmd = &cobra.Command{
+	Use:   "delete [module]",
+	Short: "Delete a runtime fingerprint",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		fingerprintID := strings.TrimSpace(flagFingerprintID)
+		if fingerprintID == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.fingerprint_id"),
+				i18n.T("module.error.fingerprint_id.fix"), pkg.ExitError)
+		}
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		if !flagFingerprintForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), fingerprintID), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		if err := client.DeleteFingerprint(context.Background(), token, fingerprintID); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Empreintes", [][2]string{{fingerprintID, i18n.T("module.deleted")}})
+		return nil
+	},
+}
+
+func runModuleFingerprintsList(cmd *cobra.Command, args []string) error {
+	token, err := requireModuleToken(args)
+	if err != nil {
+		return err
+	}
+	client, err := connectedClient()
+	if err != nil {
+		return err
+	}
+	fingerprints, err := client.ListFingerprints(context.Background(), token)
+	if err != nil {
+		return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+	}
+	rows := make([][2]string, 0, len(fingerprints))
+	for _, f := range fingerprints {
+		rows = append(rows, [2]string{f.Hash, fmt.Sprintf("%s · %s",
+			strings.Join(f.RuntimeVersions, ", "), strings.Join(f.Channels, ", "))})
+	}
+	printRows("Empreintes", rows)
+	return nil
+}
+
+// --- caches ----------------------------------------------------------------
+
+var (
+	flagCacheID    string
+	flagCacheForce bool
+)
+
+var moduleCachesCmd = &cobra.Command{
+	Use:   "caches [module]",
+	Short: "Inspect and purge a module's execution caches",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runModuleCachesList,
+}
+
+var moduleCachesListCmd = &cobra.Command{
+	Use:   "list [module]",
+	Short: "List a module's execution cache entries",
+	Args:  cobra.MaximumNArgs(1),
+	RunE:  runModuleCachesList,
+}
+
+var moduleCachesPurgeCmd = &cobra.Command{
+	Use:   "purge [module]",
+	Short: "Purge the whole execution cache of a module",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		if !flagCacheForce {
+			ok, err := tui.Confirm(i18n.T("module.prompt.confirm_purge"), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		if err := client.PurgeCaches(context.Background(), token); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Caches d'exécution", [][2]string{{"Purge", i18n.T("module.deleted")}})
+		return nil
+	},
+}
+
+var moduleCachesDeleteCmd = &cobra.Command{
+	Use:   "delete [module]",
+	Short: "Delete a single execution cache entry",
+	Args:  cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cacheID := strings.TrimSpace(flagCacheID)
+		if cacheID == "" {
+			return pkg.NewErrorWithFix(i18n.T("cat.input"), i18n.T("module.error.cache_id"),
+				i18n.T("module.error.cache_id.fix"), pkg.ExitError)
+		}
+		token, err := requireModuleToken(args)
+		if err != nil {
+			return err
+		}
+		if !flagCacheForce {
+			ok, err := tui.Confirm(fmt.Sprintf(i18n.T("module.prompt.confirm_delete"), cacheID), false)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return nil
+			}
+		}
+		client, err := connectedClient()
+		if err != nil {
+			return err
+		}
+		if err := client.DeleteCache(context.Background(), token, cacheID); err != nil {
+			return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+		}
+		printRows("Caches d'exécution", [][2]string{{cacheID, i18n.T("module.deleted")}})
+		return nil
+	},
+}
+
+func runModuleCachesList(cmd *cobra.Command, args []string) error {
+	token, err := requireModuleToken(args)
+	if err != nil {
+		return err
+	}
+	client, err := connectedClient()
+	if err != nil {
+		return err
+	}
+	caches, err := client.ListCaches(context.Background(), token)
+	if err != nil {
+		return pkg.NewError(i18n.T("cat.store"), err.Error(), pkg.ExitNetwork)
+	}
+	rows := make([][2]string, 0, len(caches))
+	for _, c := range caches {
+		rows = append(rows, [2]string{c.Key, fmt.Sprintf("%d o · %d hits · ttl %ds", c.SizeBytes, c.Hits, c.TTLSeconds)})
+	}
+	printRows("Caches d'exécution", rows)
+	return nil
+}
+
+// upperAll upper-cases every non-empty entry of a string slice.
+func upperAll(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.ToUpper(strings.TrimSpace(v))
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // --- observer & usage ------------------------------------------------------
 
 var moduleObserverCmd = &cobra.Command{
@@ -1226,7 +1869,8 @@ func normalizeChannel(name string) (string, error) {
 // digits and single dashes.
 
 func init() {
-	moduleKnowledgeCmd.AddCommand(moduleKnowledgeListCmd, moduleKnowledgeAddCmd, moduleKnowledgePublishCmd)
+	moduleKnowledgeCmd.AddCommand(moduleKnowledgeListCmd, moduleKnowledgeAddCmd,
+		moduleKnowledgePublishCmd, moduleKnowledgeDeleteCmd)
 	moduleKnowledgeAddCmd.Flags().StringVar(&flagKnowledgeKind, "kind", "GUIDE", "article kind (GUIDE|REFERENCE|CONCEPT)")
 	moduleKnowledgeAddCmd.Flags().StringVar(&flagKnowledgeSummary, "summary", "", "short article summary")
 	moduleKnowledgeAddCmd.Flags().IntVar(&flagKnowledgeReading, "reading-minutes", 1, "estimated reading time in minutes")
@@ -1234,31 +1878,74 @@ func init() {
 	moduleKnowledgeAddCmd.Flags().BoolVar(&flagKnowledgeAsDraft, "draft", false, "force draft even with --publish")
 	moduleKnowledgePublishCmd.Flags().StringVar(&flagKnowledgeArticleID, "id", "", "article id (skips the interactive selection)")
 	moduleKnowledgePublishCmd.Flags().BoolVar(&flagKnowledgeAsDraft, "draft", false, "flip the article back to draft")
+	moduleKnowledgeDeleteCmd.Flags().StringVar(&flagKnowledgeArticleID, "id", "", "article id (skips the interactive selection)")
+	moduleKnowledgeDeleteCmd.Flags().BoolVarP(&flagKnowledgeForce, "force", "f", false, "skip the confirmation prompt")
 
-	moduleWorkflowsCmd.AddCommand(moduleWorkflowListCmd, moduleWorkflowRunCmd, moduleWorkflowDeleteCmd)
+	moduleWorkflowsCmd.AddCommand(moduleWorkflowListCmd, moduleWorkflowAddCmd,
+		moduleWorkflowRunCmd, moduleWorkflowUpdateCmd, moduleWorkflowDeleteCmd)
+	moduleWorkflowAddCmd.Flags().StringVar(&flagWorkflowSource, "source", "", "workflow source (owner/repo)")
+	moduleWorkflowAddCmd.Flags().StringVar(&flagWorkflowTrigger, "trigger", "", "workflow trigger")
+	moduleWorkflowAddCmd.Flags().StringVar(&flagWorkflowStatus, "status", "IDLE", "workflow status (IDLE|RUNNING|SUCCESS|FAILED)")
+	moduleWorkflowAddCmd.Flags().StringVar(&flagWorkflowPath, "path", "", "relative path of the workflow file")
 	moduleWorkflowRunCmd.Flags().StringVar(&flagWorkflowRunID, "id", "", "workflow id (skips the interactive selection)")
+	moduleWorkflowUpdateCmd.Flags().StringVar(&flagWorkflowName, "name", "", "workflow name")
+	moduleWorkflowUpdateCmd.Flags().StringVar(&flagWorkflowSource, "source", "", "workflow source (owner/repo)")
+	moduleWorkflowUpdateCmd.Flags().StringVar(&flagWorkflowTrigger, "trigger", "", "workflow trigger")
+	moduleWorkflowUpdateCmd.Flags().StringVar(&flagWorkflowStatus, "status", "", "workflow status (IDLE|RUNNING|SUCCESS|FAILED)")
+	moduleWorkflowUpdateCmd.Flags().StringVar(&flagWorkflowPath, "path", "", "relative path of the workflow file")
 	moduleWorkflowDeleteCmd.Flags().StringVar(&flagWorkflowRunID, "id", "", "workflow id (skips the interactive selection)")
 	moduleWorkflowDeleteCmd.Flags().BoolVarP(&flagWorkflowForce, "force", "f", false, "skip the confirmation prompt")
 
+	moduleDevBuildsCmd.AddCommand(moduleDevBuildsListCmd, moduleDevBuildsAddCmd, moduleDevBuildsDeleteCmd)
+	moduleDevBuildsAddCmd.Flags().StringVar(&flagDevBuildRuntime, "runtime", "", "runtime version (SemVer)")
+	moduleDevBuildsAddCmd.Flags().StringVar(&flagDevBuildPlatform, "platform", "BUN", "target platform (BUN|NODE|BROWSER)")
+	moduleDevBuildsAddCmd.Flags().StringVar(&flagDevBuildState, "state", "", "artifact state (PREPARING|READY|FAILED)")
+	moduleDevBuildsDeleteCmd.Flags().StringVar(&flagDevBuildID, "id", "", "build id")
+	moduleDevBuildsDeleteCmd.Flags().BoolVarP(&flagDevBuildForce, "force", "f", false, "skip the confirmation prompt")
+
 	moduleChannelsCmd.AddCommand(moduleChannelsListCmd, moduleChannelsPublishCmd,
 		moduleChannelsRollbackCmd, moduleChannelsPauseCmd)
+
+	moduleFingerprintsCmd.AddCommand(moduleFingerprintsListCmd, moduleFingerprintsAddCmd, moduleFingerprintsDeleteCmd)
+	moduleFingerprintsAddCmd.Flags().StringVar(&flagFingerprintHash, "hash", "", "fingerprint hash (min. 6 chars)")
+	moduleFingerprintsAddCmd.Flags().StringSliceVar(&flagFingerprintRuntimes, "runtime", nil, "compatible runtime versions")
+	moduleFingerprintsAddCmd.Flags().StringSliceVar(&flagFingerprintChannels, "channels", nil, "target channels (ALPHA|BETA|NIGHTLY|RC|RELEASE)")
+	moduleFingerprintsDeleteCmd.Flags().StringVar(&flagFingerprintID, "id", "", "fingerprint id")
+	moduleFingerprintsDeleteCmd.Flags().BoolVarP(&flagFingerprintForce, "force", "f", false, "skip the confirmation prompt")
+
+	moduleCachesCmd.AddCommand(moduleCachesListCmd, moduleCachesPurgeCmd, moduleCachesDeleteCmd)
+	moduleCachesPurgeCmd.Flags().BoolVarP(&flagCacheForce, "force", "f", false, "skip the confirmation prompt")
+	moduleCachesDeleteCmd.Flags().StringVar(&flagCacheID, "id", "", "cache entry id")
+	moduleCachesDeleteCmd.Flags().BoolVarP(&flagCacheForce, "force", "f", false, "skip the confirmation prompt")
 
 	modulePlatformsCmd.AddCommand(modulePlatformsSetCmd)
 	modulePlatformsSetCmd.Flags().BoolVar(&flagPlatformWeb, "web", false, "support the web platform")
 	modulePlatformsSetCmd.Flags().BoolVar(&flagPlatformDesktop, "desktop", false, "support the desktop platform")
 	modulePlatformsSetCmd.Flags().BoolVar(&flagPlatformMobile, "mobile", false, "support the mobile platform")
 
-	moduleRequirementsCmd.AddCommand(moduleRequirementsListCmd, moduleRequirementsAddCmd)
+	moduleRequirementsCmd.AddCommand(moduleRequirementsListCmd, moduleRequirementsAddCmd,
+		moduleRequirementsDeleteCmd)
 	moduleRequirementsAddCmd.Flags().StringVar(&flagRequirementModule, "module-id", "", "canonical identifier of the required module")
 	moduleRequirementsAddCmd.Flags().StringVar(&flagRequirementVersion, "version", ">=1.0.0", "accepted version range")
 	moduleRequirementsAddCmd.Flags().StringVar(&flagRequirementKind, "kind", "REQUIRED", "dependency kind (REQUIRED|OPTIONAL)")
 	moduleRequirementsAddCmd.Flags().StringVar(&flagRequirementReason, "reason", "", "why the dependency is required")
+	moduleRequirementsDeleteCmd.Flags().StringVar(&flagRequirementID, "id", "", "requirement id")
+	moduleRequirementsDeleteCmd.Flags().BoolVarP(&flagRequirementForce, "force", "f", false, "skip the confirmation prompt")
 
-	moduleSigningKeysCmd.AddCommand(moduleSigningKeyRotateCmd)
+	moduleSigningKeysCmd.AddCommand(moduleSigningKeyCreateCmd, moduleSigningKeyRotateCmd,
+		moduleSigningKeyDeleteCmd)
+	moduleSigningKeyCreateCmd.Flags().StringVar(&flagSigningKeyAlgorithm, "algorithm", "Ed25519", "signing algorithm")
+	moduleSigningKeyCreateCmd.Flags().StringVar(&flagSigningKeyPublicKey, "public-key", "", "public key to register")
+	moduleSigningKeyCreateCmd.Flags().StringVar(&flagSigningKeyModule, "module", "", "attach the key to a module")
+	moduleSigningKeyDeleteCmd.Flags().BoolVarP(&flagSigningKeyForce, "force", "f", false, "skip the confirmation prompt")
 
-	moduleAccreditationsCmd.AddCommand(moduleAccreditationsListCmd, moduleAccreditationsAddCmd)
+	moduleAccreditationsCmd.AddCommand(moduleAccreditationsListCmd, moduleAccreditationsAddCmd,
+		moduleAccreditationsDeleteCmd)
 	moduleAccreditationsAddCmd.Flags().StringVar(&flagAccreditationKind, "kind", "CI_CD_TOKEN", "accreditation kind (CI_CD_TOKEN|SIGNING_KEY|STORE_ACCOUNT)")
 	moduleAccreditationsAddCmd.Flags().StringVar(&flagAccreditationReference, "reference", "", "external reference")
+	moduleAccreditationsAddCmd.Flags().StringVar(&flagAccreditationStatus, "status", "", "accreditation status (LINKED|EXPIRED|PENDING)")
+	moduleAccreditationsAddCmd.Flags().StringVar(&flagAccreditationExpiresAt, "expires-at", "", "expiration date (ISO 8601)")
+	moduleAccreditationsDeleteCmd.Flags().BoolVarP(&flagAccreditationForce, "force", "f", false, "skip the confirmation prompt")
 
 	moduleVariablesCmd.AddCommand(moduleVariablesListCmd, moduleVariablesSetCmd, moduleVariablesUnsetCmd)
 	moduleVariablesSetCmd.Flags().StringVar(&flagVariableKey, "key", "", "variable key (alternative to the positional argument)")

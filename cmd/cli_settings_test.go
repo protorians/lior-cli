@@ -35,6 +35,55 @@ func TestNoColorFromArgs(t *testing.T) {
 	}
 }
 
+func TestColorFromArgs(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		val  bool
+		set  bool
+	}{
+		{"no flag", []string{"publish"}, false, false},
+		{"plain", []string{"--color"}, true, true},
+		{"equals true", []string{"--color=true"}, true, true},
+		{"equals false", []string{"--color=false"}, false, true},
+		{"equals other value ignored", []string{"--color=banana"}, true, true},
+		{"after command", []string{"pack", "--color"}, true, true},
+		{"unrelated flag only", []string{"--verbose"}, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			val, set := colorFromArgs(c.args)
+			if val != c.val || set != c.set {
+				t.Errorf("colorFromArgs(%v) = (%v, %v), want (%v, %v)", c.args, val, set, c.val, c.set)
+			}
+		})
+	}
+}
+
+func TestColorPreferenceFromArgs(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		noColor bool
+		set     bool
+	}{
+		{"no flag", []string{"publish"}, false, false},
+		{"color", []string{"--color"}, false, true},
+		{"no-color", []string{"--no-color"}, true, true},
+		{"no-color wins over color", []string{"--color", "--no-color"}, true, true},
+		{"color false disables", []string{"--color=false"}, true, true},
+		{"no-color false forces", []string{"--no-color=false"}, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			noColor, set := colorPreferenceFromArgs(c.args)
+			if noColor != c.noColor || set != c.set {
+				t.Errorf("colorPreferenceFromArgs(%v) = (%v, %v), want (%v, %v)", c.args, noColor, set, c.noColor, c.set)
+			}
+		})
+	}
+}
+
 func TestPersistCliSettingsWritesConfig(t *testing.T) {
 	root := t.TempDir()
 	t.Chdir(root)
@@ -70,8 +119,8 @@ func TestPersistCliSettingsWritesConfig(t *testing.T) {
 // resetRootFlags restores the shared root persistent flags to their defaults
 // so tests do not leak state into one another.
 func resetRootFlags() {
-	flagLang, flagNoColor, flagVerbose = "", false, false
-	for _, name := range []string{"lang", "no-color", "verbose"} {
+	flagLang, flagNoColor, flagColor, flagVerbose = "", false, false, false
+	for _, name := range []string{"lang", "no-color", "color", "verbose"} {
 		f := rootCmd.PersistentFlags().Lookup(name)
 		_ = f.Value.Set(f.DefValue)
 		f.Changed = false
@@ -146,6 +195,34 @@ func TestExecuteHonorsPersistedNoColor(t *testing.T) {
 		t.Errorf("Language = %q, want fr-FR (persisted lang)", got)
 	}
 	i18n.Use("en-US")
+}
+
+func TestExecuteColorFlagOverridesPersistedNoColor(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	cfg := config.Default()
+	cfg.Cli.NoColor = true
+	if err := cfg.Save(config.ConfigPath(root)); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("LIORIAN_CLI_SKIP_UPDATE", "1")
+
+	before := lipgloss.ColorProfile()
+	defer lipgloss.SetColorProfile(before)
+
+	origArgs := os.Args
+	os.Args = []string{"liorian", "--color"}
+	defer func() {
+		os.Args = origArgs
+		resetRootFlags()
+	}()
+
+	Execute("dev", "none", "none", "unknown", nil)
+
+	if got := lipgloss.ColorProfile(); got == termenv.Ascii {
+		t.Error("ColorProfile = termenv.Ascii, want colors forced on by --color")
+	}
 }
 
 func TestExecutePersistsFlags(t *testing.T) {

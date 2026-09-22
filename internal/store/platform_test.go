@@ -490,6 +490,149 @@ func TestGetObserverAndUsage(t *testing.T) {
 	}
 }
 
+func TestDevBuilds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/developer-store/modules/mod-1/dev-builds" && r.Method == http.MethodGet:
+			raiton(w, http.StatusOK, `[{"id":"db-1","runtimeVersion":"1.0.0","platform":"BUN","artifactState":"READY","canInstall":true}]`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/dev-builds" && r.Method == http.MethodPost:
+			raiton(w, http.StatusCreated, `{"id":"db-2","runtimeVersion":"1.2.0","platform":"NODE","artifactState":"PREPARING"}`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/dev-builds/db-1" && r.Method == http.MethodDelete:
+			raiton(w, http.StatusOK, `null`)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	builds, err := client.ListDevBuilds(t.Context(), "mod-1")
+	if err != nil || len(builds) != 1 || builds[0].ArtifactState != "READY" || !builds[0].CanInstall {
+		t.Fatalf("ListDevBuilds: %v %+v", err, builds)
+	}
+	build, err := client.CreateDevBuild(t.Context(), "mod-1", SaveDevBuildRequest{RuntimeVersion: "1.2.0", Platform: "NODE"})
+	if err != nil || build.ID != "db-2" {
+		t.Fatalf("CreateDevBuild: %v %+v", err, build)
+	}
+	if err := client.DeleteDevBuild(t.Context(), "mod-1", "db-1"); err != nil {
+		t.Fatalf("DeleteDevBuild: %v", err)
+	}
+}
+
+func TestFingerprints(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/developer-store/modules/mod-1/fingerprints" && r.Method == http.MethodGet:
+			raiton(w, http.StatusOK, `[{"id":"fp-1","hash":"abc123","runtimeVersions":["1.0.0"],"channels":["RELEASE"]}]`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/fingerprints" && r.Method == http.MethodPost:
+			var body SaveFingerprintRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Hash != "deadbeef" {
+				http.Error(w, "bad body", http.StatusBadRequest)
+				return
+			}
+			raiton(w, http.StatusCreated, `{"id":"fp-2","hash":"deadbeef","runtimeVersions":["1.0.0"],"channels":["RELEASE"]}`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/fingerprints/fp-1" && r.Method == http.MethodDelete:
+			raiton(w, http.StatusOK, `null`)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	fingerprints, err := client.ListFingerprints(t.Context(), "mod-1")
+	if err != nil || len(fingerprints) != 1 || fingerprints[0].Hash != "abc123" {
+		t.Fatalf("ListFingerprints: %v %+v", err, fingerprints)
+	}
+	created, err := client.CreateFingerprint(t.Context(), "mod-1", SaveFingerprintRequest{Hash: "deadbeef"})
+	if err != nil || created.ID != "fp-2" {
+		t.Fatalf("CreateFingerprint: %v %+v", err, created)
+	}
+	if err := client.DeleteFingerprint(t.Context(), "mod-1", "fp-1"); err != nil {
+		t.Fatalf("DeleteFingerprint: %v", err)
+	}
+}
+
+func TestCaches(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/developer-store/modules/mod-1/caches" && r.Method == http.MethodGet:
+			raiton(w, http.StatusOK, `[{"id":"cache-1","key":"deps","sizeBytes":2048,"ttlSeconds":3600,"hits":12}]`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/caches" && r.Method == http.MethodDelete:
+			raiton(w, http.StatusOK, `null`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/caches/cache-1" && r.Method == http.MethodDelete:
+			raiton(w, http.StatusOK, `null`)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	caches, err := client.ListCaches(t.Context(), "mod-1")
+	if err != nil || len(caches) != 1 || caches[0].Key != "deps" || caches[0].Hits != 12 {
+		t.Fatalf("ListCaches: %v %+v", err, caches)
+	}
+	if err := client.PurgeCaches(t.Context(), "mod-1"); err != nil {
+		t.Fatalf("PurgeCaches: %v", err)
+	}
+	if err := client.DeleteCache(t.Context(), "mod-1", "cache-1"); err != nil {
+		t.Fatalf("DeleteCache: %v", err)
+	}
+}
+
+func TestWorkflowCreateAndUpdate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/developer-store/modules/mod-1/workflows" && r.Method == http.MethodPost:
+			var body SaveWorkflowRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Source != "acme/app" {
+				http.Error(w, "bad body", http.StatusBadRequest)
+				return
+			}
+			raiton(w, http.StatusCreated, `{"id":"wf-2","name":"Release","source":"acme/app","status":"IDLE"}`)
+		case r.URL.Path == "/api/developer-store/modules/mod-1/workflows/wf-1" && r.Method == http.MethodPut:
+			raiton(w, http.StatusOK, `{"id":"wf-1","name":"CI","source":"acme/app","status":"SUCCESS"}`)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	workflow, err := client.CreateWorkflow(t.Context(), "mod-1", SaveWorkflowRequest{Name: "Release", Source: "acme/app"})
+	if err != nil || workflow.ID != "wf-2" {
+		t.Fatalf("CreateWorkflow: %v %+v", err, workflow)
+	}
+	updated, err := client.UpdateWorkflow(t.Context(), "mod-1", "wf-1", SaveWorkflowRequest{Status: "SUCCESS"})
+	if err != nil || updated.Status != "SUCCESS" {
+		t.Fatalf("UpdateWorkflow: %v %+v", err, updated)
+	}
+}
+
+func TestSigningKeyCreateAndDelete(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/developer-store/signing-keys" && r.Method == http.MethodPost:
+			raiton(w, http.StatusCreated, `{"id":"k3","keyId":"sign_new","algorithm":"Ed25519","status":"ACTIVE"}`)
+		case r.URL.Path == "/api/developer-store/signing-keys/sign_abc" && r.Method == http.MethodDelete:
+			raiton(w, http.StatusOK, `null`)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	key, err := client.CreateSigningKey(t.Context(), CreateSigningKeyRequest{Algorithm: "Ed25519"})
+	if err != nil || key.KeyID != "sign_new" {
+		t.Fatalf("CreateSigningKey: %v %+v", err, key)
+	}
+	if err := client.DeleteSigningKey(t.Context(), "sign_abc"); err != nil {
+		t.Fatalf("DeleteSigningKey: %v", err)
+	}
+}
+
 func TestPlatformPathEscapesModuleID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/developer-store/modules/mod-1/channels/RC/rollback" {

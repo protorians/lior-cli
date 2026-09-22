@@ -111,6 +111,39 @@ func noColorFromArgs(args []string) (bool, bool) {
 	return false, false
 }
 
+// colorFromArgs scans the raw arguments for `--color`, `--color=true` or
+// `--color=false` before Cobra has parsed the flag set. The second return
+// value reports whether the flag was present at all.
+func colorFromArgs(args []string) (bool, bool) {
+	for _, a := range args {
+		if a == "--color" {
+			return true, true
+		}
+		if v, ok := strings.CutPrefix(a, "--color="); ok {
+			parsed, err := strconv.ParseBool(v)
+			if err != nil {
+				return true, true // malformed value: keep the enable-colors intent
+			}
+			return parsed, true
+		}
+	}
+	return false, false
+}
+
+// colorPreferenceFromArgs resolves the `--color` / `--no-color` pair from the
+// raw arguments, before Cobra has parsed the flag set. It returns whether
+// colors must be disabled and whether either flag was present. The two flags
+// are inverses and `--no-color` wins when both are supplied.
+func colorPreferenceFromArgs(args []string) (noColor bool, set bool) {
+	if noColor, ok := noColorFromArgs(args); ok {
+		return noColor, true
+	}
+	if color, ok := colorFromArgs(args); ok {
+		return !color, true
+	}
+	return false, false
+}
+
 // configLang reads the `"cli".lang` key from the project config when the
 // current directory sits inside a Liorian project.
 func configLang() (string, bool) {

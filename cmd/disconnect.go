@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/protorians/lior-cli/internal/appconfig"
 	"github.com/protorians/lior-cli/internal/auth"
 	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/pkg"
@@ -56,6 +57,19 @@ func runDisconnect(cmd *cobra.Command) error {
 	connector.Client.Token = sess.AccessToken
 	if err := connector.SignOut(context.Background(), sess.Device); err != nil {
 		debugf("server-side token invalidation: %v", err)
+	}
+
+	// Best-effort OAuth2 revocation (RFC 7009) of the refresh/access tokens
+	// obtained via `liorian auth` (spec §8.1 / §6.3).
+	oauth := appconfig.Resolved("").OAuth(appconfig.AuthAppID)
+	store := auth.NewStore()
+	if refresh, rerr := store.Get(auth.KeyOAuthRefreshToken); rerr == nil && strings.TrimSpace(refresh) != "" {
+		if err := auth.RevokeToken(context.Background(), connector.Client, oauth.RevokeEndpoint, oauth.ClientID, refresh, "refresh_token"); err != nil {
+			debugf("oauth refresh token revocation: %v", err)
+		}
+	}
+	if err := auth.RevokeToken(context.Background(), connector.Client, oauth.RevokeEndpoint, oauth.ClientID, sess.AccessToken, "access_token"); err != nil {
+		debugf("oauth access token revocation: %v", err)
 	}
 
 	if _, err := tui.RunWithSpinner(i18n.T("disconnect.spinner"), func() (struct{}, error) {

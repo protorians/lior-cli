@@ -3,6 +3,7 @@ package pkg
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -141,5 +142,37 @@ func TestRaitonEnvelopeNullData(t *testing.T) {
 	client := NewClient(server.URL)
 	if err := client.Do(context.Background(), "GET", "/api/test", nil, &json.RawMessage{}); err != nil {
 		t.Fatalf("Do: %v", err)
+	}
+}
+
+// TestRaitonEnvelopeErrorOn200 guards the regression where Raiton returns an
+// application-level error (DTO validation) with an HTTP 200 status and
+// `error: true`. The client must surface it as an APIError carrying the
+// envelope status code and message instead of silently decoding a null payload
+// (which previously produced a confusing downstream 404).
+func TestRaitonEnvelopeErrorOn200(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"error":true,"statusCode":400,"message":"maxManager doit être une version SemVer ou une plage valide","data":null}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	var out struct {
+		ID string `json:"id"`
+	}
+	err := client.Do(context.Background(), "POST", "/api/test", nil, &out)
+	if err == nil {
+		t.Fatal("expected an error for an `error: true` envelope on HTTP 200")
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError, got %T: %v", err, err)
+	}
+	if apiErr.StatusCode != 400 {
+		t.Errorf("expected status 400, got %d", apiErr.StatusCode)
+	}
+	if !strings.Contains(apiErr.Message, "maxManager") {
+		t.Errorf("unexpected message: %q", apiErr.Message)
 	}
 }

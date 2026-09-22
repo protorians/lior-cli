@@ -21,8 +21,9 @@ const FileName = "app.config.json"
 
 // Well-known application ids in `applications`.
 const (
-	AuthAppID  = "liorian-auth"
-	StoreAppID = "liorian-store"
+	AuthAppID    = "liorian-auth"
+	StoreAppID   = "liorian-store"
+	ConnectAppID = "liorian-connect"
 )
 
 // Config mirrors the registry schema (lorian.config.schema.json).

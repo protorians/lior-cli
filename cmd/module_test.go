@@ -96,15 +96,54 @@ func TestWorkflowLabel(t *testing.T) {
 	}
 }
 
+func TestUpperAll(t *testing.T) {
+	got := upperAll([]string{" alpha ", "beta", "", "release"})
+	want := []string{"ALPHA", "BETA", "RELEASE"}
+	if len(got) != len(want) {
+		t.Fatalf("upperAll = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("upperAll[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if got := upperAll(nil); got != nil {
+		t.Errorf("upperAll(nil) = %v, want nil", got)
+	}
+}
+
+func TestArticleTitle(t *testing.T) {
+	articles := []store.KnowledgeArticle{{ID: "a1", Title: "Guide"}, {ID: "a2", Title: "Ref"}}
+	if got := articleTitle(articles, "a2"); got != "Ref" {
+		t.Errorf("articleTitle = %q, want Ref", got)
+	}
+	if got := articleTitle(articles, "missing"); got != "missing" {
+		t.Errorf("articleTitle inconnu = %q, want missing", got)
+	}
+}
+
+func TestRequirementLabel(t *testing.T) {
+	requirements := []store.ModuleRequirement{{ID: "r1", Name: "CRM", ModuleID: "core.crm"}}
+	if got := requirementLabel(requirements, "r1"); got != "CRM (core.crm)" {
+		t.Errorf("requirementLabel = %q", got)
+	}
+	if got := requirementLabel(requirements, "r9"); got != "r9" {
+		t.Errorf("requirementLabel inconnu = %q, want r9", got)
+	}
+}
+
 func TestModuleCommandTree(t *testing.T) {
 	want := map[string][]string{
-		"knowledge":      {"add", "list", "publish"},
-		"workflow":       {"delete", "list", "run"},
+		"knowledge":      {"add", "delete", "list", "publish"},
+		"workflow":       {"add", "delete", "list", "run", "update"},
+		"dev-builds":     {"add", "delete", "list"},
 		"channels":       {"list", "pause", "publish", "rollback"},
+		"fingerprints":   {"add", "delete", "list"},
+		"caches":         {"delete", "list", "purge"},
 		"platforms":      {"set"},
-		"requirements":   {"add", "list"},
-		"signing-keys":   {"rotate"},
-		"accreditations": {"add", "list"},
+		"requirements":   {"add", "delete", "list"},
+		"signing-keys":   {"create", "delete", "rotate"},
+		"accreditations": {"add", "delete", "list"},
 		"variables":      {"list", "set", "unset"},
 		"github":         {"link", "unlink"},
 	}

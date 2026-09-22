@@ -358,7 +358,8 @@ func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
 // resource served by liorian-api-connect (spec module-lifecycle).
 func isLifecyclePath(segment string) bool {
 	switch segment {
-	case "knowledge", "workflows", "channels", "platforms", "requirements", "observer", "usage":
+	case "knowledge", "workflows", "channels", "platforms", "requirements",
+		"dev-builds", "fingerprints", "caches", "observer", "usage":
 		return true
 	default:
 		return false
@@ -379,6 +380,12 @@ func (s *Server) handleLifecycle(w http.ResponseWriter, r *http.Request, parts [
 		s.platforms(w, r, parts)
 	case "requirements":
 		s.requirements(w, r, parts)
+	case "dev-builds":
+		s.devBuilds(w, r, parts)
+	case "fingerprints":
+		s.fingerprints(w, r, parts)
+	case "caches":
+		s.caches(w, r, parts)
 	case "observer":
 		writeData(w, http.StatusOK, map[string]any{
 			"productId": parts[0],
@@ -449,13 +456,30 @@ func (s *Server) knowledge(w http.ResponseWriter, r *http.Request, parts []strin
 func (s *Server) workflows(w http.ResponseWriter, r *http.Request, parts []string) {
 	// parts: [moduleId, workflows] / [moduleId, workflows, id] / [moduleId, workflows, id, run]
 	if len(parts) == 2 {
-		if r.Method != http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
+			writeData(w, http.StatusOK, []map[string]any{
+				{"id": "wf-1", "name": "CI", "source": "acme/app", "trigger": "push", "status": "IDLE", "runCount": 2},
+			})
+		case http.MethodPost:
+			var req struct {
+				Name    string `json:"name"`
+				Source  string `json:"source"`
+				Trigger string `json:"trigger"`
+				Status  string `json:"status"`
+			}
+			if !decodeBody(w, r, &req) {
+				return
+			}
+			if req.Status == "" {
+				req.Status = "IDLE"
+			}
+			writeData(w, http.StatusCreated, map[string]any{
+				"id": "wf-2", "name": req.Name, "source": req.Source, "trigger": req.Trigger, "status": req.Status, "runCount": 0,
+			})
+		default:
 			writeError(w, 405, "Method not allowed")
-			return
 		}
-		writeData(w, http.StatusOK, []map[string]any{
-			{"id": "wf-1", "name": "CI", "source": "acme/app", "trigger": "push", "status": "IDLE", "runCount": 2},
-		})
 		return
 	}
 	workflowID := parts[2]
@@ -463,6 +487,19 @@ func (s *Server) workflows(w http.ResponseWriter, r *http.Request, parts []strin
 	case len(parts) == 4 && parts[3] == "run" && r.Method == http.MethodPost:
 		writeData(w, http.StatusOK, map[string]any{
 			"id": workflowID, "name": "CI", "source": "acme/app", "trigger": "push", "status": "RUNNING", "runCount": 3,
+		})
+	case len(parts) == 3 && r.Method == http.MethodPut:
+		var req struct {
+			Name    string `json:"name"`
+			Source  string `json:"source"`
+			Trigger string `json:"trigger"`
+			Status  string `json:"status"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		writeData(w, http.StatusOK, map[string]any{
+			"id": workflowID, "name": req.Name, "source": req.Source, "trigger": req.Trigger, "status": req.Status, "runCount": 0,
 		})
 	case len(parts) == 3 && r.Method == http.MethodDelete:
 		writeData(w, http.StatusOK, nil)
@@ -555,17 +592,96 @@ func (s *Server) requirements(w http.ResponseWriter, r *http.Request, parts []st
 	writeError(w, 405, "Method not allowed")
 }
 
+func (s *Server) devBuilds(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) == 2 && r.Method == http.MethodGet {
+		writeData(w, http.StatusOK, []map[string]any{
+			{"id": "db-1", "runtimeVersion": "1.0.0", "platform": "BUN", "artifactState": "READY", "canInstall": true},
+		})
+		return
+	}
+	if len(parts) == 2 && r.Method == http.MethodPost {
+		var req struct {
+			RuntimeVersion string `json:"runtimeVersion"`
+			Platform       string `json:"platform"`
+			ArtifactState  string `json:"artifactState"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		if req.ArtifactState == "" {
+			req.ArtifactState = "PREPARING"
+		}
+		writeData(w, http.StatusCreated, map[string]any{
+			"id": "db-2", "runtimeVersion": req.RuntimeVersion, "platform": req.Platform,
+			"artifactState": req.ArtifactState, "canInstall": req.ArtifactState == "READY",
+		})
+		return
+	}
+	if len(parts) == 3 && r.Method == http.MethodDelete {
+		writeData(w, http.StatusOK, nil)
+		return
+	}
+	writeError(w, 405, "Method not allowed")
+}
+
+func (s *Server) fingerprints(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) == 2 && r.Method == http.MethodGet {
+		writeData(w, http.StatusOK, []map[string]any{
+			{"id": "fp-1", "hash": "abc123", "runtimeVersions": []string{"1.0.0"}, "channels": []string{"RELEASE"}},
+		})
+		return
+	}
+	if len(parts) == 2 && r.Method == http.MethodPost {
+		var req struct {
+			Hash            string   `json:"hash"`
+			RuntimeVersions []string `json:"runtimeVersions"`
+			Channels        []string `json:"channels"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		writeData(w, http.StatusCreated, map[string]any{
+			"id": "fp-2", "hash": req.Hash, "runtimeVersions": req.RuntimeVersions, "channels": req.Channels,
+		})
+		return
+	}
+	if len(parts) == 3 && r.Method == http.MethodDelete {
+		writeData(w, http.StatusOK, nil)
+		return
+	}
+	writeError(w, 405, "Method not allowed")
+}
+
+func (s *Server) caches(w http.ResponseWriter, r *http.Request, parts []string) {
+	if len(parts) == 2 && r.Method == http.MethodGet {
+		writeData(w, http.StatusOK, []map[string]any{
+			{"id": "cache-1", "key": "deps", "sizeBytes": 2048, "ttlSeconds": 3600, "hits": 12},
+		})
+		return
+	}
+	if r.Method == http.MethodDelete {
+		writeData(w, http.StatusOK, nil)
+		return
+	}
+	writeError(w, 405, "Method not allowed")
+}
+
 func (s *Server) signingKeys(w http.ResponseWriter, r *http.Request) {
 	rest := strings.TrimPrefix(r.URL.Path, "/api/developer-store/signing-keys")
 	rest = strings.Trim(rest, "/")
 	if rest == "" {
-		if r.Method != http.MethodGet {
+		switch r.Method {
+		case http.MethodGet:
+			writeData(w, http.StatusOK, []map[string]any{
+				{"id": "k1", "keyId": "sign_abc", "algorithm": "Ed25519", "status": "ACTIVE"},
+			})
+		case http.MethodPost:
+			writeData(w, http.StatusCreated, map[string]any{
+				"id": "k3", "keyId": "sign_new", "algorithm": "Ed25519", "status": "ACTIVE",
+			})
+		default:
 			writeError(w, 405, "Method not allowed")
-			return
 		}
-		writeData(w, http.StatusOK, []map[string]any{
-			{"id": "k1", "keyId": "sign_abc", "algorithm": "Ed25519", "status": "ACTIVE"},
-		})
 		return
 	}
 	parts := strings.Split(rest, "/")
@@ -573,6 +689,10 @@ func (s *Server) signingKeys(w http.ResponseWriter, r *http.Request) {
 		writeData(w, http.StatusOK, map[string]any{
 			"id": "k2", "keyId": "sign_def", "algorithm": "Ed25519", "status": "ACTIVE",
 		})
+		return
+	}
+	if len(parts) == 1 && r.Method == http.MethodDelete {
+		writeData(w, http.StatusOK, nil)
 		return
 	}
 	writeError(w, 404, "Unknown route")

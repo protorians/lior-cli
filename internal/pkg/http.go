@@ -122,10 +122,16 @@ func normalizeArch(arch string) string {
 // RaitonResponse is the standard Raiton API envelope `{message, data, statusCode}`
 // returned by every endpoint of `liorian-api-core` / `liorian-api-connect`
 // (see `RaitonResponses(message, data, statusCode)` in the Raiton framework).
+//
+// Raiton signals application-level failures (DTO validation, thrown errors) with
+// `error: true` inside the envelope. Those bodies may still carry an HTTP 200
+// status, so the `error`/`statusCode` fields must be inspected even on 2xx.
 type RaitonResponse struct {
 	Message    string          `json:"message"`
 	Data       json.RawMessage `json:"data"`
 	StatusCode int             `json:"statusCode"`
+	Error      bool            `json:"error"`
+	Code       string          `json:"code,omitempty"`
 }
 
 // Client is a thin JSON-aware HTTP client used to talk to the liorian APIs.
@@ -211,11 +217,36 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any,
 		return fmt.Errorf("HTTP %d response: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 
-	if out != nil && len(data) > 0 {
-		var envelope RaitonResponse
-		if err := json.Unmarshal(data, &envelope); err != nil {
-			return fmt.Errorf("failed to decode the response: %w", err)
+	if len(data) == 0 {
+		return nil
+	}
+
+	// Raiton may return an application-level error with an HTTP 200 status
+	// (e.g. DTO validation): the envelope carries `error: true` and a
+	// `statusCode >= 400`. Surface it as an APIError instead of silently
+	// decoding a null `data` payload.
+	var envelope RaitonResponse
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		// Non-JSON success body: nothing to decode (kept for endpoints that
+		// return a plain payload and expect no output).
+		if out == nil {
+			return nil
 		}
+		return fmt.Errorf("failed to decode the response: %w", err)
+	}
+	if envelope.Error || envelope.StatusCode >= 400 {
+		status := envelope.StatusCode
+		if status < 400 {
+			status = resp.StatusCode
+		}
+		message := envelope.Message
+		if message == "" {
+			message = fmt.Sprintf("HTTP %d response", resp.StatusCode)
+		}
+		return &APIError{StatusCode: status, Code: envelope.Code, Message: message}
+	}
+
+	if out != nil {
 		if len(envelope.Data) == 0 || string(envelope.Data) == "null" {
 			return nil
 		}

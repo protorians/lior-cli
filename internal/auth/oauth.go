@@ -106,6 +106,44 @@ func ExchangeRefreshToken(ctx context.Context, client *pkg.Client, endpoint, cli
 	return exchange(ctx, client, endpoint, form)
 }
 
+// RevokeToken revokes an access or refresh token at the OAuth2 revoke endpoint
+// (RFC 7009). It is best-effort: an empty token is a no-op, and HTTP 400
+// (unknown token) is tolerated.
+func RevokeToken(ctx context.Context, client *pkg.Client, endpoint, clientID, token, tokenTypeHint string) error {
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	form := url.Values{}
+	form.Set("token", token)
+	if clientID != "" {
+		form.Set("client_id", clientID)
+	}
+	if tokenTypeHint != "" {
+		form.Set("token_type_hint", tokenTypeHint)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		strings.TrimRight(client.BaseURL, "/")+endpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("failed to build the revoke request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", pkg.UserAgent())
+
+	resp, err := client.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 && resp.StatusCode != http.StatusBadRequest {
+		data, _ := io.ReadAll(resp.Body)
+		return oauthError(resp.StatusCode, data)
+	}
+	return nil
+}
+
 // exchange performs a form-encoded OAuth2 token request against the endpoint
 // and decodes the standard token response. The Raiton envelope is tolerated
 // for the (non-standard) case where the server wraps the token in `data`.

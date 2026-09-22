@@ -13,6 +13,7 @@ import (
 	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/module"
 	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/signing"
 	"github.com/protorians/lior-cli/internal/store"
 	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
@@ -195,6 +196,15 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	client.SetToken(sess.AccessToken)
 	client.WithAutoRefresh(sess)
 
+	// Sign the archive before publishing (spec §5.6 / SEC-009): when a signing
+	// key is available the `.SenMod` is signed and the signature verified. The
+	// publish still proceeds unsigned (with a warning) when no key is present.
+	if signed, serr := signForPublish(packResult.Path); serr != nil {
+		return pkg.NewError(i18n.T("cat.signature"), serr.Error(), pkg.ExitSigning)
+	} else if !signed {
+		warn(i18n.T("publish.warn.unsigned"))
+	}
+
 	// Publish, resolving SemVer conflicts by offering a patch bump on retry
 	// (spec §5.6 step 6).
 	var pubResult *store.PublishResponse
@@ -238,6 +248,11 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		})
 		if err != nil {
 			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+		}
+		if signed, serr := signForPublish(packResult.Path); serr != nil {
+			return pkg.NewError(i18n.T("cat.signature"), serr.Error(), pkg.ExitSigning)
+		} else if !signed {
+			warn(i18n.T("publish.warn.unsigned"))
 		}
 	}
 	if err != nil {
@@ -283,6 +298,35 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 // maxPublishAttempts bounds the conflict-retry loop.
 const maxPublishAttempts = 5
+
+// signForPublish signs the freshly packed archive when a signing key is
+// available and verifies the produced signature. It returns signed=false (and
+// no error) when no key pair exists, so unsigned publication stays possible.
+func signForPublish(archivePath string) (bool, error) {
+	store := signing.NewKeyStore()
+	if !store.HasKeys() {
+		return false, nil
+	}
+
+	pub, priv, err := signing.LoadKeyPair(store)
+	if err != nil {
+		return false, err
+	}
+
+	sigPath, err := signing.SignArchive(archivePath, priv)
+	if err != nil {
+		return false, err
+	}
+
+	ok, err := signing.VerifySignature(archivePath, sigPath, pub)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, errors.New(i18n.T("publish.error.signature_invalid"))
+	}
+	return true, nil
+}
 
 // isVersionConflict reports whether a publish error is a version conflict
 // (HTTP 409 or an identifiable message).

@@ -150,6 +150,35 @@ type UsageOverview struct {
 	} `json:"totals"`
 }
 
+// DevBuild is a development build of a module.
+type DevBuild struct {
+	ID             string `json:"id"`
+	RuntimeVersion string `json:"runtimeVersion"`
+	Platform       string `json:"platform"`
+	ArtifactState  string `json:"artifactState"`
+	CanInstall     bool   `json:"canInstall"`
+	CreatedAt      string `json:"createdAt"`
+}
+
+// Fingerprint is a runtime fingerprint definition of a module.
+type Fingerprint struct {
+	ID              string   `json:"id"`
+	Hash            string   `json:"hash"`
+	RuntimeVersions []string `json:"runtimeVersions"`
+	Channels        []string `json:"channels"`
+	CreatedAt       string   `json:"createdAt"`
+}
+
+// CacheEntry is an execution cache entry of a module.
+type CacheEntry struct {
+	ID           string `json:"id"`
+	Key          string `json:"key"`
+	SizeBytes    int64  `json:"sizeBytes"`
+	TTLSeconds   int    `json:"ttlSeconds"`
+	LastAccessAt string `json:"lastAccessAt"`
+	Hits         int    `json:"hits"`
+}
+
 // --- Client methods --------------------------------------------------------
 
 // ListKnowledgeArticles returns the documentation of a module.
@@ -204,6 +233,33 @@ func (c *Client) GetModulePlatforms(ctx context.Context, moduleID string) ([]Pla
 	var out []PlatformSupport
 	if err := c.http().Do(ctx, "GET", modulePath(moduleID, "/platforms"), nil, &out); err != nil {
 		return nil, fmt.Errorf("failed to fetch platforms: %w", err)
+	}
+	return out, nil
+}
+
+// ListDevBuilds returns the development builds of a module.
+func (c *Client) ListDevBuilds(ctx context.Context, moduleID string) ([]DevBuild, error) {
+	var out []DevBuild
+	if err := c.http().Do(ctx, "GET", modulePath(moduleID, "/dev-builds"), nil, &out); err != nil {
+		return nil, fmt.Errorf("failed to fetch dev builds: %w", err)
+	}
+	return out, nil
+}
+
+// ListFingerprints returns the runtime fingerprints of a module.
+func (c *Client) ListFingerprints(ctx context.Context, moduleID string) ([]Fingerprint, error) {
+	var out []Fingerprint
+	if err := c.http().Do(ctx, "GET", modulePath(moduleID, "/fingerprints"), nil, &out); err != nil {
+		return nil, fmt.Errorf("failed to fetch fingerprints: %w", err)
+	}
+	return out, nil
+}
+
+// ListCaches returns the execution cache entries of a module.
+func (c *Client) ListCaches(ctx context.Context, moduleID string) ([]CacheEntry, error) {
+	var out []CacheEntry
+	if err := c.http().Do(ctx, "GET", modulePath(moduleID, "/caches"), nil, &out); err != nil {
+		return nil, fmt.Errorf("failed to fetch caches: %w", err)
 	}
 	return out, nil
 }
@@ -354,6 +410,34 @@ func (c *Client) DeleteKnowledgeArticle(ctx context.Context, moduleID, articleID
 
 // --- Workflows (write) -----------------------------------------------------
 
+// SaveWorkflowRequest is the create/update payload of a CI/CD workflow.
+type SaveWorkflowRequest struct {
+	Name         string `json:"name"`
+	Source       string `json:"source"`
+	Trigger      string `json:"trigger"`
+	Status       string `json:"status,omitempty"`
+	WorkflowPath string `json:"workflowPath,omitempty"`
+}
+
+// CreateWorkflow declares a CI/CD workflow.
+func (c *Client) CreateWorkflow(ctx context.Context, moduleID string, body SaveWorkflowRequest) (*Workflow, error) {
+	var out Workflow
+	if err := c.http().Do(ctx, "POST", modulePath(moduleID, "/workflows"), body, &out); err != nil {
+		return nil, fmt.Errorf("failed to create workflow: %w", err)
+	}
+	return &out, nil
+}
+
+// UpdateWorkflow updates a CI/CD workflow declaration.
+func (c *Client) UpdateWorkflow(ctx context.Context, moduleID, workflowID string, body SaveWorkflowRequest) (*Workflow, error) {
+	path := modulePath(moduleID, "/workflows/"+url.PathEscape(workflowID))
+	var out Workflow
+	if err := c.http().Do(ctx, "PUT", path, body, &out); err != nil {
+		return nil, fmt.Errorf("failed to update workflow: %w", err)
+	}
+	return &out, nil
+}
+
 // DeleteWorkflow removes a CI/CD workflow declaration.
 func (c *Client) DeleteWorkflow(ctx context.Context, moduleID, workflowID string) error {
 	path := modulePath(moduleID, "/workflows/"+url.PathEscape(workflowID))
@@ -426,7 +510,96 @@ func (c *Client) DeleteRequirement(ctx context.Context, moduleID, requirementID 
 	return nil
 }
 
+// --- Development builds (write) --------------------------------------------
+
+// SaveDevBuildRequest is the `CreateDevBuildDto` payload.
+type SaveDevBuildRequest struct {
+	RuntimeVersion string `json:"runtimeVersion"`
+	Platform       string `json:"platform"`
+	ArtifactState  string `json:"artifactState,omitempty"`
+}
+
+// CreateDevBuild declares a development build.
+func (c *Client) CreateDevBuild(ctx context.Context, moduleID string, body SaveDevBuildRequest) (*DevBuild, error) {
+	var out DevBuild
+	if err := c.http().Do(ctx, "POST", modulePath(moduleID, "/dev-builds"), body, &out); err != nil {
+		return nil, fmt.Errorf("failed to create dev build: %w", err)
+	}
+	return &out, nil
+}
+
+// DeleteDevBuild removes a development build.
+func (c *Client) DeleteDevBuild(ctx context.Context, moduleID, buildID string) error {
+	path := modulePath(moduleID, "/dev-builds/"+url.PathEscape(buildID))
+	if err := c.http().Do(ctx, "DELETE", path, nil, nil); err != nil {
+		return fmt.Errorf("failed to delete dev build: %w", err)
+	}
+	return nil
+}
+
+// --- Fingerprints (write) --------------------------------------------------
+
+// SaveFingerprintRequest is the `CreateFingerprintDto` payload.
+type SaveFingerprintRequest struct {
+	Hash            string   `json:"hash"`
+	RuntimeVersions []string `json:"runtimeVersions"`
+	Channels        []string `json:"channels"`
+}
+
+// CreateFingerprint declares a runtime fingerprint.
+func (c *Client) CreateFingerprint(ctx context.Context, moduleID string, body SaveFingerprintRequest) (*Fingerprint, error) {
+	var out Fingerprint
+	if err := c.http().Do(ctx, "POST", modulePath(moduleID, "/fingerprints"), body, &out); err != nil {
+		return nil, fmt.Errorf("failed to create fingerprint: %w", err)
+	}
+	return &out, nil
+}
+
+// DeleteFingerprint removes a runtime fingerprint.
+func (c *Client) DeleteFingerprint(ctx context.Context, moduleID, fingerprintID string) error {
+	path := modulePath(moduleID, "/fingerprints/"+url.PathEscape(fingerprintID))
+	if err := c.http().Do(ctx, "DELETE", path, nil, nil); err != nil {
+		return fmt.Errorf("failed to delete fingerprint: %w", err)
+	}
+	return nil
+}
+
+// --- Caches (write) --------------------------------------------------------
+
+// PurgeCaches clears the whole execution cache of a module.
+func (c *Client) PurgeCaches(ctx context.Context, moduleID string) error {
+	if err := c.http().Do(ctx, "DELETE", modulePath(moduleID, "/caches"), nil, nil); err != nil {
+		return fmt.Errorf("failed to purge caches: %w", err)
+	}
+	return nil
+}
+
+// DeleteCache removes a single execution cache entry.
+func (c *Client) DeleteCache(ctx context.Context, moduleID, cacheID string) error {
+	path := modulePath(moduleID, "/caches/"+url.PathEscape(cacheID))
+	if err := c.http().Do(ctx, "DELETE", path, nil, nil); err != nil {
+		return fmt.Errorf("failed to delete cache: %w", err)
+	}
+	return nil
+}
+
 // --- Signing keys (write) --------------------------------------------------
+
+// CreateSigningKeyRequest is the `CreateSigningKeyDto` payload.
+type CreateSigningKeyRequest struct {
+	Algorithm string `json:"algorithm,omitempty"`
+	ProductID string `json:"productId,omitempty"`
+	PublicKey string `json:"publicKey,omitempty"`
+}
+
+// CreateSigningKey issues a new signing key.
+func (c *Client) CreateSigningKey(ctx context.Context, body CreateSigningKeyRequest) (*SigningKey, error) {
+	var out SigningKey
+	if err := c.http().Do(ctx, "POST", platformBase+"/signing-keys", body, &out); err != nil {
+		return nil, fmt.Errorf("failed to create signing key: %w", err)
+	}
+	return &out, nil
+}
 
 // RotateSigningKey marks the current key as rotated and issues a new one.
 func (c *Client) RotateSigningKey(ctx context.Context, keyID string) (*SigningKey, error) {

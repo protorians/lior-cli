@@ -90,3 +90,51 @@ exec $LIORIAN --no-color module observer com.example.blog-manager
 stdout 'Erreurs'
 exec $LIORIAN --no-color module usage com.example.blog-manager
 stdout 'Totaux'
+
+# knowledge delete — id + --force.
+exec $LIORIAN --no-color module knowledge delete com.example.blog-manager --id art-1 --force
+stdout 'deleted|supprim'
+
+# workflows — add with --source, then update.
+exec sh -c '"$LIORIAN" --no-color module workflow add "Release" --source acme/app --trigger tag'
+stdout 'acme/app'
+exec sh -c '"$LIORIAN" --no-color module workflow update wf-1 --source acme/app --status SUCCESS'
+stdout 'SUCCESS'
+
+# dev-builds — list, add a SemVer runtime, delete.
+exec $LIORIAN --no-color module dev-builds list com.example.blog-manager
+stdout 'READY'
+exec sh -c '"$LIORIAN" --no-color module dev-builds add com.example.blog-manager --runtime 1.2.0 --platform BUN --state READY'
+stdout '1.2.0'
+exec $LIORIAN --no-color module dev-builds delete com.example.blog-manager --id db-1 --force
+stdout 'deleted|supprim'
+
+# fingerprints — list, add, delete.
+exec $LIORIAN --no-color module fingerprints list com.example.blog-manager
+stdout 'abc123'
+exec sh -c '"$LIORIAN" --no-color module fingerprints add com.example.blog-manager --hash deadbeef --runtime 1.0.0 --channels release'
+stdout 'deadbeef'
+exec $LIORIAN --no-color module fingerprints delete com.example.blog-manager --id fp-1 --force
+stdout 'deleted|supprim'
+
+# caches — list, purge, delete one entry.
+exec $LIORIAN --no-color module caches list com.example.blog-manager
+stdout 'deps'
+exec $LIORIAN --no-color module caches purge com.example.blog-manager --force
+stdout 'deleted|supprim'
+exec $LIORIAN --no-color module caches delete com.example.blog-manager --id cache-1 --force
+stdout 'deleted|supprim'
+
+# requirements delete — id + --force.
+exec $LIORIAN --no-color module requirements delete com.example.blog-manager --id req-1 --force
+stdout 'deleted|supprim'
+
+# signing keys — create then delete.
+exec $LIORIAN --no-color module signing-keys create
+stdout 'sign_new'
+exec $LIORIAN --no-color module signing-keys delete sign_abc --force
+stdout 'deleted|supprim'
+
+# accreditations delete — id + --force.
+exec $LIORIAN --no-color module accreditations delete acc-1 --force
+stdout 'deleted|supprim'
