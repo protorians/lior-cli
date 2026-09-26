@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
@@ -134,7 +135,7 @@ type RaitonResponse struct {
 	Code       string          `json:"code,omitempty"`
 }
 
-// Client is a thin JSON-aware HTTP client used to talk to the liorian APIs.
+// Client is a thin JSON-aware HTTP client used to talk to the liora APIs.
 type Client struct {
 	BaseURL string
 	HTTP    *http.Client
@@ -165,6 +166,92 @@ func NewClientWithTimeout(baseURL string, timeout time.Duration) *Client {
 // the client refreshes the bearer token and retries the request once.
 func (c *Client) Do(ctx context.Context, method, path string, body any, out any) error {
 	return c.do(ctx, method, path, body, out, false)
+}
+
+// DoMultipart uploads one binary file and optional text fields, while keeping
+// the authentication, Raiton-envelope and one-time token-refresh behaviour of
+// Do. It is intentionally small: the CLI only needs a single archive part.
+func (c *Client) DoMultipart(ctx context.Context, path string, fields map[string]string, fieldName, filename string, file []byte, out any) error {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return fmt.Errorf("failed to write multipart field %q: %w", key, err)
+		}
+	}
+	part, err := writer.CreateFormFile(fieldName, filename)
+	if err != nil {
+		return fmt.Errorf("failed to create multipart file part: %w", err)
+	}
+	if _, err := part.Write(file); err != nil {
+		return fmt.Errorf("failed to write multipart file: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return fmt.Errorf("failed to finalize multipart request: %w", err)
+	}
+	return c.doMultipart(ctx, path, body.Bytes(), writer.FormDataContentType(), out, false)
+}
+
+func (c *Client) doMultipart(ctx context.Context, path string, body []byte, contentType string, out any, retried bool) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to build the request: %w", err)
+	}
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", UserAgent())
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("network error: %w", err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read the response: %w", err)
+	}
+	if resp.StatusCode == http.StatusUnauthorized && !retried && c.TokenRefreshFunc != nil {
+		newToken, refreshErr := c.TokenRefreshFunc()
+		if refreshErr != nil {
+			return refreshErr
+		}
+		if newToken != "" {
+			c.Token = newToken
+			return c.doMultipart(ctx, path, body, contentType, out, true)
+		}
+	}
+	if resp.StatusCode >= 400 {
+		if apiErr := parseAPIError(resp.StatusCode, data); apiErr != nil {
+			return apiErr
+		}
+		return fmt.Errorf("HTTP %d response: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	var envelope RaitonResponse
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		if out == nil {
+			return nil
+		}
+		return fmt.Errorf("failed to decode the response: %w", err)
+	}
+	if envelope.Error || envelope.StatusCode >= 400 {
+		status := envelope.StatusCode
+		if status < 400 {
+			status = resp.StatusCode
+		}
+		return &APIError{StatusCode: status, Code: envelope.Code, Message: envelope.Message}
+	}
+	if out != nil && len(envelope.Data) > 0 && string(envelope.Data) != "null" {
+		if err := json.Unmarshal(envelope.Data, out); err != nil {
+			return fmt.Errorf("failed to decode the response: %w", err)
+		}
+	}
+	return nil
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, out any, retried bool) error {
@@ -281,7 +368,7 @@ func parseAPIError(statusCode int, data []byte) *APIError {
 	return nil
 }
 
-// APIError represents an error returned by the liorian API.
+// APIError represents an error returned by the liora API.
 type APIError struct {
 	StatusCode int    `json:"-"`
 	Code       string `json:"code,omitempty"`

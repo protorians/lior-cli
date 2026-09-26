@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/protorians/lior-cli/internal/audit"
@@ -24,16 +25,34 @@ var publishCmd = &cobra.Command{
 	Short: "Publish a module to the store",
 	Long: `Builds and publishes a module to the store via the liorian-connect API.
 
-Checks authentication, validates the manifest, builds the .SenMod archive,
-then sends it to the store.`,
+Checks authentication, validates the manifest, builds the .liozip archive,
+signs the canonical publication payload (mandatory, ADR-010) and sends the
+artefact to the store.
+
+Flags --file and --version support the release session flow:
+  liora pack ./acme-crm --version 1.3.0 --out acme-crm.liozip
+  liora sign acme-crm.liozip --key ~/.acme/ed25519
+  liora publish mod.acme.crm --version 1.3.0 --file acme-crm.liozip`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runPublish(cmd, args)
 	},
 }
 
+var (
+	publishFile          string
+	publishVersion       string
+	publishAllowUnsigned bool
+)
+
 func init() {
+	publishCmd.Flags().StringVar(&publishFile, "file", "", i18n.T("publish.flag.file"))
+	publishCmd.Flags().StringVar(&publishVersion, "version", "", i18n.T("publish.flag.version"))
+	publishCmd.Flags().BoolVar(&publishAllowUnsigned, "allow-unsigned", false, i18n.T("publish.flag.allow_unsigned"))
 	i18nHelp(publishCmd, "cmd.publish.short", "cmd.publish.long")
+	i18nFlag(publishCmd, "file", "publish.flag.file")
+	i18nFlag(publishCmd, "version", "publish.flag.version")
+	i18nFlag(publishCmd, "allow-unsigned", "publish.flag.allow_unsigned")
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
@@ -42,7 +61,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Check auth. Spec §5.6 step 1: when not connected, run the `liorian
+	// Check auth. Spec §5.6 step 1: when not connected, run the `liora
 	// connect` flow automatically before publishing.
 	s := tui.NewStyles()
 	sess, err := auth.LoadSession(auth.NewStore())
@@ -65,6 +84,12 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	if sess.User != nil {
 		email = sess.User.Email
 	}
+
+	// The Developer Store client is built once: the developer identity is
+	// resolved from it before the metadata prompts, then reused to publish.
+	client := store.NewClient()
+	client.SetToken(sess.AccessToken)
+	client.WithAutoRefresh(sess)
 
 	// Identify module
 	name, err := resolveModule(root, args)
@@ -109,9 +134,11 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check if metadata is incomplete and prompt
+	// Complete the manifest metadata. The developer identity is resolved from the
+	// store, never typed by hand; only the remaining blanks are prompted for.
+	manifestUpdated := resolveDeveloperIdentity(context.Background(), client, sess, manifest)
+
 	if tui.IsInteractive() {
-		updated := false
 		if manifest.Name == "" || manifest.Name == name {
 			n, err := tui.AskText(i18n.T("publish.prompt.display_name"), manifest.Name)
 			if err != nil {
@@ -119,7 +146,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			}
 			if strings.TrimSpace(n) != "" {
 				manifest.Name = strings.TrimSpace(n)
-				updated = true
+				manifestUpdated = true
 			}
 		}
 		if manifest.Description == "" {
@@ -129,17 +156,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			}
 			if strings.TrimSpace(d) != "" {
 				manifest.Description = strings.TrimSpace(d)
-				updated = true
-			}
-		}
-		if manifest.Publisher.ID == "" {
-			p, err := tui.AskText(i18n.T("publish.prompt.dev_id"), "")
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(p) != "" {
-				manifest.Publisher.ID = strings.TrimSpace(p)
-				updated = true
+				manifestUpdated = true
 			}
 		}
 		if manifest.Publisher.Name == "" {
@@ -149,13 +166,13 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			}
 			if strings.TrimSpace(pn) != "" {
 				manifest.Publisher.Name = strings.TrimSpace(pn)
-				updated = true
+				manifestUpdated = true
 			}
 		}
-		if updated {
-			if err := manifest.Save(manifestPath); err != nil {
-				warn(i18n.Tf("publish.warn.manifest", err.Error()))
-			}
+	}
+	if manifestUpdated {
+		if err := manifest.Save(manifestPath); err != nil {
+			warn(i18n.Tf("publish.warn.manifest", err.Error()))
 		}
 	}
 
@@ -166,7 +183,9 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			strings.TrimSpace(s.SubHeader.Render(i18n.T("publish.metadata"))) + "\n\n" +
 			s.KeyValue(i18n.T("label.name"), s.Value.Render(manifest.Name)) + "\n" +
 			s.KeyValue(i18n.T("label.description"), s.Value.Render(manifest.Description)) + "\n" +
-			s.KeyValue(i18n.T("label.version"), s.Value.Render(manifest.Version)),
+			s.KeyValue(i18n.T("label.version"), s.Value.Render(effectivePublishVersion(manifest))) + "\n" +
+			s.KeyValue(i18n.T("label.type"), s.Value.Render(manifest.Type)) + "\n" +
+			s.KeyValue(i18n.T("label.publisher"), s.Value.Render(publisherLabel(manifest))),
 	)))
 
 	// Confirm
@@ -180,29 +199,91 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Pack
-	packer := &module.Packer{Root: root}
-	packResult, err := tui.RunWithSpinner(i18n.T("pack.spinner"), func() (*module.PackResult, error) {
-		return packer.Pack(name)
-	})
-	if err != nil {
-		if _, ok := err.(*pkg.Error); ok {
-			return err
+	// An explicit --version pins the published version for this run.
+	if strings.TrimSpace(publishVersion) != "" {
+		manifest.Version = strings.TrimSpace(publishVersion)
+		if err := manifest.Save(manifestPath); err != nil {
+			return pkg.NewError(i18n.T("cat.manifest"), err.Error(), pkg.ExitManifest)
 		}
-		return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 	}
 
-	client := store.NewClient()
-	client.SetToken(sess.AccessToken)
-	client.WithAutoRefresh(sess)
+	// Pack (or reuse --file, e.g. a pre-built release archive).
+	packer := &module.Packer{Root: root}
+	var packResult *module.PackResult
+	if strings.TrimSpace(publishFile) != "" {
+		archivePath := strings.TrimSpace(publishFile)
+		info, err := os.Stat(archivePath)
+		if err != nil {
+			return pkg.NewErrorWithFix(i18n.T("cat.pack"),
+				i18n.Tf("publish.error.file_not_found", archivePath),
+				i18n.T("publish.error.file_not_found.fix"), pkg.ExitBuild)
+		}
+		if info.Size() > module.MaxArchiveSize {
+			return pkg.NewError(i18n.T("cat.pack"),
+				i18n.Tf("pack.error.max_size", module.MaxArchiveSize/(1024*1024)), pkg.ExitBuild)
+		}
+		packResult = &module.PackResult{
+			Module:  name,
+			Version: manifest.Version,
+			Path:    archivePath,
+			Size:    info.Size(),
+		}
+	} else {
+		var err error
+		packResult, err = tui.RunWithSpinner(i18n.T("pack.spinner"), func() (*module.PackResult, error) {
+			return packer.Pack(name)
+		})
+		if err != nil {
+			if _, ok := err.(*pkg.Error); ok {
+				return err
+			}
+			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+		}
+	}
 
-	// Sign the archive before publishing (spec §5.6 / SEC-009): when a signing
-	// key is available the `.SenMod` is signed and the signature verified. The
-	// publish still proceeds unsigned (with a warning) when no key is present.
-	if signed, serr := signForPublish(packResult.Path); serr != nil {
+	// Sign the canonical publication payload before publishing (spec §7.1 /
+	// ADR-010): the signature is mandatory — the server refuses unsigned
+	// artefacts. `--allow-unsigned` keeps an explicit escape hatch (dev/mock).
+	// The module identifier is the one the server recomputes from the product
+	// (`mod.<publisherSlug>.<moduleSlug>`) — signing `manifest.Domain` would
+	// diverge whenever the publisher slug is not the one recorded locally.
+	accountSlug := ""
+	if account, aerr := client.GetMyAccount(context.Background()); aerr == nil {
+		accountSlug = account.Slug
+	} else {
+		debugf("developer account slug lookup: %v", aerr)
+	}
+	moduleIdentifier := store.CatalogIdentifier(accountSlug, store.ProductSlug(manifest))
+
+	// Local verification/signing BEFORE the upload (spec: verify the
+	// signature locally first — an existing .sig is checked against the
+	// canonical payload; an unsigned artefact prompts the developer to sign
+	// first; a stale .sig is re-signed). The store then verifies the
+	// signature again on reception.
+	signed, keyID, publicKeyPEM, serr := signOrReuseForPublish(packResult.Path, manifest, moduleIdentifier)
+	if serr != nil {
 		return pkg.NewError(i18n.T("cat.signature"), serr.Error(), pkg.ExitSigning)
-	} else if !signed {
+	}
+	if !signed {
 		warn(i18n.T("publish.warn.unsigned"))
+	}
+
+	// Register the local public key on the store before the upload: the server
+	// verifies the signature against an ACTIVE `DeveloperSigningKey.publicKey`
+	// and rejects the artefact (422) when the account carries none. Idempotent
+	// — an already-registered identical key is reused.
+	if signed {
+		key, created, kerr := client.EnsureSigningKey(context.Background(), publicKeyPEM)
+		if kerr != nil {
+			return pkg.NewErrorWithFix(i18n.T("cat.signature"), kerr.Error(),
+				i18n.T("publish.error.key_register.fix"), pkg.ExitSigning)
+		}
+		if created {
+			fmt.Println(s.Info.Render(i18n.T("publish.info.key_registered")))
+		}
+		if key != nil && strings.TrimSpace(keyID) == "" {
+			keyID = key.KeyID
+		}
 	}
 
 	// Publish, resolving SemVer conflicts by offering a patch bump on retry
@@ -217,7 +298,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 		if !isVersionConflict(err) {
 			return pkg.NewErrorWithFix(i18n.T("cat.publication"), err.Error(),
-				i18n.T("publish.error.fix"), pkg.ExitPublish)
+				publishErrorFix(err), pkg.ExitPublish)
 		}
 		if !tui.IsInteractive() {
 			return pkg.NewErrorWithFix(i18n.T("cat.publication"), err.Error(),
@@ -249,15 +330,19 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 		}
-		if signed, serr := signForPublish(packResult.Path); serr != nil {
+		if resigned, newKeyID, _, serr := signForPublish(packResult.Path, manifest, moduleIdentifier); serr != nil {
 			return pkg.NewError(i18n.T("cat.signature"), serr.Error(), pkg.ExitSigning)
-		} else if !signed {
-			warn(i18n.T("publish.warn.unsigned"))
+		} else {
+			signed = resigned
+			keyID = newKeyID
+			if !signed {
+				warn(i18n.T("publish.warn.unsigned"))
+			}
 		}
 	}
 	if err != nil {
 		return pkg.NewErrorWithFix(i18n.T("cat.publication"), err.Error(),
-			i18n.T("publish.error.fix"), pkg.ExitPublish)
+			publishErrorFix(err), pkg.ExitPublish)
 	}
 
 	// Sync the local manifest with the published artifact (spec §5.6 step 7):
@@ -288,6 +373,9 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	rows := []string{
 		s.KeyValue(i18n.T("label.module"), s.Value.Render(name+" v"+pubResult.Version)),
 	}
+	if keyID != "" {
+		rows = append(rows, s.KeyValue(i18n.T("label.signature_key"), s.Value.Render(shortDigest(keyID))))
+	}
 	if pubResult.URL != "" {
 		rows = append(rows, s.KeyValue(i18n.T("label.url"), s.Info.Render(pubResult.URL)))
 	}
@@ -299,33 +387,192 @@ func runPublish(cmd *cobra.Command, args []string) error {
 // maxPublishAttempts bounds the conflict-retry loop.
 const maxPublishAttempts = 5
 
-// signForPublish signs the freshly packed archive when a signing key is
-// available and verifies the produced signature. It returns signed=false (and
-// no error) when no key pair exists, so unsigned publication stays possible.
-func signForPublish(archivePath string) (bool, error) {
-	store := signing.NewKeyStore()
-	if !store.HasKeys() {
-		return false, nil
+// resolveDeveloperIdentity fills `manifest.publisher` from the developer's own
+// store account (`GET /api/developer-store/accounts/me`), falling back to the
+// session user when that endpoint is unreachable.
+//
+// The identifier is the Liorian account id `liorian-connect` scopes every
+// resource to (`DeveloperProduct.developerId`, extracted from the session JWT
+// by `DeveloperAuthMiddleware`) — it is never an Apple or third-party
+// developer id, and the server is the one that assigns it. It is therefore
+// resolved rather than asked for: the store never receives a `publisher` field,
+// so the block is local display metadata kept in sync with the remote account.
+//
+// It reports whether the manifest was modified.
+func resolveDeveloperIdentity(ctx context.Context, c *store.Client, sess *auth.Session, m *module.Manifest) bool {
+	if m == nil {
+		return false
+	}
+	// Nothing to resolve — avoid the round trip on an already-synced manifest.
+	if strings.TrimSpace(m.Publisher.ID) != "" && strings.TrimSpace(m.Publisher.Name) != "" {
+		return false
 	}
 
-	pub, priv, err := signing.LoadKeyPair(store)
+	updated := false
+	account, err := c.GetMyAccount(ctx)
+	if err != nil {
+		debugf("developer account lookup: %v", err)
+	} else {
+		if strings.TrimSpace(m.Publisher.ID) == "" {
+			if id := strings.TrimSpace(account.ID); id != "" {
+				m.Publisher.ID = id
+				updated = true
+			}
+		}
+		if strings.TrimSpace(m.Publisher.Name) == "" {
+			if name := strings.TrimSpace(account.Name); name != "" {
+				m.Publisher.Name = name
+				updated = true
+			}
+		}
+	}
+
+	// Offline fallback: the session user id, restored from the keychain.
+	if strings.TrimSpace(m.Publisher.ID) == "" && sess != nil && sess.User != nil {
+		if id := strings.TrimSpace(sess.User.ID); id != "" {
+			m.Publisher.ID = id
+			updated = true
+		}
+	}
+	return updated
+}
+
+// publisherLabel renders the resolved publisher for the metadata summary
+// ("name (id)", or the id alone when the display name is still unknown).
+func publisherLabel(m *module.Manifest) string {
+	if m == nil {
+		return ""
+	}
+	name := strings.TrimSpace(m.Publisher.Name)
+	id := strings.TrimSpace(m.Publisher.ID)
+	switch {
+	case name != "" && id != "":
+		return name + " (" + id + ")"
+	case name != "":
+		return name
+	default:
+		return id
+	}
+}
+
+// signOrReuseForPublish verifies the local signature of the artefact before
+// the upload. An existing valid .sig is reused as-is; a stale one (checksum,
+// manifest or identifier drift) triggers a re-sign; a missing one prompts the
+// developer to sign first when interactive. `--allow-unsigned` keeps the
+// explicit unsigned escape hatch (dev/mock only — the server refuses it).
+func signOrReuseForPublish(archivePath string, manifest *module.Manifest, moduleIdentifier string) (bool, string, string, error) {
+	sigPath := archivePath + ".sig"
+	if pkg.FileExists(sigPath) {
+		valid, verr := verifyLocalSignature(archivePath, manifest, moduleIdentifier)
+		if verr != nil {
+			return false, "", "", verr
+		}
+		if valid {
+			pub, _, lerr := signing.LoadKeyPair(signing.NewKeyStore())
+			if lerr == nil {
+				if pemKey, perr := signing.PublicKeyPEM(pub); perr == nil {
+					debugf("reusing the existing local signature (%s)", sigPath)
+					return true, signing.Fingerprint(pub), pemKey, nil
+				}
+			}
+		} else {
+			warn(i18n.T("publish.warn.local_signature_stale"))
+		}
+	} else if tui.IsInteractive() && !publishAllowUnsigned && signing.NewKeyStore().HasKeys() {
+		answer, aerr := tui.Confirm(i18n.T("publish.prompt.sign_now"), true)
+		if aerr != nil {
+			return false, "", "", aerr
+		}
+		if !answer {
+			return false, "", "", errors.New(i18n.T("publish.error.signature_required"))
+		}
+	}
+	return signForPublish(archivePath, manifest, moduleIdentifier)
+}
+
+// verifyLocalSignature checks the artefact's .sig against the canonical
+// publication payload (same fields the store re-verifies on reception).
+func verifyLocalSignature(archivePath string, manifest *module.Manifest, moduleIdentifier string) (bool, error) {
+	pub, _, err := signing.LoadKeyPair(signing.NewKeyStore())
 	if err != nil {
 		return false, err
 	}
-
-	sigPath, err := signing.SignArchive(archivePath, priv)
+	checksum, err := signing.ArchiveChecksum(archivePath)
 	if err != nil {
 		return false, err
 	}
-
-	ok, err := signing.VerifySignature(archivePath, sigPath, pub)
+	sig, err := os.ReadFile(archivePath + ".sig")
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to read the signature: %w", err)
 	}
-	if !ok {
-		return false, errors.New(i18n.T("publish.error.signature_invalid"))
+	payload := signing.CanonicalPayloadBytes(signing.CanonicalPayload{
+		ModuleIdentifier: moduleIdentifier,
+		Version:          manifest.Version,
+		Checksum:         checksum,
+		ManifestChecksum: module.ManifestChecksum(manifest),
+		Entry:            manifest.Entry,
+		Type:             manifest.Type,
+	})
+	return signing.VerifyPayload(payload, sig, pub), nil
+}
+
+// signForPublish signs the canonical publication payload of an archive
+// (spec §7.1) and verifies the produced signature. The signature is mandatory
+// (ADR-010): without a signing key it returns a descriptive error unless
+// `--allow-unsigned` was passed, in which case it returns signed=false and the
+// publish proceeds explicitly unsigned (dev/mock only). It also returns the
+// signature key id (public-key fingerprint) and the PEM/SPKI public key for
+// the store registration (`EnsureSigningKey`).
+func signForPublish(archivePath string, manifest *module.Manifest, moduleIdentifier string) (signed bool, keyID string, publicKeyPEM string, err error) {
+	ks := signing.NewKeyStore()
+	if !ks.HasKeys() {
+		if publishAllowUnsigned {
+			return false, "", "", nil
+		}
+		return false, "", "", errors.New(i18n.T("publish.error.signature_required"))
 	}
-	return true, nil
+
+	pub, priv, err := signing.LoadKeyPair(ks)
+	if err != nil {
+		return false, "", "", err
+	}
+
+	checksum, err := signing.ArchiveChecksum(archivePath)
+	if err != nil {
+		return false, "", "", err
+	}
+	payload := signing.CanonicalPayloadBytes(signing.CanonicalPayload{
+		ModuleIdentifier: moduleIdentifier,
+		Version:          manifest.Version,
+		Checksum:         checksum,
+		ManifestChecksum: module.ManifestChecksum(manifest),
+		Entry:            manifest.Entry,
+		Type:             manifest.Type,
+	})
+
+	sig := signing.SignPayload(payload, priv)
+	sigPath := archivePath + ".sig"
+	if err := os.WriteFile(sigPath, sig, 0o600); err != nil {
+		return false, "", "", fmt.Errorf("failed to write the signature: %w", err)
+	}
+
+	if !signing.VerifyPayload(payload, sig, pub) {
+		return false, "", "", errors.New(i18n.T("publish.error.signature_invalid"))
+	}
+	pemKey, err := signing.PublicKeyPEM(pub)
+	if err != nil {
+		return false, "", "", err
+	}
+	return true, signing.Fingerprint(pub), pemKey, nil
+}
+
+// effectivePublishVersion returns the version that will be published (the
+// explicit --version flag wins over the manifest version).
+func effectivePublishVersion(manifest *module.Manifest) string {
+	if strings.TrimSpace(publishVersion) != "" {
+		return strings.TrimSpace(publishVersion)
+	}
+	return manifest.Version
 }
 
 // isVersionConflict reports whether a publish error is a version conflict
@@ -342,4 +589,26 @@ func isVersionConflict(err error) bool {
 	return strings.Contains(lower, "version") &&
 		(strings.Contains(lower, "exists") || strings.Contains(lower, "already") ||
 			strings.Contains(lower, "conflict"))
+}
+
+// publishErrorFix returns the actionable hint for a failed publication. A
+// missing developer-store route is a base-URL misconfiguration, not a
+// connectivity problem, so it gets its own hint instead of the generic one;
+// the same applies to signature rejections (HTTP 422): the archive was
+// received, only its authenticity could not be established.
+func publishErrorFix(err error) string {
+	if errors.Is(err, store.ErrNoStoreRoute) {
+		return i18n.Tf("publish.error.no_route.fix", store.EnvConnectAPI)
+	}
+	var apiErr *pkg.APIError
+	if errors.As(err, &apiErr) {
+		message := strings.ToLower(apiErr.Message)
+		if strings.Contains(message, "signature") {
+			if strings.Contains(message, "clé") || strings.Contains(message, "key") {
+				return i18n.T("publish.error.signature_key.fix")
+			}
+			return i18n.T("publish.error.signature_mismatch.fix")
+		}
+	}
+	return i18n.T("publish.error.fix")
 }

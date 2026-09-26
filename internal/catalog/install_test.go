@@ -38,6 +38,8 @@ func signArchive(data []byte) (sigB64, pubB64 string, err error) {
 
 // baseEntries returns a conformant module file set: manifest, entry page and
 // assets. badManifest points the entry to a missing file so validation fails.
+// The manifest follows the canonical contract (compatibility, oauth,
+// capabilities, Role:Verbe permissions).
 func baseEntries(name, page string, badManifest bool) map[string]string {
 	manifest := map[string]any{
 		"schemaVersion": 1,
@@ -48,21 +50,24 @@ func baseEntries(name, page string, badManifest bool) map[string]string {
 		"description":   "A module used by the install tests",
 		"version":       "1.2.3",
 		"icon":          "PuzzleIcon",
-		"type":          "EXTERNAL",
+		"type":          "WEB_APP_LOCAL",
+		"external":      true,
 		"entry":         config.ModuleEntryFileName,
 		"uri":           "/" + page,
 		"category":      "SYSTEM",
 		"token":         pkg.NewUUID(),
-		"publisher":     map[string]any{"id": "pub_1", "name": "Test Publisher"},
 		"platforms": map[string]any{
 			"web": map[string]any{"supported": true, "modes": []string{"web"}},
 		},
-		"managerCompatibility": map[string]any{"min": "0.17.1", "max": "0.17.x"},
-		"apiCompatibility":     map[string]any{"min": "0.27.0", "max": "0.27.x"},
-		"permissions":          []string{},
+		"compatibility": map[string]any{
+			"socle": map[string]any{"min": "0.17.1", "max": "0.17.x"},
+			"api":   map[string]any{"min": "0.27.0", "max": "0.27.x"},
+		},
+		"permissions":          []string{"User:Get"},
+		"oauth":                map[string]any{"scopes": []string{"openid"}},
 		"optionalRequirements": map[string]string{},
 		"requirements":         map[string]any{},
-		"capabilities":         map[string]any{"needsNetwork": true},
+		"capabilities":         []string{"core:default"},
 	}
 	if badManifest {
 		manifest["entry"] = "missing.tsx"
@@ -86,7 +91,7 @@ type archiveOpts struct {
 	noManifest  bool   // drop the manifest (unusable archive)
 }
 
-// buildArchive zips an ordered entry map into .SenMod bytes.
+// buildArchive zips an ordered entry map into .liozip bytes.
 func buildArchive(t *testing.T, name, page string, opts archiveOpts) []byte {
 	t.Helper()
 	entries := baseEntries(name, page, opts.badManifest)
@@ -171,7 +176,7 @@ func newInstallServer(t *testing.T, mods []catalogModuleFile) *installServer {
 		for _, m := range mods {
 			if m.name == ref {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write(raiton(t, m.catalogEntry(s.srv.URL+"/artifacts/"+m.name+".SenMod")))
+				_, _ = w.Write(raiton(t, m.catalogEntry(s.srv.URL+"/artifacts/"+m.name+".liozip")))
 				return
 			}
 		}
@@ -179,7 +184,9 @@ func newInstallServer(t *testing.T, mods []catalogModuleFile) *installServer {
 		_, _ = w.Write([]byte(`{"message":"module not found","statusCode":404,"data":null}`))
 	})
 	mux.HandleFunc("/artifacts/", func(w http.ResponseWriter, r *http.Request) {
-		name := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/artifacts/"), ".SenMod")
+		name := strings.TrimPrefix(r.URL.Path, "/artifacts/")
+		name = strings.TrimSuffix(name, ".liozip")
+		name = strings.TrimSuffix(name, ".SenMod")
 		for _, m := range mods {
 			if m.name == name {
 				w.Header().Set("Content-Type", "application/octet-stream")
@@ -201,6 +208,11 @@ func (s *installServer) install(root, name string, force bool) (*InstallResult, 
 		Install(context.Background(), name)
 }
 
+func (s *installServer) installAllowUnsigned(root, name string, force bool) (*InstallResult, error) {
+	return (&Installer{Root: root, Force: force, AllowUnsigned: true, Client: &Client{HTTP: pkg.NewClient(s.URL)}}).
+		Install(context.Background(), name)
+}
+
 const (
 	testName = "com.example.blog-manager"
 	testPage = "blog-manager"
@@ -208,7 +220,13 @@ const (
 
 func TestInstallHappyPath(t *testing.T) {
 	data := buildArchive(t, testName, testPage, archiveOpts{})
-	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	sig, pub, err := signArchive(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newInstallServer(t, []catalogModuleFile{{
+		name: testName, data: data, checksum: sha256Hex(data), signature: sig, publicKey: pub,
+	}})
 	root := t.TempDir()
 
 	res, err := srv.install(root, testName, false)
@@ -221,8 +239,8 @@ func TestInstallHappyPath(t *testing.T) {
 	if res.Version != "1.2.3" {
 		t.Errorf("Version = %q, want 1.2.3", res.Version)
 	}
-	if res.SignatureStatus != SignatureUnsigned {
-		t.Errorf("SignatureStatus = %q, want unsigned", res.SignatureStatus)
+	if res.SignatureStatus != SignatureVerified {
+		t.Errorf("SignatureStatus = %q, want verified", res.SignatureStatus)
 	}
 	if res.Files != 4 {
 		t.Errorf("Files = %d, want 4", res.Files)
@@ -237,6 +255,44 @@ func TestInstallHappyPath(t *testing.T) {
 		if !pkg.FileExists(filepath.Join(root, rel)) {
 			t.Errorf("expected %s to be installed", rel)
 		}
+	}
+}
+
+// TestInstallUnsignedRefused pins the fail-closed rule (SEC-001, ADR-010): an
+// artefact without a publisher signature is refused.
+func TestInstallUnsignedRefused(t *testing.T) {
+	data := buildArchive(t, testName, testPage, archiveOpts{})
+	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	root := t.TempDir()
+
+	_, err := srv.install(root, testName, false)
+	if err == nil {
+		t.Fatal("expected a signature error for an unsigned artefact")
+	}
+	if pkg.ExitCodeFor(err) != pkg.ExitSigning {
+		t.Errorf("ExitCode = %d, want %d", pkg.ExitCodeFor(err), pkg.ExitSigning)
+	}
+	if pkg.PathExists(filepath.Join(root, config.ExternalModulesDir)) {
+		t.Error("nothing should be installed after a refused signature")
+	}
+}
+
+// TestInstallUnsignedAllowedExplicitly covers the explicit dev escape hatch
+// (--allow-unsigned): the install proceeds with an unsigned warning.
+func TestInstallUnsignedAllowedExplicitly(t *testing.T) {
+	data := buildArchive(t, testName, testPage, archiveOpts{})
+	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	root := t.TempDir()
+
+	res, err := srv.installAllowUnsigned(root, testName, false)
+	if err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if res.SignatureStatus != SignatureUnsigned {
+		t.Errorf("SignatureStatus = %q, want unsigned", res.SignatureStatus)
+	}
+	if len(res.Warnings) == 0 {
+		t.Error("expected an unsigned warning")
 	}
 }
 
@@ -271,7 +327,13 @@ func TestInstallAlreadyInstalled(t *testing.T) {
 
 func TestInstallForceReplaces(t *testing.T) {
 	data := buildArchive(t, testName, testPage, archiveOpts{})
-	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	sig, pub, err := signArchive(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newInstallServer(t, []catalogModuleFile{{
+		name: testName, data: data, checksum: sha256Hex(data), signature: sig, publicKey: pub,
+	}})
 	root := t.TempDir()
 
 	moduleDir := config.ModuleDir(root, testName)
@@ -347,15 +409,14 @@ func TestInstallSignatureWithoutKey(t *testing.T) {
 	}})
 	root := t.TempDir()
 
-	res, err := srv.install(root, testName, false)
-	if err != nil {
-		t.Fatalf("Install() error = %v", err)
+	// Fail-closed: a signature without a publisher public key cannot be
+	// verified, so the install is refused (no unverified warning path).
+	_, err = srv.install(root, testName, false)
+	if err == nil {
+		t.Fatal("expected a signature error (no public key)")
 	}
-	if res.SignatureStatus != SignatureUnverified {
-		t.Errorf("SignatureStatus = %q, want unverified", res.SignatureStatus)
-	}
-	if len(res.Warnings) == 0 {
-		t.Error("expected a verification warning")
+	if pkg.ExitCodeFor(err) != pkg.ExitSigning {
+		t.Errorf("ExitCode = %d, want %d", pkg.ExitCodeFor(err), pkg.ExitSigning)
 	}
 }
 
@@ -400,17 +461,25 @@ func TestInstallModuleNotFound(t *testing.T) {
 	}
 }
 
-func TestInstallTraversalIgnored(t *testing.T) {
+func TestInstallTraversalRefused(t *testing.T) {
 	data := buildArchive(t, testName, testPage, archiveOpts{traverse: "../evil.txt"})
-	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	sig, pub, err := signArchive(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newInstallServer(t, []catalogModuleFile{{
+		name: testName, data: data, checksum: sha256Hex(data), signature: sig, publicKey: pub,
+	}})
 	root := t.TempDir()
 
-	res, err := srv.install(root, testName, false)
-	if err != nil {
-		t.Fatalf("Install() error = %v", err)
+	// Fail-closed archive audit (§7.2): traversal entries are refused, the
+	// whole install aborts and nothing is extracted.
+	_, err = srv.install(root, testName, false)
+	if err == nil {
+		t.Fatal("expected a traversal error")
 	}
-	if res.Files != 4 {
-		t.Errorf("Files = %d, want 4 (traversal entry dropped)", res.Files)
+	if pkg.PathExists(filepath.Join(root, config.ExternalModulesDir)) {
+		t.Error("nothing should be installed after a refused archive entry")
 	}
 	if pkg.FileExists(filepath.Join(root, "evil.txt")) {
 		t.Error("traversal entry escaped the module layout")
@@ -418,26 +487,37 @@ func TestInstallTraversalIgnored(t *testing.T) {
 }
 
 func TestInstallInvalidArchive(t *testing.T) {
+	garbage := []byte("not a zip")
+	sig, pub, err := signArchive(garbage)
+	if err != nil {
+		t.Fatal(err)
+	}
 	srv := newInstallServer(t, []catalogModuleFile{{
-		name: testName, data: []byte("not a zip"), checksum: sha256Hex([]byte("not a zip")),
+		name: testName, data: garbage, checksum: sha256Hex(garbage), signature: sig, publicKey: pub,
 	}})
 	root := t.TempDir()
 
-	_, err := srv.install(root, testName, false)
+	_, err = srv.install(root, testName, false)
 	if err == nil {
 		t.Fatal("expected an unpack error")
 	}
-	if !strings.Contains(err.Error(), ".SenMod") {
+	if !strings.Contains(err.Error(), ".liozip") {
 		t.Errorf("error %q should mention the archive", err)
 	}
 }
 
 func TestInstallNoManifest(t *testing.T) {
 	data := buildArchive(t, testName, testPage, archiveOpts{noManifest: true})
-	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	sig, pub, err := signArchive(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newInstallServer(t, []catalogModuleFile{{
+		name: testName, data: data, checksum: sha256Hex(data), signature: sig, publicKey: pub,
+	}})
 	root := t.TempDir()
 
-	_, err := srv.install(root, testName, false)
+	_, err = srv.install(root, testName, false)
 	if err == nil {
 		t.Fatal("expected a manifest error")
 	}
@@ -445,10 +525,16 @@ func TestInstallNoManifest(t *testing.T) {
 
 func TestInstallValidationFails(t *testing.T) {
 	data := buildArchive(t, testName, testPage, archiveOpts{badManifest: true})
-	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
+	sig, pub, err := signArchive(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newInstallServer(t, []catalogModuleFile{{
+		name: testName, data: data, checksum: sha256Hex(data), signature: sig, publicKey: pub,
+	}})
 	root := t.TempDir()
 
-	_, err := srv.install(root, testName, false)
+	_, err = srv.install(root, testName, false)
 	if err == nil {
 		t.Fatal("expected a validation error")
 	}
@@ -482,8 +568,11 @@ func TestUnpackRejectsAbsoluteEntry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if sanitizeEntry("/etc/passwd") == "" && containsEntry(t, buf.Bytes()) {
-		t.Fatal("unreachable")
+	// Fail-closed: the absolute entry aborts the whole unpack.
+	if err := unpack(buf.Bytes(), t.TempDir(), true, &InstallResult{}); err == nil {
+		t.Fatal("expected an error for the absolute entry")
+	} else if !strings.Contains(err.Error(), "absolute") {
+		t.Errorf("error %q should mention the absolute path", err)
 	}
 }
 
@@ -498,6 +587,47 @@ func containsEntry(t *testing.T, data []byte) bool {
 		}
 	}
 	return false
+}
+
+// TestEntryAudit pins the fail-closed archive audit contract (spec §7.2):
+// traversal, absolute paths and executables are refused with an error;
+// entries inside the module layout (including the canonical root manifest)
+// pass; anything else is skipped.
+func TestEntryAudit(t *testing.T) {
+	for _, raw := range []string{"../evil.txt", "../../etc/passwd", "/etc/passwd", "C:/win/evil.txt"} {
+		f := &zip.File{FileHeader: zip.FileHeader{Name: raw}}
+		if _, err := auditEntry(f); err == nil {
+			t.Errorf("auditEntry(%q) = nil, want an error", raw)
+		}
+	}
+	for _, raw := range []string{"tool.exe", "lib/native.so", "run.sh"} {
+		f := &zip.File{FileHeader: zip.FileHeader{Name: raw}}
+		if _, err := auditEntry(f); err == nil {
+			t.Errorf("auditEntry(%q) = nil, want an error (executable)", raw)
+		}
+	}
+	for raw, want := range map[string]string{
+		config.ExternalModulesDir + "/com.example.x/manifest.json": config.ExternalModulesDir + "/com.example.x/manifest.json",
+		"src/app/blog/page.tsx": "src/app/blog/page.tsx",
+		"manifest.json":         "manifest.json",
+	} {
+		f := &zip.File{FileHeader: zip.FileHeader{Name: raw}}
+		got, err := auditEntry(f)
+		if err != nil {
+			t.Errorf("auditEntry(%q) error = %v", raw, err)
+		} else if got != want {
+			t.Errorf("auditEntry(%q) = %q, want %q", raw, got, want)
+		}
+	}
+	for _, raw := range []string{"random/notes.txt", "README.md"} {
+		f := &zip.File{FileHeader: zip.FileHeader{Name: raw}}
+		got, err := auditEntry(f)
+		if err != nil {
+			t.Errorf("auditEntry(%q) error = %v", raw, err)
+		} else if got != "" {
+			t.Errorf("auditEntry(%q) = %q, want skipped", raw, got)
+		}
+	}
 }
 
 // TestEntrySanitization pins the sanitizer contract: entries are reduced to a

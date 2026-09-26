@@ -1,4 +1,4 @@
-// Package catalog talks to the public Liorian module catalog
+// Package catalog talks to the public Liora module catalog
 // (`liorian-api-store`, `/api/catalog/*`): it backs the `marketplace`
 // command (search + install of third-party modules, spec §2.4 Future Scope).
 //
@@ -164,7 +164,7 @@ func (c *Client) GetModule(ctx context.Context, ref string) (*CatalogModule, err
 	return &out, nil
 }
 
-// DownloadArtifact fetches the raw `.SenMod` archive bytes of a catalog
+// DownloadArtifact fetches the raw `.liozip` archive bytes of a catalog
 // module. It enforces the store archive limit (module.MaxArchiveSize).
 func (c *Client) DownloadArtifact(ctx context.Context, artifactURL string) ([]byte, error) {
 	artifactURL = strings.TrimSpace(artifactURL)

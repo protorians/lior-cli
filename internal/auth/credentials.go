@@ -24,7 +24,7 @@ const (
 	KeyUserEmail   = prefix + "user_email"
 	KeyMFASecret   = prefix + "mfa_secret"
 	// KeyOAuthRefreshToken stores the OAuth2 refresh token obtained by
-	// `liorian auth` (authorization-code + PKCE).
+	// `liora auth` (authorization-code + PKCE).
 	KeyOAuthRefreshToken = prefix + "oauth_refresh_token"
 	// KeyRefreshTokenLegacy was dropped from the session model (single-token
 	// sessions). Kept in AllKeys so stale keychain entries are purged on

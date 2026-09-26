@@ -1,4 +1,4 @@
-# liorian auth — OAuth2 authorization-code + PKCE (CI mode).
+# liora auth — OAuth2 authorization-code + PKCE (CI mode).
 # LIORIAN_CLI_AUTH_CODE feeds the code directly, skipping the browser + the
 # local loopback callback server.
 mkdir project

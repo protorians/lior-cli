@@ -25,7 +25,7 @@ const (
 )
 
 // gateChecks maps an application lifecycle command to the module health checks
-// required before it is proxied (spec docs/specs/liorian-toolchain.md, §5.7):
+// required before it is proxied (spec docs/specs/liora-toolchain.md, §5.7):
 // the modules must be conformant before the application starts or is built.
 // The gate only audits conformance — the costly debug/test checks are left to
 // their dedicated commands.

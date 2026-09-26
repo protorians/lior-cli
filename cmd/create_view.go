@@ -22,7 +22,7 @@ embedded hello-world view mockup, renamed with the given identifier
 The module is resolved interactively (or passed as the first positional
 argument) and the view identifier is deduced from the domain when omitted.
 
-Usage : liorian create view <module> [name] [--name my-view] [--label "My View"]`,
+Usage : liora create view <module> [name] [--name my-view] [--label "My View"]`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runCreateView(cmd, args)

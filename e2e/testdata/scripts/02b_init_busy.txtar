@@ -1,4 +1,4 @@
-# TC-001b — `liorian init .` into a non-empty directory:
+# TC-001b — `liora init .` into a non-empty directory:
 #   * refused without LIORIAN_CLI_YES, the existing content stays untouched,
 #   * approved via LIORIAN_CLI_YES, the contents are cleared and the
 #     template is copied in place.

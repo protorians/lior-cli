@@ -119,11 +119,11 @@ jobs:
           EXT=""
           if [[ "$GOOS" == "windows" ]]; then EXT=".exe"; fi
           go build -trimpath -ldflags "-s -w" \
-            -o "dist/liorian-${GOOS}-${GOARCH}${EXT}" .
+            -o "dist/liora-${GOOS}-${GOARCH}${EXT}" .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: liorian-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/liorian-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
+          name: liora-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/liora-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
           retention-days: 1

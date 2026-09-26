@@ -1,6 +1,6 @@
 // Package toolchain runs the application-level passthrough commands (`dev`,
 // `build`, `start`, `check`). Those commands proxy the package.json scripts of
-// the project (spec docs/specs/liorian-toolchain.md): the CLI stays the single
+// the project (spec docs/specs/liora-toolchain.md): the CLI stays the single
 // entry point of the application lifecycle and can run configurable pre/post
 // actions — hooks — around the underlying command.
 //

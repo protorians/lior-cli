@@ -1,6 +1,9 @@
 # Build artifacts
+/liora
 /liorian
 /dist/
+npm/lior-cli/bin/liora
+npm/lior-cli/bin/liora.exe
 npm/lior-cli/bin/liorian
 npm/lior-cli/bin/liorian.exe
 

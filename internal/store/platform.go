@@ -73,11 +73,12 @@ type ModuleRequirement struct {
 
 // SigningKey is a module signing key.
 type SigningKey struct {
-	ID        string `json:"id"`
-	KeyID     string `json:"keyId"`
-	Algorithm string `json:"algorithm"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"createdAt"`
+	ID        string  `json:"id"`
+	KeyID     string  `json:"keyId"`
+	Algorithm string  `json:"algorithm"`
+	Status    string  `json:"status"`
+	PublicKey *string `json:"publicKey,omitempty"`
+	CreatedAt string  `json:"createdAt"`
 }
 
 // Accreditation is an account-level accreditation.

@@ -22,12 +22,17 @@ stdout 'com.analytics.visitors'
 exec $LIORIAN --no-color marketplace search nonexistent-module
 stdout 'No module matches your search.'
 
-# TC-031 — `marketplace install` of an unsigned module inside a workspace.
+# TC-031 — unsigned artefacts are refused fail-closed (SEC-001, ADR-010).
 mkdir project
 cd project
 exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
 mkdir -p library/modules
-exec $LIORIAN --no-color marketplace install com.analytics.visitors
+! exec $LIORIAN --no-color marketplace install com.analytics.visitors
+stderr 'not signed'
+stderr 'signature is mandatory'
+
+# --allow-unsigned is the explicit dev escape hatch.
+exec $LIORIAN --no-color marketplace install com.analytics.visitors --allow-unsigned
 stderr 'Installing com.analytics.visitors'
 stderr 'archive not signed'
 stdout '✓ Module installed'
@@ -45,7 +50,7 @@ stdout 'exit=3'
 
 # --force replaces the module.
 exec sh -c 'printf "stale" > library/modules/com.analytics.visitors/marker.txt'
-exec $LIORIAN --no-color marketplace install com.analytics.visitors --force
+exec $LIORIAN --no-color marketplace install com.analytics.visitors --force --allow-unsigned
 stdout '✓ Module installed'
 ! exec test -f library/modules/com.analytics.visitors/marker.txt
 
@@ -69,4 +74,4 @@ stderr 'failed to fetch module'
 # Install outside a workspace requires a project root.
 cd ..
 ! exec $LIORIAN --no-color marketplace install com.example.blog-manager
-stderr 'no Liorian project found'
+stderr 'no Liora project found'

@@ -27,25 +27,26 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "liorian",
-	Short: "Lior CLI — Development tool for Liorian modules",
-	Long: `Lior CLI is the one development tool to create, maintain
-and publish modules in the Liorian ecosystem.
+	Use:     "liora",
+	Aliases: []string{"liorian"},
+	Short:   "Liora CLI — Development tool for Liora modules",
+	Long: `Liora CLI is the one development tool to create, maintain
+and publish modules in the Liora ecosystem.
 
 Full lifecycle: init → create → develop → debug → audit → pack → sign → publish.
 `,
-	Example: `  liorian init
-  liorian create module
-  liorian connect
-  liorian pack com.example.blog-manager
-  liorian sign com.example.blog-manager
-  liorian publish com.example.blog-manager
-  liorian audit`,
+	Example: `  liora init
+  liora create module
+  liora connect
+  liora pack com.example.blog-manager
+  liora sign com.example.blog-manager
+  liora publish com.example.blog-manager
+  liora audit`,
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	// TraverseChildren parses the root (global) flags before descending into a
 	// subcommand. Combined with DisableFlagParsing on the toolchain commands,
-	// this keeps `liorian --no-color dev` valid while forwarding everything
+	// this keeps `liora --no-color dev` valid while forwarding everything
 	// after `dev` verbatim to the backing script.
 	TraverseChildren: true,
 	Args: func(cmd *cobra.Command, args []string) error {
@@ -100,7 +101,7 @@ func init() {
 	i18nFlag(rootCmd, "color", "flag.color")
 	i18nFlag(rootCmd, "lang", "flag.lang")
 
-	rootCmd.SetVersionTemplate("liorian {{.Version}}\n")
+	rootCmd.SetVersionTemplate("liora {{.Version}}\n")
 
 	// Themed help: section labels are tinted when colors are enabled, and
 	// degrade to plain text under --no-color (so E2E regexes stay stable).
@@ -176,7 +177,7 @@ func setupHelpTemplates(root *cobra.Command) {
 
 	// Help template: brand wordmark on top of the main screen, then the
 	// description and the (shared) usage template.
-	root.SetHelpTemplate(`{{if eq .Name "liorian"}}{{wordmark}}{{println}}{{println}}{{end}}{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
+	root.SetHelpTemplate(`{{if eq .Name "liora"}}{{wordmark}}{{println}}{{println}}{{end}}{{with (or .Long .Short)}}{{. | trimTrailingWhitespaces}}
 
 {{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}`)
 }
@@ -292,7 +293,7 @@ func debugf(format string, args ...any) {
 	if !flagVerbose && os.Getenv("LIORIAN_CLI_DEBUG") == "" && !debugConfigVerboseEnabled() {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "[liorian] "+format+"\n", args...)
+	fmt.Fprintf(os.Stderr, "[liora] "+format+"\n", args...)
 }
 
 // warn prints a warning to stderr.

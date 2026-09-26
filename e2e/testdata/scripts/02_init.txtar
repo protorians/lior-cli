@@ -1,4 +1,4 @@
-# TC-001 — `liorian init` with bun detected (fixture on the PATH) and local
+# TC-001 — `liora init` with bun detected (fixture on the PATH) and local
 # template source (LIORIAN_CLI_TEMPLATE_REPO) to stay offline.
 mkdir template
 cd template

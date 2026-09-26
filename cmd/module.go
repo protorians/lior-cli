@@ -21,7 +21,7 @@ import (
 // GitHub and observability.
 var moduleCmd = &cobra.Command{
 	Use:   "module",
-	Short: "Inspect a module's lifecycle on Liorian Connect",
+	Short: "Inspect a module's lifecycle on Liora Connect",
 	Long: `Inspects the Developer Store resources of a published module:
 documentation, workflows, build channels, platforms, requirements, signing keys,
 accreditations, environment variables, GitHub and observability.`,
@@ -113,7 +113,7 @@ func requireModuleToken(args []string) (string, error) {
 	if token == "" {
 		return "", pkg.NewErrorWithFix(i18n.T("cat.module"),
 			fmt.Sprintf("Le module %q n'est pas lié au store (token absent).", name),
-			fmt.Sprintf("Exécutez « liorian publish %s » ou « liorian link %s <token> ».", name, name),
+			fmt.Sprintf("Exécutez « liora publish %s » ou « liora link %s <token> ».", name, name),
 			pkg.ExitModuleNotFound)
 	}
 	return token, nil

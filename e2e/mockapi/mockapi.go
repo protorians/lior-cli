@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -337,7 +338,7 @@ func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
 		s.handleModulesRoot(w, r)
 		return
 	}
-	// /:id, /:id/versions, /:id/versions/:vid/artifact, /:id/<lifecycle>
+	// /:id, /:id/versions, /:id/versions/:vid/artifact/upload, /:id/<lifecycle>
 	parts := strings.Split(strings.Trim(p, "/"), "/")
 	id := parts[0]
 	switch {
@@ -345,7 +346,7 @@ func (s *Server) storeModules(w http.ResponseWriter, r *http.Request) {
 		s.handleModule(w, r, id)
 	case len(parts) == 2 && parts[1] == "versions":
 		s.handleVersions(w, r, id)
-	case len(parts) == 4 && parts[1] == "versions" && parts[3] == "artifact":
+	case len(parts) == 5 && parts[1] == "versions" && parts[3] == "artifact" && parts[4] == "upload":
 		s.handleArtifact(w, r, id, parts[2])
 	case len(parts) >= 2 && isLifecyclePath(parts[1]):
 		s.handleLifecycle(w, r, parts)
@@ -993,12 +994,24 @@ func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request, productI
 		writeError(w, 405, "Method not allowed")
 		return
 	}
-	var req struct {
-		Checksum  string `json:"checksum"`
-		Signature string `json:"signature"`
-		SizeBytes int64  `json:"size"`
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid multipart artifact")
+		return
 	}
-	if !decodeBody(w, r, &req) {
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Archive missing")
+		return
+	}
+	defer file.Close()
+	archive, err := io.ReadAll(file)
+	if err != nil || len(archive) == 0 {
+		writeError(w, http.StatusBadRequest, "Archive empty")
+		return
+	}
+	checksum := r.FormValue("checksum")
+	if checksum == "" {
+		writeError(w, http.StatusBadRequest, "Checksum missing")
 		return
 	}
 	s.mu.Lock()
@@ -1007,10 +1020,10 @@ func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request, productI
 	s.mu.Unlock()
 	writeData(w, http.StatusCreated, map[string]any{
 		"url":       "https://store.liorian.dev/modules/" + slug,
-		"key":       "artifacts/" + productID + "/" + versionID + ".SenMod",
-		"checksum":  req.Checksum,
-		"signature": req.Signature,
-		"sizeBytes": req.SizeBytes,
+		"key":       "artifacts/" + productID + "/" + versionID + ".liozip",
+		"checksum":  checksum,
+		"signature": r.FormValue("signature"),
+		"sizeBytes": len(archive),
 	})
 }
 
@@ -1069,7 +1082,7 @@ func (s *Server) seedCatalog() {
 func (s *Server) seedModule(slug, page, name, desc, category, version string, installs int64, signed bool) {
 	data := buildModuleArchive(slug, page, version)
 	entry := CatalogModule{
-		ID: "cat_" + slug, Slug: slug, Type: "EXTERNAL", Domain: slug,
+		ID: "cat_" + slug, Slug: slug, Type: "WEB_APP_LOCAL", Domain: slug,
 		Name: name, Description: desc, Icon: "PuzzleIcon",
 		PrimaryCategory: category, SecondaryCategory: "OPERATIONS",
 		Publisher: func() struct {
@@ -1107,8 +1120,9 @@ func sha256HexBytes(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// buildModuleArchive packs a conformant module (manifest + entry + page +
-// assets) into a `.SenMod` ZIP, mirroring `internal/module/packer.go`.
+// buildModuleArchive packs a conformant module (canonical manifest at the
+// root + module tree + page + assets) into a `.liozip` ZIP, mirroring
+// `internal/module/packer.go` (spec TECH-002).
 func buildModuleArchive(name, page, version string) []byte {
 	manifest := map[string]any{
 		"schemaVersion": 1,
@@ -1119,27 +1133,31 @@ func buildModuleArchive(name, page, version string) []byte {
 		"description":   "A module distributed through the public catalog",
 		"version":       version,
 		"icon":          "PuzzleIcon",
-		"type":          "EXTERNAL",
+		"type":          "WEB_APP_LOCAL",
+		"external":      true,
 		"entry":         "index.tsx",
 		"uri":           "/" + page,
 		"category":      "SYSTEM",
 		"token":         uuid.NewString(),
-		"publisher":     map[string]any{"id": "pub-protorians", "name": "protorians"},
 		"platforms": map[string]any{
 			"web": map[string]any{"supported": true, "modes": []string{"web"}},
 		},
-		"managerCompatibility": map[string]any{"min": "0.17.1", "max": "0.17.x"},
-		"apiCompatibility":     map[string]any{"min": "0.27.0", "max": "0.27.x"},
-		"permissions":          []string{},
+		"compatibility": map[string]any{
+			"socle": map[string]any{"min": "0.17.1", "max": "0.17.x"},
+			"api":   map[string]any{"min": "0.27.0", "max": "0.27.x"},
+		},
+		"permissions":          []string{"User:Get"},
+		"oauth":                map[string]any{"scopes": []string{"openid"}},
 		"optionalRequirements": map[string]string{},
 		"requirements":         map[string]any{},
-		"capabilities":         map[string]any{"needsNetwork": true},
+		"capabilities":         []string{"core:default"},
 	}
 	raw, _ := json.MarshalIndent(manifest, "", "  ")
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	entries := map[string]string{
+		"manifest.json": string(raw) + "\n",
 		"library/modules/" + name + "/manifest.json": string(raw) + "\n",
 		"library/modules/" + name + "/index.tsx":     "export default function Demo() {\n  return <div>Demo</div>;\n}\n",
 		"src/app/" + page + "/page.tsx":              "export default function Page() { return <div>Page</div>; }\n",
@@ -1147,6 +1165,7 @@ func buildModuleArchive(name, page, version string) []byte {
 	}
 	// deterministic order keeps archives stable across runs
 	for _, rel := range []string{
+		"manifest.json",
 		"library/modules/" + name + "/manifest.json",
 		"library/modules/" + name + "/index.tsx",
 		"src/app/" + page + "/page.tsx",
@@ -1168,7 +1187,7 @@ func buildModuleArchive(name, page, version string) []byte {
 
 // withArtifactURL fills the absolute storefront artifact URL for a request.
 func (m CatalogModule) withArtifactURL(r *http.Request) CatalogModule {
-	m.ArtifactURL = "http://" + r.Host + "/catalog/artifacts/" + m.Slug + ".SenMod"
+	m.ArtifactURL = "http://" + r.Host + "/catalog/artifacts/" + m.Slug + ".liozip"
 	return m
 }
 
@@ -1217,7 +1236,9 @@ func (s *Server) catalogGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) catalogArtifact(w http.ResponseWriter, r *http.Request) {
-	slug := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/catalog/artifacts/"), ".SenMod")
+	slug := strings.TrimPrefix(r.URL.Path, "/catalog/artifacts/")
+	slug = strings.TrimSuffix(slug, ".liozip")
+	slug = strings.TrimSuffix(slug, ".SenMod")
 	s.mu.Lock()
 	data, ok := s.catalogArtifacts[slug]
 	s.mu.Unlock()

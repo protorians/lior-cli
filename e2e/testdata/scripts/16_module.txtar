@@ -1,4 +1,4 @@
-# TC-030 — `liorian module` exposes the Developer Store module-lifecycle
+# TC-030 — `liora module` exposes the Developer Store module-lifecycle
 # sub-commands (spec module-lifecycle §CLI, epic E-008).
 exec $LIORIAN --no-color help module
 stdout 'Inspects the Developer Store resources'
@@ -12,7 +12,7 @@ exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-ma
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
 exec $LIORIAN --no-color connect
-exec $LIORIAN --no-color publish com.example.blog-manager
+exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
 stdout 'Published successfully'
 
 # list — account-scoped product listing.

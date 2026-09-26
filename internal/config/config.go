@@ -17,7 +17,7 @@ type Config struct {
 	Toolchain ToolchainConfig `json:"toolchain"`
 }
 
-// TestConfig configures `liorian test`: which package manager installs and
+// TestConfig configures `liora test`: which package manager installs and
 // runs the test packages, and which test package each module uses. The values
 // are persisted in `lorian.config.json` so later runs skip detection and
 // selection.
@@ -81,34 +81,34 @@ type CliConfig struct {
 // `build`, `start`, `check`): the project can rename the package.json script
 // backing each command and register pre/post actions around it.
 type ToolchainConfig struct {
-	// Commands maps a liorian command ("dev", "build", "start", "check") to
+	// Commands maps a liora command ("dev", "build", "start", "check") to
 	// the package.json script that backs it. An empty value falls back to the
 	// default mapping ("dev"→"dev", "build"→"build", "start"→"start",
 	// "check"→"lint").
 	Commands map[string]string `json:"commands,omitempty"`
 	// Before lists package.json scripts run through the package manager
-	// before the toolchain command, keyed by liorian command name. A failing
+	// before the toolchain command, keyed by liora command name. A failing
 	// hook aborts the command.
 	Before map[string][]string `json:"before,omitempty"`
 	// After lists package.json scripts run through the package manager after
-	// the toolchain command, keyed by liorian command name. A failing hook
+	// the toolchain command, keyed by liora command name. A failing hook
 	// makes the run non-zero.
 	After map[string][]string `json:"after,omitempty"`
 }
 
-// Command returns the configured package.json script for a liorian command
+// Command returns the configured package.json script for a liora command
 // name, falling back to an empty string when none is configured.
 func (c ToolchainConfig) Command(name string) string {
 	return strings.TrimSpace(c.Commands[name])
 }
 
-// BeforeHooks returns the configured pre-action hook names for a liorian
+// BeforeHooks returns the configured pre-action hook names for a liora
 // command.
 func (c ToolchainConfig) BeforeHooks(name string) []string {
 	return c.CommandsHooks(c.Before, name)
 }
 
-// AfterHooks returns the configured post-action hook names for a liorian
+// AfterHooks returns the configured post-action hook names for a liora
 // command.
 func (c ToolchainConfig) AfterHooks(name string) []string {
 	return c.CommandsHooks(c.After, name)

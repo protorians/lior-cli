@@ -40,10 +40,16 @@ type InstallResult struct {
 }
 
 // Installer downloads, verifies and extracts a third-party module into a
-// Liorian workspace (spec §2.4 Future Scope: `marketplace install`).
+// Liora workspace (spec §2.4 Future Scope: `marketplace install`).
+//
+// Verification is fail-closed (spec SEC-001): an artefact is never extracted
+// without a matching SHA-256 checksum AND a valid Ed25519 signature.
 type Installer struct {
 	Root  string
 	Force bool
+	// AllowUnsigned explicitly accepts artefacts without a publisher
+	// signature (dev only — the server chain always requires one, ADR-010).
+	AllowUnsigned bool
 	// Client overrides the catalog client (tests inject a mock server).
 	Client *Client
 }
@@ -55,9 +61,9 @@ func (i *Installer) client() *Client {
 	return NewClient()
 }
 
-// Install resolves a module in the catalog, downloads its `.SenMod` archive,
-// verifies the SHA-256 checksum (and the Ed25519 signature when the publisher
-// provides one), then extracts the module in place.
+// Install resolves a module in the catalog, downloads its `.liozip` archive,
+// verifies the SHA-256 checksum and the Ed25519 publisher signature
+// (fail-closed), then extracts the module in place.
 func (i *Installer) Install(ctx context.Context, ref string) (*InstallResult, error) {
 	mod, err := i.client().GetModule(ctx, ref)
 	if err != nil {
@@ -116,7 +122,7 @@ func (i *Installer) Install(ctx context.Context, ref string) (*InstallResult, er
 			pkg.ExitError)
 	}
 
-	if err := verifySignature(mod, archive, res); err != nil {
+	if err := verifySignature(mod, archive, res, i.AllowUnsigned); err != nil {
 		return nil, err
 	}
 
@@ -126,12 +132,13 @@ func (i *Installer) Install(ctx context.Context, ref string) (*InstallResult, er
 	return res, nil
 }
 
-// verifyChecksum compares the archive SHA-256 with the catalog checksum. A
-// missing catalog checksum is not an error (best-effort verification).
+// verifyChecksum compares the archive SHA-256 with the catalog checksum.
+// Fail-closed (SEC-001): a missing catalogue checksum is an error, never a
+// silent pass.
 func verifyChecksum(expected string, data []byte) error {
 	expected = normalizeChecksum(expected)
 	if expected == "" {
-		return nil
+		return errors.New(i18n.T("marketplace.error.checksum_missing"))
 	}
 	got := checksumHex(data)
 	if !strings.EqualFold(got, expected) {
@@ -140,19 +147,25 @@ func verifyChecksum(expected string, data []byte) error {
 	return nil
 }
 
-// verifySignature verifies the optional Ed25519 signature of an archive.
-// An unsigned archive is a warning; a signature without a public key cannot be
-// checked (warning); a present-but-invalid signature is a hard error.
-func verifySignature(mod *CatalogModule, data []byte, res *InstallResult) error {
+// verifySignature verifies the Ed25519 publisher signature of an archive.
+// Fail-closed (SEC-001, ADR-010): a missing or unverifiable signature is a
+// hard error unless AllowUnsigned was explicitly passed (dev only). A
+// present-but-invalid signature is always a hard error.
+func verifySignature(mod *CatalogModule, data []byte, res *InstallResult, allowUnsigned bool) error {
 	if strings.TrimSpace(mod.Signature) == "" {
-		res.SignatureStatus = SignatureUnsigned
-		res.Warnings = append(res.Warnings, i18n.T("marketplace.verify.unsigned"))
-		return nil
+		if allowUnsigned {
+			res.SignatureStatus = SignatureUnsigned
+			res.Warnings = append(res.Warnings, i18n.T("marketplace.verify.unsigned"))
+			return nil
+		}
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
+			i18n.T("marketplace.error.signature_required"),
+			i18n.T("marketplace.error.signature_required.fix"), pkg.ExitSigning)
 	}
 	if strings.TrimSpace(mod.SignaturePublicKey) == "" {
-		res.SignatureStatus = SignatureUnverified
-		res.Warnings = append(res.Warnings, i18n.T("marketplace.verify.unverified"))
-		return nil
+		return pkg.NewErrorWithFix(i18n.T("cat.signature"),
+			i18n.T("marketplace.error.signature.no_key"),
+			i18n.T("marketplace.error.signature.no_key.fix"), pkg.ExitSigning)
 	}
 	sig, err := base64.StdEncoding.DecodeString(mod.Signature)
 	if err != nil {
@@ -186,9 +199,11 @@ func checksumHex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// unpack extracts a `.SenMod` (ZIP) archive into a temporary directory,
-// validates the extracted module and copies only this module's directories
-// into the workspace: `library/modules/<name>/`, `public/assets/<name>/` and
+// unpack extracts a `.liozip` (ZIP) archive into a temporary directory,
+// audits every entry fail-closed (traversal, absolute paths, symlinks,
+// executables, entry count and decompression ratio — spec §7.2), validates
+// the extracted module and copies only this module's directories into the
+// workspace: `library/modules/<name>/`, `public/assets/<name>/` and
 // `src/app/<uri-or-id>/`. Nothing touches the workspace when the archive is
 // invalid or fails validation, so a bad install never leaves partial files.
 func unpack(data []byte, root string, force bool, res *InstallResult) error {
@@ -198,19 +213,33 @@ func unpack(data []byte, root string, force bool, res *InstallResult) error {
 	}
 	defer os.RemoveAll(tmp)
 
-	var files []string
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return fmt.Errorf("not a valid .SenMod archive: %w", err)
+		return fmt.Errorf("not a valid .liozip archive: %w", err)
 	}
+	if len(zr.File) > module.MaxArchiveFiles {
+		return fmt.Errorf("archive holds too many entries (max %d)", module.MaxArchiveFiles)
+	}
+	var uncompressed int64
 	for _, f := range zr.File {
-		rel := sanitizeEntry(f.Name)
-		if rel == "" || !allowedEntry(rel) {
+		uncompressed += int64(f.UncompressedSize64)
+	}
+	if int64(len(data))*module.MaxArchiveRatio < uncompressed {
+		return errors.New(i18n.T("pack.error.zip_bomb"))
+	}
+
+	var files []string
+	for _, f := range zr.File {
+		rel, err := auditEntry(f)
+		if err != nil {
+			return err
+		}
+		if rel == "" {
 			continue
 		}
 		target := filepath.Join(tmp, filepath.FromSlash(rel))
 		if !withinDir(tmp, target) {
-			continue
+			return fmt.Errorf("archive entry escapes its directory: %s", f.Name)
 		}
 		if err := writeZipEntry(f, target); err != nil {
 			return err
@@ -275,6 +304,47 @@ func unpack(data []byte, root string, force bool, res *InstallResult) error {
 	return nil
 }
 
+// auditEntry validates one archive entry fail-closed (spec §7.2,
+// ModuleArchiveSafetyPolicy): traversal, absolute paths, symlinks and
+// executables are refused with an error. Entries outside the module layout
+// (including the canonical root `manifest.json`) are skipped ("" result).
+func auditEntry(f *zip.File) (string, error) {
+	name := filepath.ToSlash(f.Name)
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`) ||
+		(len(name) > 2 && name[1] == ':') {
+		return "", fmt.Errorf("absolute path refused in archive: %s", f.Name)
+	}
+	for _, seg := range strings.Split(name, "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("path traversal refused in archive: %s", f.Name)
+		}
+	}
+	clean := strings.TrimPrefix(path.Clean("/"+name), "/")
+	if clean == "" || clean == "." {
+		return "", nil
+	}
+	if f.FileInfo().Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("symlink refused in archive: %s", f.Name)
+	}
+	if isBlockedExt(clean) {
+		return "", fmt.Errorf("executable refused in archive: %s", f.Name)
+	}
+	if !allowedEntry(clean) {
+		return "", nil
+	}
+	return clean, nil
+}
+
+// isBlockedExt reports whether an entry carries a non-servable executable
+// extension (mirrors the packer refusal list).
+func isBlockedExt(rel string) bool {
+	switch strings.ToLower(path.Ext(rel)) {
+	case ".so", ".dylib", ".dll", ".exe", ".bat", ".cmd", ".msi", ".dmg", ".sh", ".node":
+		return true
+	}
+	return false
+}
+
 // sanitizeEntry normalizes a zip entry name to a clean, project-relative path.
 // Absolute paths and `..` traversal are rejected (empty result).
 func sanitizeEntry(name string) string {
@@ -285,8 +355,12 @@ func sanitizeEntry(name string) string {
 	return clean
 }
 
-// allowedEntry reports whether an archive entry belongs to the module layout.
+// allowedEntry reports whether an archive entry belongs to the module layout:
+// the module tree, its page, its assets, or the canonical root manifest.
 func allowedEntry(rel string) bool {
+	if rel == "manifest.json" {
+		return true
+	}
 	return strings.HasPrefix(rel, config.ExternalModulesDir+"/") ||
 		strings.HasPrefix(rel, "src/") ||
 		strings.HasPrefix(rel, "public/")

@@ -112,7 +112,7 @@ func (d *Debugger) DebugModuleCtx(ctx context.Context, name string) (*DebugResul
 
 	result := &DebugResult{Module: name}
 
-	// Step 1 — validate the module against the Liorian rules.
+	// Step 1 — validate the module against the Liora rules.
 	v := &module.Validator{Root: d.Root}
 	res, err := v.ValidateModule(name)
 	if err != nil {

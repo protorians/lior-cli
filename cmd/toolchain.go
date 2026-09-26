@@ -15,7 +15,7 @@ import (
 
 // toolchainCmd builds a passthrough command that proxies the package.json
 // script backing the given application lifecycle command (spec
-// docs/specs/liorian-toolchain.md). Every argument — including flags such as
+// docs/specs/liora-toolchain.md). Every argument — including flags such as
 // `-p` or `--experimental-https` — is forwarded verbatim to the script (an
 // optional `--` separator is accepted and dropped); hooks configured in
 // `lorian.config.json` run before/after it.
@@ -28,7 +28,7 @@ func toolchainCmd(name string) *cobra.Command {
 		// The backing script owns these arguments: flags such as `-p` or
 		// `--experimental-https` must be forwarded verbatim instead of being
 		// parsed (and rejected) by the CLI. Global flags placed before the
-		// command (`liorian --no-color dev …`) are still parsed by Cobra
+		// command (`liora --no-color dev …`) are still parsed by Cobra
 		// because the root command traverses its children first.
 		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -42,8 +42,8 @@ func toolchainCmd(name string) *cobra.Command {
 
 // forwardArgs normalises the raw arguments of a passthrough command: an
 // optional `--` separator is dropped so the remaining tokens are forwarded
-// verbatim to the underlying script (`liorian dev -- --port 3000` and
-// `liorian dev --port 3000` are equivalent).
+// verbatim to the underlying script (`liora dev -- --port 3000` and
+// `liora dev --port 3000` are equivalent).
 func forwardArgs(args []string) []string {
 	for i, a := range args {
 		if a == "--" {
@@ -85,7 +85,7 @@ func runToolchain(cmd *cobra.Command, name string, args []string) error {
 		cfg = config.Default()
 	}
 
-	// Pre-flight gate (spec docs/specs/liorian-toolchain.md, §5.7): the
+	// Pre-flight gate (spec docs/specs/liora-toolchain.md, §5.7): the
 	// modules must be healthy before the application lifecycle command runs.
 	// dev → debug + test ; build/start → debug + test + audit.
 	if err := runToolchainGate(root, cfg, name); err != nil {

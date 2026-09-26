@@ -1,7 +1,7 @@
-# Plan de mise à jour / mise à niveau — Lior CLI
+# Plan de mise à jour / mise à niveau — Liora CLI
 
-> Objectif : aligner le **code** de la CLI `liorian` sur les contrats de référence du workspace
-> (`liorian-workspace/docs`) qui ont évolué, et sur la spec réalignée `docs/specs/liorian.md`.
+> Objectif : aligner le **code** de la CLI `liora` sur les contrats de référence du workspace
+> (`liorian-workspace/docs`) qui ont évolué, et sur la spec réalignée `docs/specs/liora.md`.
 > Document de travail : à transformer en lots (issues/PR) et à tenir à jour dans
 > `docs/rapport-implementation.md`.
 >
@@ -24,6 +24,7 @@ Légende : ✅ fait · 🟡 partiel · ⬜ non fait · ➖ sans objet.
 | D | Audit/Validator étendu (E-11) | ✅ fait |
 | E | OAuth refresh + chemin `$schema` (E-13) | ✅ fait (OAuth) · ✅ schéma ; catalogue ➖ |
 | F | Docs, i18n, release | ✅ fait |
+| G | Chaîne d'installation `module-installation` (specs 0.49.0–0.50.0 `EXÉCUTÉ`) : manifeste canonique, `.liozip`, signature obligatoire, fail-closed | ✅ fait (voir §10) |
 
 **Vérifications** : `gofmt -l .` propre · `go vet ./...` propre · `go test ./...` vert ·
 `go test ./e2e/ -run TestScripts -count=1` vert · audit sans WARNING sur un module créé neuf.
@@ -119,7 +120,7 @@ round-trip **sans perte**.
   utilisent `com.example.*`) ; l'audit conserve le WARNING de format `mod.liorian.<name>`.
 - Vérifier que le scaffold `index.tsx` n'embarque pas les 4 champs de prérequis/dépendances. — ✅
 
-**DoD lot B** : un module créé passe la validation schéma SDK + `liorian audit` sans WARNING de domaine.
+**DoD lot B** : un module créé passe la validation schéma SDK + `liora audit` sans WARNING de domaine.
 
 > ✅ Vérifié : `audit` sur un module `mod.liorian.<id>` neuf → aucune catégorie WARNING.
 
@@ -191,14 +192,14 @@ E2E publish verts.
 
 ## 6. Lot F — P3 : documentation & release — ✅ Fait
 
-> `rapport-implementation.md` (écarts E-01→E-13 clos + itération), `specs/liorian.md`
+> `rapport-implementation.md` (écarts E-01→E-13 clos + itération), `specs/liora.md`
 > (create/publish/audit/OAuth/versions), `CHANGELOG.md` `v0.7.0`, `README.md`,
 > `app.config.json` + `npm/lior-cli/package.json` (0.7.0), i18n fr/en
 > (`create.flag.type`/`create.flag.category`, `module.error.type`/`module.error.category`).
 > CI vérifiée localement : `gofmt -l`, `go vet`, `go test ./...`, `go test ./e2e/ -run TestScripts`.
 
 - `docs/rapport-implementation.md` : clore les écarts E-01 → E-12 une fois traités.
-- `docs/specs/liorian.md` : recompiler les sections concernées si un comportement change.
+- `docs/specs/liora.md` : recompiler les sections concernées si un comportement change.
 - `CHANGELOG.md` + `README.md` + `npm/lior-cli/package.json` (version) + `app.config.json`.
 - i18n : nouvelles clés `create.flag.category`, `create.flag.type`, messages d'audit — `en-US.json` **et** `fr-FR.json`.
 - CI : `go vet ./...`, `gofmt -l`, `go test ./...`, `go test ./e2e/ -run TestScripts`.
@@ -232,7 +233,7 @@ Lot A (manifeste)  ──▶ Lot B (create)  ──▶ Lot C (publish) ──▶
 |--------|------------|------|
 | Le round-trip typé perd des champs futurs | Conserver un sac d'extensions `json.RawMessage` (A.1) | ✅ `Extra` + test |
 | E2E cassés par les nouvelles assertions/mock | Mettre à jour `e2e/mockapi` et txtar dans le même lot | ✅ E2E verts |
-| Régression sur les projets existants (manifestes sans `optionalRequirements`) | Audit en WARNING ; migration douce via `liorian audit` | ✅ WARNING uniquement |
+| Régression sur les projets existants (manifestes sans `optionalRequirements`) | Audit en WARNING ; migration douce via `liora audit` | ✅ WARNING uniquement |
 | Bump `buildNumber` côté serveur déjà géré | Confirmer la règle « défaut = dernière build + 1 » dans `liorian-connect.md` | ✅ confirmé (spec §2.2) |
 | Incohérence de chemin de schéma SDK | Trancher avec l'équipe workspace avant de figer `$schema` | ✅ chemin SDK figé |
 
@@ -252,5 +253,27 @@ Lot A (manifeste)  ──▶ Lot B (create)  ──▶ Lot C (publish) ──▶
 **Reste à faire (non bloquant)**
 - 🟡 Lancer la validation `ajv` en CI sur le manifeste produit (outil absent localement).
 - 🟡 Confirmer le durcissement éventuel de `ValidateDomain` vers `^mod\.` en équipe (souplesse
-  reverse-DNS conservée pour l'instant).
+  reverse-DNS conservée pour l'instant ; WARNING `canonical domain` en place).
 - ➖ Catalogue `/api/catalog/*` : aucun client à ajouter tant qu'aucun `link`/`publish` ne s'en sert.
+
+---
+
+## 10. Lot G — chaîne d'installation `module-installation` (specs 0.49.0–0.50.0 `EXÉCUTÉ`)
+
+> **Statut lot G : ✅ Fait.** La CLI est le premier maillon côté éditeur de la chaîne
+> [`module-installation.md`](../../../lior-workspace/docs/specs/applications/module-installation.md)
+> (artefact `.liozip`, signature obligatoire, manifeste canonique, fail-closed).
+
+| # | Écart | Traitement |
+|---|-------|------------|
+| G-01 | Extension `.SenMod` vs `.liozip` canonique (ADR-003, D6) | `config.ArchiveExt = ".liozip"` ; `.SenMod`/`.smp` lus en legacy (signature, install), jamais produits ; mock E2E + scripts alignés |
+| G-02 | Manifeste legacy (`managerCompatibility`, `apiScopes`, `capabilities` objet, `INTERNAL`/`EXTERNAL`, permissions `<id>.action`) | Champs canoniques ajoutés (`compatibility.{socle,api}`, `oauth.scopes`, `capabilities: []`, `external`, `dataModel`, `declarative`) ; lecture legacy normalisée (round-trip préservé) ; mockup = miroir 1:1 du socle (`WEB_APP_LOCAL`, permissions `Role:Verbe`) ; `create` défaut `WEB_APP_LOCAL` |
+| G-03 | Signature optionnelle (warning) vs obligatoire (ADR-010, SEC-001) | Charge utile canonique `{moduleIdentifier, version, checksum, manifestChecksum, entry, type}` (§7.1) signée par `liora sign` (module ou fichier `--key`) ; `publish` refuse sans clé sauf `--allow-unsigned` ; artefact déclaré avec `manifestChecksum` + `signatureKeyId` (fingerprint) |
+| G-04 | `publish` sans `--file`/`--version` (session §16) | Flags `--file`, `--version`, `--allow-unsigned` ; `pack --out/--version` ; normalisation des args (`./x`, `library/modules/x`) |
+| G-05 | Runtimes `WEB/DESKTOP/MOBILE` vs `ModuleRuntimeEnum` (§4.3) | `supportedRuntimes` canoniques (`web`, `tauri-desktop-*`, `tauri-mobile-*` depuis `os`) ; compat effective (`compatibility` prioritaire) envoyée à la version |
+| G-06 | Install marketplace best-effort (checksum/signature optionnels, traversal silencieuse) | Fail-closed : checksum absent → erreur, signature absente/invérifiable → erreur (`--allow-unsigned` en dev), audit d'archive bloquant (traversée, absolu, symlink, exécutables, 5 000 entrées, ratio 100:1 — §7.2) |
+| G-07 | Types de modules restreints (`INTERNAL`/`EXTERNAL`) | Enum canonique à 10 valeurs (`CONFIGURATION`, `WEB_APP_*`, `WIDGET`, `THEME`, `SYSTEM`, `SERVICE`, …) ; legacy en WARNING ; validateur : domaine canonique `mod.*`, permissions `Role:Verbe`, `oauth.scopes` au catalogue, `CONFIGURATION` (`entry: index.json`, `dataModel`) |
+| G-08 | Spec/i18n/docs | `docs/specs/liora.md` (§5.2, §5.5, §5.6, §5.13, FR/SEC, session §16, références specs), `README.md`, 30 clés i18n fr/en, E2E `04/05/08/10/13/16` |
+
+**DoD lot G** : `go build ./...` + `go vet ./...` + `gofmt -l` propres · `go test ./...` vert (unitaires) ·
+`go test ./e2e/ -run TestScripts -count=1` vert · audit sans WARNING sur un module créé neuf.

@@ -168,10 +168,25 @@ func TestMockupManifestRoundTripNoLoss(t *testing.T) {
 	if len(reloaded.Platforms.Desktop.OS) == 0 {
 		t.Error("platforms.desktop.os perdu au round-trip")
 	}
-	if reloaded.Platforms.Mobile.IOSSupported == nil {
-		t.Error("platforms.mobile.iosSupported perdu au round-trip")
+	if reloaded.Compatibility == nil {
+		t.Error("compatibility perdu au round-trip")
+	} else {
+		if reloaded.Compatibility.Socle.Min != "0.17.1" || reloaded.Compatibility.API.Min != "0.27.0" {
+			t.Errorf("compatibility altérée: %+v", reloaded.Compatibility)
+		}
 	}
-	if reloaded.Capabilities != original.Capabilities {
+	if reloaded.OAuth == nil || len(reloaded.OAuth.Scopes) == 0 {
+		t.Error("oauth.scopes perdu au round-trip")
+	}
+	if len(reloaded.Capabilities) == 0 {
+		t.Error("capabilities perdu au round-trip")
+	}
+	for _, p := range reloaded.Permissions {
+		if !IsPermissionCode(p) {
+			t.Errorf("permission non canonique après round-trip: %q", p)
+		}
+	}
+	if !reflect.DeepEqual(reloaded.Capabilities, original.Capabilities) {
 		t.Errorf("capabilities altérées: %+v", reloaded.Capabilities)
 	}
 	if !reflect.DeepEqual(reloaded.Menu, original.Menu) {
@@ -407,5 +422,103 @@ func TestRawPermissionsIsArray(t *testing.T) {
 		if got := rawPermissionsIsArray(path); got != want {
 			t.Errorf("rawPermissionsIsArray(%q) = %v, want %v", content, got, want)
 		}
+	}
+}
+
+func TestPermissionCodes(t *testing.T) {
+	for _, ok := range []string{"User:Get", "Editor:Post", "Admin:Delete", "Root:Get", "Viewer:Put"} {
+		if !IsPermissionCode(ok) {
+			t.Errorf("IsPermissionCode(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "hello-world.read", "User:Read", "Writer:Get", "User:Get:Extra", "user:get"} {
+		if IsPermissionCode(bad) {
+			t.Errorf("IsPermissionCode(%q) = true, want false", bad)
+		}
+	}
+}
+
+func TestCanonicalDomain(t *testing.T) {
+	for _, ok := range []string{"mod.acme.crm", "mod.liorian.helloworld", "mod.a-b.c_d"} {
+		_ = ok
+	}
+	if !IsCanonicalDomain("mod.acme.crm") || !IsCanonicalDomain("mod.liorian.helloworld") {
+		t.Error("canonical mod.* domains must be accepted")
+	}
+	for _, bad := range []string{"com.example.app", "blog-manager", "mod.", "MOD.acme.x"} {
+		if IsCanonicalDomain(bad) {
+			t.Errorf("IsCanonicalDomain(%q) = true, want false", bad)
+		}
+	}
+	// ValidateDomain stays reverse-DNS lenient (canonical is a WARNING, not an error).
+	if err := ValidateDomain("com.example.app"); err != nil {
+		t.Errorf("ValidateDomain(com.example.app) = %v, want nil (lenient)", err)
+	}
+}
+
+func TestLegacyCapabilitiesNormalized(t *testing.T) {
+	raw := `{"needsNetwork": true, "supportsOffline": false}`
+	var c Capabilities
+	if err := json.Unmarshal([]byte(raw), &c); err != nil {
+		t.Fatalf("Unmarshal legacy capabilities: %v", err)
+	}
+	if len(c) != 1 || c[0] != "needsNetwork" {
+		t.Errorf("legacy capabilities normalized to %v, want [needsNetwork]", []string(c))
+	}
+	data, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(data)) != `["needsNetwork"]` {
+		t.Errorf("Marshal emits %s, want the canonical array", data)
+	}
+}
+
+func TestManifestChecksumDeterministic(t *testing.T) {
+	a := NewManifest("demo", "")
+	b := NewManifest("demo", "")
+	b.Token = a.Token
+	if ManifestChecksum(&a) != ManifestChecksum(&b) {
+		t.Error("ManifestChecksum must be deterministic")
+	}
+	b.Version = "9.9.9"
+	if ManifestChecksum(&a) == ManifestChecksum(&b) {
+		t.Error("ManifestChecksum must change with the manifest content")
+	}
+}
+
+func TestEffectiveCompatibilityAndScopes(t *testing.T) {
+	m := NewManifest("demo", "")
+	if m.EffectiveSocle().Min == "" || m.EffectiveAPI().Min == "" {
+		t.Error("canonical compatibility must feed the effective windows")
+	}
+	if len(m.EffectiveOAuthScopes()) == 0 {
+		t.Error("canonical oauth scopes must be effective")
+	}
+	// Legacy forms stay readable.
+	m.Compatibility = nil
+	m.ManagerCompat = Compatibility{Min: "0.1.0"}
+	m.APICompat = Compatibility{Min: "0.2.0"}
+	m.OAuth = nil
+	m.APIScopes = []string{"openid"}
+	if m.EffectiveSocle().Min != "0.1.0" || m.EffectiveAPI().Min != "0.2.0" {
+		t.Errorf("legacy compat not effective: %+v / %+v", m.EffectiveSocle(), m.EffectiveAPI())
+	}
+	if len(m.EffectiveOAuthScopes()) != 1 {
+		t.Errorf("legacy apiScopes not effective: %v", m.EffectiveOAuthScopes())
+	}
+}
+
+func TestValidateTypeCanonical(t *testing.T) {
+	for _, ok := range []string{"", "CONFIGURATION", "WEB_APP_LOCAL", "WEB_APP_REMOTE", "WIDGET", "THEME", "EXTERNAL_URL"} {
+		if err := ValidateType(ok); err != nil {
+			t.Errorf("ValidateType(%q) = %v, want nil", ok, err)
+		}
+	}
+	if err := ValidateType("NOPE"); err == nil {
+		t.Error("ValidateType(NOPE) = nil, want error")
+	}
+	if !IsLegacyModuleType("EXTERNAL") || IsLegacyModuleType("WEB_APP_LOCAL") {
+		t.Error("legacy type detection is wrong")
 	}
 }

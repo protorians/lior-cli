@@ -15,7 +15,7 @@ import (
 )
 
 // templateRepo is the repository whose release zip is downloaded by
-// `liorian init` (spec FR-002). `LIORIAN_CLI_TEMPLATE_REPO` overrides it:
+// `liora init` (spec FR-002). `LIORIAN_CLI_TEMPLATE_REPO` overrides it:
 // it accepts a GitHub repository URL, a direct zip download URL or a local
 // directory (useful for tests and mirrors).
 const defaultTemplateRepo = "https://github.com/protorians/liorian-socle"
@@ -27,7 +27,7 @@ func templateRepo() string {
 	return defaultTemplateRepo
 }
 
-// packageManagers is the detection + install order for `liorian init`.
+// packageManagers is the detection + install order for `liora init`.
 var packageManagers = []struct {
 	name       string
 	installCmd []string
@@ -40,8 +40,8 @@ var packageManagers = []struct {
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize a new Liorian project",
-	Long: `Initializes a new Liorian project by downloading the release
+	Short: "Initialize a new Liora project",
+	Long: `Initializes a new Liora project by downloading the release
 archive of the template protorians/liorian-socle (ZIP) and installing
 the dependencies.
 
@@ -295,8 +295,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println(s.StepsList(i18n.T("init.next"),
 		s.Info.Render("cd "+targetDir),
-		s.Info.Render("liorian connect"),
-		s.Info.Render("liorian create module"),
+		s.Info.Render("liora connect"),
+		s.Info.Render("liora create module"),
 	))
 	fmt.Println()
 	return nil

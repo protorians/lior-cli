@@ -1,12 +1,12 @@
 {
   "$schema": "lorian.config.schema.json",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "branch": "alpha",
   "commit": "e7cbd2f",
   "date": "2026-09-21T04:26:39Z",
   "applications": {
     "liorian-socle": {
-      "name": "Lior Socle",
+      "name": "Liora Socle",
       "description": "Gestion des organisations, utilisateurs, contrôle d'accès, notifications, médiathèque",
       "domains": {
         "production": "socle.liorian.protorians.com",
@@ -19,7 +19,7 @@
       }
     },
     "liorian-connect": {
-      "name": "Liorian Connect",
+      "name": "Liora Connect",
       "description": "Espace Développeur & Publication de Modules",
       "domains": {
         "production": "connect.liorian.protorians.com",
@@ -27,12 +27,12 @@
         "development": "localhost:5020"
       },
       "api": {
-        "baseUrl": "https://localhost:5711",
+        "baseUrl": "https://localhost:5721",
         "timeout": 30000
       }
     },
     "liorian-console": {
-      "name": "Liorian Console",
+      "name": "Liora Console",
       "description": "Administration & gouvernance",
       "domains": {
         "production": "console.liorian.protorians.com",
@@ -40,12 +40,12 @@
         "development": "localhost:5030"
       },
       "api": {
-        "baseUrl": "https://localhost:5711",
+        "baseUrl": "https://localhost:5741",
         "timeout": 30000
       }
     },
     "liorian-store": {
-      "name": "Liorian Store",
+      "name": "Liora Store",
       "description": "Storefront client pour l'installation de modules",
       "domains": {
         "production": "store.liorian.protorians.com",
@@ -58,7 +58,7 @@
       }
     },
     "liorian-auth": {
-      "name": "Liorian Auth",
+      "name": "Liora Auth",
       "description": "Service d'authentification SSO — Login, consentement OAuth, MFA",
       "domains": {
         "production": "auth.liorian.protorians.com",

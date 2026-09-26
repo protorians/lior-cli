@@ -1,8 +1,8 @@
-# Rapport d'implémentation — Lior CLI
+# Rapport d'implémentation — Liora CLI
 
 > Document de suivi pour implémenter les features au fil des itérations.
 > Dernière mise à jour : 2026-09-20 — version courante du code : `v0.14.0` (branche `alpha`).
-> Spécification de référence : `docs/specs/liorian.md` (statut *active* — implémentée, dernière release documentée 0.14.0).
+> Spécification de référence : `docs/specs/liora.md` (statut *active* — implémentée, dernière release documentée 0.14.0).
 
 ---
 
@@ -34,13 +34,13 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 
 ## 2. Ce qui est implémenté (par commande)
 
-### `liorian init` (FR-001, FR-002, FR-003)
+### `liora init` (FR-001, FR-002, FR-003)
 - Clone shallow de `protorians/liorian-socle` (dossier cible demandé, confirmation/écrasement si existe).
 - Détection des package managers `bun → pnpm → yarn → npm` (FR-001) + choix interactif.
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
 - Écrit `lorian.config.json` (config projet).
 
-### `liorian create module [nom]` (FR-004, FR-005)
+### `liora create module [nom]` (FR-004, FR-005)
 - Génère la structure `library/modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
   `components/`, `hooks/`, `services/` (avec `.gitkeep`).
 - Token UUID v4 dans le manifest (FR-005), key en `UPPER_SNAKE_CASE`.
@@ -49,7 +49,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   manquant, puis résolution des `dependencies`/`devDependencies` via le gestionnaire de paquets détecté
   (`bun → pnpm → yarn → npm`) à la racine du projet (`--skip-install` pour désactiver).
 
-### `liorian connect` (FR-006, FR-007, FR-008)
+### `liora connect` (FR-006, FR-007, FR-008)
 - Sign-in email/mot de passe via `POST /api/auth/sign-in` → `{user, token, device}` (**jeton unique**).
 - MFA via les endpoints **gardés** `POST /api/mfa/challenge`, `/api/mfa/totp/verify`, `/api/mfa/recovery/verify`
   (le token de session est attaché en Bearer après le sign-in).
@@ -57,10 +57,10 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Credentials stockées dans le keychain OS (`go-keyring`), avec store chiffré de repli.
 - Base URL et timeout via l'entrée `liorian-auth` de `app.config.json` (`api.baseUrl`, `api.timeout`), surchargée par l'env `LIORIAN_AUTH_API` ; le registre `app.config.json` est embarqué dans le binaire.
 
-### `liorian disconnect` (FR-008, FR-009)
+### `liora disconnect` (FR-008, FR-009)
 - Invalidation serveur best-effort (`POST /api/auth/logout`) + suppression locale, avec confirmation.
 
-### `liorian auth` (spec §5.14 — ex périmètre futur)
+### `liora auth` (spec §5.14 — ex périmètre futur)
 - Flux OAuth2 **code d'autorisation + PKCE** (RFC 7636) : `code_verifier`/`code_challenge` S256 +
   `state` anti-CSRF, navigation navigateur, redirection reçue sur un serveur local en boucle
   (`http://127.0.0.1:<port>/callback`, port éphémère), échange du code au `tokenEndpoint`
@@ -73,16 +73,16 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - `pkg.OpenBrowser` (cross-platform `open` / `rundll32` / `xdg-open`) ; l'échange de token est
   tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
-### `liorian pack [module]` (FR-010, FR-011)
+### `liora pack [module]` (FR-010, FR-011)
 - Zip `library/modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.lorian/build/<module>-<version>.SenMod`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
-### `liorian sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
+### `liora sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
 - Paires de clés **Ed25519**, stockées dans le keychain (service `lorian-cli-signing`).
 - Signature binaire 64 octets dans `<archive>.SenMod.sig` ; vérification sur archive + clé publique.
 - Fingerprint SHA-256 de la clé publique (commande `sign` sans argument).
 
-### `liorian publish [module]` (FR-012, FR-013)
+### `liora publish [module]` (FR-012, FR-013)
 - Authentification obligatoire, auto-audit pré-publication (config `autoAudit`), complétion
   interactive des métadonnées (`name`, `description`, `publisher.*`), pack puis publication en
   **3 étapes** sur l'API developer-store (spec connect §21) :
@@ -93,7 +93,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Conflit SemVer → bump patch interactif (jusqu'à 5 essais) ; après succès, le manifest local
   est synchronisé (version publiée + **token produit résolu**).
 
-### `liorian link` / `liorian unlink` (FR-014, FR-015)
+### `liora link` / `liora unlink` (FR-014, FR-015)
 - `link` : liste les produits modules (`GET /api/developer-store/modules`), valide l'id
   (`GET /api/developer-store/modules/:id`), écrit l'id distant dans le `manifest.json` local et
   **fusionne les métadonnées distantes absentes** (`name`, `description`, `publisher.*`) — §5.7 étape 6.
@@ -103,7 +103,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - `unlink` : régénère un token UUID local et purge l'état `links.json` (déliaison locale ; pas d'appel
   API de mise à jour).
 
-### `liorian debug [module]` (FR-016)
+### `liora debug [module]` (FR-016)
 - Validation du module + détection du gestionnaire de paquets + résolution de la commande de build
   (script `debug`/`dev`/`build` du `package.json`, repli bundler `esbuild`/`tsup`, repli `tsc --noEmit`).
 - Trace **pas-à-pas** des étapes (`internal/tui/step.go` : `RUNNING`/`SUCCESS`/`NOTICE`/`WARNING`/
@@ -117,12 +117,12 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Clôture par un **récapitulatif de sévérité** (`Summary`) ; mode all modules : tableau + logs +
   récapitulatif global.
 
-### `liorian audit [module]` (FR-017, FR-018)
+### `liora audit [module]` (FR-017, FR-018)
 - Audit : Clean Architecture (imports croisés, JSX dans services, index async+render), manifest
   (id/name/version semver/token UUID/entry/domain), index.tsx, requirements, assets.
 - Sortie tableau TUI ou JSON (`--output json`), résumé erreurs/warnings.
 
-### `liorian test [module]` (first chunk of §2.4 future scope, v0.9.0)
+### `liora test [module]` (first chunk of §2.4 future scope, v0.9.0)
 
 - Nouveau package **`internal/moduletest`** (`Tester`, `TestResult`, catalogue `catalog.go`) :
   validation du module + résolution du package de test.
@@ -152,7 +152,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   plafonds et arrêt SIGINT→SIGKILL est extrait dans **`internal/runner`** (partagé avec le `debug`,
   désormais allégé de ses helpers `runStream`/`scanLines`/proc).
 
-### `liorian help`, `liorian -v` / `--version` (FR-019, FR-020)
+### `liora help`, `liora -v` / `--version` (FR-019, FR-020)
 - Aide contextuelle Cobra ; version/branch/commit/date alignées sur `app.config.json`, surchargées
   par ldflags au build de release (`main.version/branch/commit/date`).
 - **Auto-update (S-015, NFR-006)** ✅ — non bloquant, **notification seule** via les releases
@@ -280,7 +280,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >   refresh token OAuth est présent, avec repli sur `/api/auth/sessions/refresh`.
 >
 > Itération du 2026-09-16 (quater) : **`debug` pas-à-pas et sortie temps réel (v0.8.0)** —
-> `liorian debug` rapporte désormais chaque étape au fil de sa complétion (validation,
+> `liora debug` rapporte désormais chaque étape au fil de sa complétion (validation,
 > détection du gestionnaire de paquets, résolution de la commande de build, exécution) et
 > clôt l'exécution par un **récapitulatif de sévérité** (succès, notice, avertissement,
 > erreur, obsolète) :
@@ -314,10 +314,10 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 > les deux derniers écarts constatés du rapport (§5, items `link`/`audit` « ✅/partiel » — en fait
 > entièrement implémentés) sont clos :
 > - **`publish` auto-connect (spec §5.6 étape 1)** : `cmd/publish.go` ne renvoie plus une erreur
->   quand l'utilisateur n'est pas connecté — il exécute d'abord le flux `liorian connect`
+>   quand l'utilisateur n'est pas connecté — il exécute d'abord le flux `liora connect`
 >   (factorisé dans `cmd/connect.go` `doConnect()`, réutilisé par la commande `connect`), puis
 >   recharge la session et poursuit la publication. Si l'auto-connexion échoue (ex. CI sans
->   `LIORIAN_CLI_CONNECT_*`), l'erreur catégorisée avec le fix `Run 'liorian connect' first.`
+>   `LIORIAN_CLI_CONNECT_*`), l'erreur catégorisée avec le fix `Run 'liora connect' first.`
 >   est conservée (exit 2). Le scénario E2E TC-011 publie désormais **sans connexion préalable**
 >   (le flux auto est vérifié), clé i18n `publish.info.connect` ajoutée (en-US/fr-FR, 396 clés).
 > - **`debug.verbose` / `debug.logLevel` consommés (spec §6.1, NFR-005)** : `debugf`
@@ -339,6 +339,40 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >   `category`, `skip-install`) ;
 > - suite complète verte : `go build`, `go vet`, `gofmt -l`, `go test ./...` (unitaires +
 >   E2E testscript), `go test ./e2e/ -run TestScripts -count=1`.
+>
+> Itération du 2026-09-26 : **alignement sur la chaîne d'installation `module-installation`
+> (specs workspace 0.49.0–0.50.0 `EXÉCUTÉ`)** — la CLI devient le premier maillon côté
+> éditeur (lot G de `docs/plan-mise-a-niveau.md`) :
+> - **Manifeste canonique** (`internal/module/manifest.go`) : `compatibility.{socle,api}`,
+>   `oauth.scopes`, `capabilities: []string` (objet legacy normalisé à la lecture),
+>   `external`, `dataModel` + `declarative` (§7.5 : pages `kpi`/`datagrid`/`form`/`chart`/
+>   `settings`, widgets), enum `ModuleType` à 10 valeurs (legacy `INTERNAL`/`EXTERNAL`
+>   acceptés, WARNING), permissions `Role:Verbe` (`IsPermissionCode`, catalogue 14 rôles ×
+>   4 verbes), domaine canonique `mod.*` (`IsCanonicalDomain`, WARNING sinon) ;
+>   `NewManifest` canonique (`WEB_APP_LOCAL`, compat `0.17.x`/`0.27.x`, `User:Get`…) ;
+>   mockup = miroir 1:1 du socle ; `create` défaut `WEB_APP_LOCAL`.
+> - **Pack `.liozip`** (`config`, `packer.go`, `cmd/pack.go`) : extension canonique ADR-003
+>   (legacy lu, jamais produit), `manifest.json` canonique à la racine (TECH-002), quotas
+>   NFR-006..008 (50 Mo, 5 000 entrées, ratio 100:1, 10 Mo/fichier, symlinks/exécutables
+>   refusés), empreintes SHA-256 (archive + manifeste) exposées (`PackResult`) et affichées ;
+>   flags `--out`/`--version`, args normalisés (`./x`, `library/modules/x`).
+> - **Signature canonique obligatoire** (`signing`, `cmd/sign.go`, `cmd/publish.go`) :
+>   charge utile `{moduleIdentifier, version, checksum, manifestChecksum, entry, type}`
+>   (§7.1), `sign [module|archive] [--key fichier]` (manifeste lu à la racine de
+>   l'archive), `verify` canonique + repli legacy signalé ; `publish` refuse sans clé
+>   (ADR-010) sauf `--allow-unsigned`, déclare `manifestChecksum` + `signatureKeyId`
+>   (fingerprint) ; flags `--file`/`--version` (session §16).
+> - **Contrat version** (`store/publisher.go`) : compat effective + runtimes canoniques
+>   (`web`, `tauri-desktop-*`, `tauri-mobile-*`) envoyés à la création de version.
+> - **Install fail-closed** (`catalog/install.go`) : checksum absent → erreur, signature
+>   absente/invérifiable → erreur (`--allow-unsigned` en dev), audit d'archive bloquant
+>   (§7.2) ; mock E2E canonique (artefacts `.liozip`, manifeste racine).
+> - **Validateur** : `compatibility`/`oauth.scopes`/`capabilities`/`permissions`/`type`/
+>   domaine canonique/`CONFIGURATION` (`entry: index.json`, `dataModel`) en WARNING,
+>   `index.tsx` exigé hors `CONFIGURATION` ; `publisher` absent = OK (schéma), incomplet =
+>   WARNING ; `repair` aligné (compat canonique, `core:default`).
+> - **Docs/i18n/E2E** : `docs/specs/liora.md` (§5.2, §5.5, §5.6, §5.13, FR/SEC, session §16,
+>   références specs), `README.md`, ~30 clés i18n fr/en, scénarios `03/04/05/08/10/13/16`.
 
 ### 4.1 Sécurité — ✅ corrigé à l'itération du 2026-09-12
 - **Fallback keychain → fichier chiffré activé** : `auth.NewStore()` et
@@ -466,15 +500,15 @@ La spec découpe 3 releases. État actuel : quasi tout le « MVP » et le « Sto
      (`esbuild`/`tsup`, node_modules module → racine → PATH) qui compile l'entrée dans `dist/`,
 avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (fixture
    `esbuild`).
-- **`liorian test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
+- **`liora test <module>`** — ✅ fait au 2026-09-16 (v0.9.0) : commande Cobra `test`,
       package `internal/moduletest` (validation + résolution script/runner + streaming + plafond),
       exit code **13** (échec de tests), extraction du runner partagé `internal/runner`, i18n
       `en-US`/`fr-FR`, tests unitaires + scénario E2E `12_test.txtar` (TC-028/TC-029). **Rehaussé en
       v0.10.0** : gestionnaire de paquets choisi à l'installation + catalogue (vitest/jest/mocha/ava)
       + installation dans le périmètre du gestionnaire + sélection interactive + persistance de la
       section `test` de `lorian.config.json` (cf. §2.4).
-7. **Future spec** : `liorian watch` (hot-reload), `liorian deploy`,
-   `liorian marketplace` (§2.4 future scope) — `liorian auth` (OAuth2 PKCE) ✅ fait au
+7. **Future spec** : `liora watch` (hot-reload), `liora deploy`,
+   `liora marketplace` (§2.4 future scope) — `liora auth` (OAuth2 PKCE) ✅ fait au
    2026-09-16.
 
 ---
@@ -482,8 +516,8 @@ avant le repli `tsc --noEmit` puis `WARNING`. Tests unitaires + scénario E2E (f
 ## 6. Commandes utiles
 
 ```bash
-go build -o liorian .
-./liorian --help
+go build -o liora .
+./liora --help
 go test ./...              # unitaires + E2E testscript (TC-001 → TC-029)
 go test ./e2e/ -run TestScripts -v   # suite E2E seule
 go vet ./...

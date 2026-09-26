@@ -110,7 +110,7 @@ func (s *Styles) Wordmark() string {
 	name := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(s.palette.accent)).
-		Render("liorian")
+		Render("liora")
 	return badge + " " + name
 }
 

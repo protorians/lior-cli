@@ -27,19 +27,19 @@ exec $LIORIAN --no-color disconnect
 stdout '✓ Disconnected successfully'
 ! exec test -e /.lorian-cli/credentials.enc
 
-# TC-011 — publish while disconnected: the command auto-runs `liorian connect`
+# TC-011 — publish while disconnected: the command auto-runs `liora connect`
 # first (spec §5.6 step 1), then publishes. The env-driven sign-in below feeds
 # the auto-connect flow against the mock API.
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
-exec $LIORIAN --no-color publish com.example.blog-manager
+exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
 stdout '✓ Connected as dev@example.com'
 stdout '✓ Published successfully'
 stdout 'URL : https://store.liorian.dev/modules/blog-manager'
 exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
 
 # TC-012 — same version already published: 409 conflict (exit 11 / ExitPublish).
-! exec $LIORIAN --no-color publish com.example.blog-manager
+! exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
 stderr 'An identical version already exists'
-exec sh -c '"$LIORIAN" --no-color publish com.example.blog-manager >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color publish com.example.blog-manager --allow-unsigned >/dev/null 2>&1; echo $?'
 stdout '^11$'

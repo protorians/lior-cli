@@ -60,7 +60,7 @@ func runDisconnect(cmd *cobra.Command) error {
 	}
 
 	// Best-effort OAuth2 revocation (RFC 7009) of the refresh/access tokens
-	// obtained via `liorian auth` (spec §8.1 / §6.3).
+	// obtained via `liora auth` (spec §8.1 / §6.3).
 	oauth := appconfig.Resolved("").OAuth(appconfig.AuthAppID)
 	store := auth.NewStore()
 	if refresh, rerr := store.Get(auth.KeyOAuthRefreshToken); rerr == nil && strings.TrimSpace(refresh) != "" {

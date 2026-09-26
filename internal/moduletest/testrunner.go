@@ -1,5 +1,5 @@
-// Package moduletest runs the tests of Liorian modules (spec §6.x, future
-// scope moved to scope: `liorian test <module>`).
+// Package moduletest runs the tests of Liora modules (spec §6.x, future
+// scope moved to scope: `liora test <module>`).
 package moduletest
 
 import (
@@ -128,7 +128,7 @@ func (t *Tester) TestModuleCtx(ctx context.Context, name string) (*TestResult, e
 
 	result := &TestResult{Module: name}
 
-	// Step 1 — validate the module against the Liorian rules.
+	// Step 1 — validate the module against the Liora rules.
 	v := &module.Validator{Root: t.Root}
 	res, err := v.ValidateModule(name)
 	if err != nil {

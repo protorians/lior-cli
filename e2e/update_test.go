@@ -18,7 +18,7 @@ import (
 // The default E2E binary reports `dev` (which skips the check entirely), so a
 // dedicated binary with an injected version is built here.
 func TestUpdateNotification(t *testing.T) {
-	bin := filepath.Join(t.TempDir(), "liorian-update")
+	bin := filepath.Join(t.TempDir(), "liora-update")
 	root, err := filepath.Abs("..")
 	if err != nil {
 		t.Fatal(err)

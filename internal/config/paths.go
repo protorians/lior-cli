@@ -9,7 +9,7 @@ import (
 	"github.com/protorians/lior-cli/internal/i18n"
 )
 
-// Well-known directory and file names within a Liorian project.
+// Well-known directory and file names within a Liora project.
 const (
 	ConfigFileName      = "lorian.config.json"
 	LorianConfigName    = "lorian.config.toml"
@@ -21,11 +21,19 @@ const (
 	LorianBuildsDir     = ".lorian/build"
 	ManifestFileName    = "manifest.json"
 	ModuleEntryFileName = "index.tsx"
-	// ArchiveExt is the extension of built module archives (`<name>-<version>.SenMod`).
-	ArchiveExt = ".SenMod"
+	// ArchiveExt is the canonical extension of built module archives
+	// (`<name>-<version>.liozip`, a renamed ZIP — ADR-003 of the
+	// module-installation spec). `.SenMod`/`.smp` archives are still read as
+	// deprecated legacy inputs, never produced.
+	ArchiveExt = ".liozip"
 )
 
-// IsProjectRoot reports whether dir looks like a Liorian project root.
+// LegacyArchiveExts lists the deprecated archive extensions accepted on read
+// (signature lookup, marketplace install). They are never produced anymore
+// (ADR-003: `.liozip` is the canonical extension).
+var LegacyArchiveExts = []string{".SenMod", ".smp"}
+
+// IsProjectRoot reports whether dir looks like a Liora project root.
 func IsProjectRoot(dir string) bool {
 	if fileExists(filepath.Join(dir, LorianConfigName)) {
 		return true
@@ -40,7 +48,7 @@ func IsProjectRoot(dir string) bool {
 }
 
 // FindProjectRoot walks up from start (default: current directory) looking
-// for a Liorian project root. Returns an error when none is found.
+// for a Liora project root. Returns an error when none is found.
 func FindProjectRoot(start string) (string, error) {
 	dir := start
 	if dir == "" {

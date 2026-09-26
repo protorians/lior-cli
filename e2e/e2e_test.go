@@ -1,4 +1,4 @@
-// Package e2e runs the end-to-end (testscript) suite of the Lior CLI
+// Package e2e runs the end-to-end (testscript) suite of the Liora CLI
 // against a mock liorian-connect API (spec §12: TC-001 → TC-029).
 package e2e
 
@@ -13,15 +13,15 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 )
 
-// liorianBin is the path of the CLI binary built in TestMain.
-var liorianBin string
+// lioraBin is the path of the CLI binary built in TestMain.
+var lioraBin string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "liorian-e2e-")
+	dir, err := os.MkdirTemp("", "liora-e2e-")
 	if err != nil {
 		panic(err)
 	}
-	liorianBin = filepath.Join(dir, "liorian")
+	lioraBin = filepath.Join(dir, "liora")
 
 	// Build the CLI from the repository root (the test binary runs with cwd
 	// set to this package's directory).
@@ -29,7 +29,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	build := exec.Command("go", "build", "-o", liorianBin, ".")
+	build := exec.Command("go", "build", "-o", lioraBin, ".")
 	build.Dir = root
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -44,7 +44,7 @@ func TestScripts(t *testing.T) {
 		Dir: "testdata/scripts",
 		Setup: func(env *testscript.Env) error {
 			// Whole CLI under test is the freshly built binary.
-			env.Setenv("LIORIAN", liorianBin)
+			env.Setenv("LIORIAN", lioraBin)
 			// Network: a dedicated mock liorian-auth API per script, so
 			// store/auth state never leaks between TC scenarios. The mock
 			// also serves the public catalog (`/api/catalog/*`), which the

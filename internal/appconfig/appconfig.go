@@ -1,5 +1,5 @@
 // Package appconfig reads the workspace `app.config.json` registry used to
-// parameterise the CLI: each Liorian application carries its API `baseUrl`
+// parameterise the CLI: each Liora application carries its API `baseUrl`
 // and `timeout`. The registry is embedded in the binary at build time, so any
 // command keeps working outside a workspace; a local `app.config.json`
 // (walked up from the current directory) overrides the embedded one.

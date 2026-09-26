@@ -12,10 +12,11 @@ import (
 )
 
 var (
-	marketplaceCategory string
-	marketplaceLimit    int
-	marketplaceOffset   int
-	marketplaceForce    bool
+	marketplaceCategory      string
+	marketplaceLimit         int
+	marketplaceOffset        int
+	marketplaceForce         bool
+	marketplaceAllowUnsigned bool
 )
 
 var marketplaceCmd = &cobra.Command{
@@ -58,6 +59,8 @@ func init() {
 
 	marketplaceInstallCmd.Flags().BoolVar(&marketplaceForce, "force", false, i18n.T("marketplace.flag.force"))
 	i18nFlag(marketplaceInstallCmd, "force", "marketplace.flag.force")
+	marketplaceInstallCmd.Flags().BoolVar(&marketplaceAllowUnsigned, "allow-unsigned", false, i18n.T("marketplace.flag.allow_unsigned"))
+	i18nFlag(marketplaceInstallCmd, "allow-unsigned", "marketplace.flag.allow_unsigned")
 
 	marketplaceCmd.AddCommand(marketplaceSearchCmd, marketplaceInstallCmd)
 	i18nHelp(marketplaceCmd, "cmd.marketplace.short", "cmd.marketplace.long")
@@ -127,7 +130,7 @@ func runMarketplaceInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	inst := &catalog.Installer{Root: root, Force: marketplaceForce}
+	inst := &catalog.Installer{Root: root, Force: marketplaceForce, AllowUnsigned: marketplaceAllowUnsigned}
 	result, err := tui.RunWithSpinner(i18n.Tf("marketplace.spinner.install", args[0]), func() (*catalog.InstallResult, error) {
 		return inst.Install(context.Background(), args[0])
 	})

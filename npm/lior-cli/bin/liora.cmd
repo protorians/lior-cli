@@ -1,4 +1,4 @@
 @ECHO OFF
 SETLOCAL
 SET SCRIPT_DIR=%~dp0
-"%SCRIPT_DIR%liorian.exe" %*
+"%SCRIPT_DIR%liora.exe" %*

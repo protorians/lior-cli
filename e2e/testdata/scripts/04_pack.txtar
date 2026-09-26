@@ -8,16 +8,16 @@ exec sh -c 'echo "logo" > public/assets/com.example.blog-manager/logo.txt'
 exec sh -c 'mkdir -p src/app/blog-manager'
 exec sh -c 'echo "page" > src/app/blog-manager/page.tsx'
 
-# TC-009 — `pack` of an existing module, produces the .SenMod archive.
+# TC-009 — `pack` of an existing module, produces the .liozip archive.
 exec $LIORIAN --no-color pack com.example.blog-manager
 stdout '✓ Archive created successfully'
 stdout 'Module : com.example.blog-manager v1.0.0'
-exists .lorian/build/com.example.blog-manager-1.0.0.SenMod
+exists .lorian/build/com.example.blog-manager-1.0.0.liozip
 
 # TC-010 — the archive contains the module manifest, app sources and assets.
-exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "library/modules/com.example.blog-manager/manifest.json"'
-exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "src/app/blog-manager/page.tsx"'
-exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.SenMod | grep -q "public/assets/com.example.blog-manager/logo.txt"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.liozip | grep -q "library/modules/com.example.blog-manager/manifest.json"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.liozip | grep -q "src/app/blog-manager/page.tsx"'
+exec sh -c 'unzip -l .lorian/build/com.example.blog-manager-1.0.0.liozip | grep -q "public/assets/com.example.blog-manager/logo.txt"'
 
 # Missing module: exit 3 (ExitModuleNotFound).
 ! exec $LIORIAN --no-color pack com.example.missing
@@ -29,8 +29,8 @@ stdout '^3$'
 exec $LIORIAN --no-color pack com.example.blog-manager@2.1.0
 stdout '✓ Archive created successfully'
 stdout 'Module : com.example.blog-manager v2.1.0'
-exists .lorian/build/com.example.blog-manager-2.1.0.SenMod
-exec sh -c 'test -f .lorian/build/com.example.blog-manager-2.1.0.SenMod'
+exists .lorian/build/com.example.blog-manager-2.1.0.liozip
+exec sh -c 'test -f .lorian/build/com.example.blog-manager-2.1.0.liozip'
 
 # Invalid version: rejected before building.
 ! exec $LIORIAN --no-color pack com.example.blog-manager@not-a-version

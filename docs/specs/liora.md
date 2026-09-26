@@ -1,10 +1,10 @@
-# Lior CLI (`liorian`)
+# Liora CLI (`liora`)
 
-> **Statut : IMPLÉMENTÉ (binaire `liorian`, spec alignée sur le code)**
+> **Statut : IMPLÉMENTÉ (binaire `liora`, spec alignée sur le code)**
 >
-> Ce document est la **spécification SpecKit de la CLI `liorian`**, outil en ligne de commande
+> Ce document est la **spécification SpecKit de la CLI `liora`**, outil en ligne de commande
 > permettant aux développeurs d'initialiser, créer, construire, auditer, déboguer et publier des
-> modules Liorian via un compte développeur `liorian-connect`.
+> modules Liora via un compte développeur `liorian-connect`.
 >
 > - **Stack technique** : Go (1.26, Cobra) + Bubbletea (TUI lipgloss/charmbracelet)
 > - **Distribution** : binaire unique multi-plateforme (Linux, macOS, Windows)
@@ -13,13 +13,20 @@
 >
 > **Specs satellite** : les commandes outillage `dev`/`build`/`start`/`check` (passe-plat vers les
 > scripts `package.json` du projet, section `toolchain` de `lorian.config.json`) sont spécifiées
-> dans `docs/specs/liorian-toolchain.md`.
+> dans `docs/specs/liora-toolchain.md`.
 >
 > **Documents de référence (workspace `liorian-workspace/docs`)** : la présente spec s'aligne sur
 > les contrats du workspace, en particulier le manifest de module
-> (`docs/modules/module-manifest.md`, schéma JSON `@liorian/sdk/domain/schemas/module-manifest.schema.json`)
+> (`docs/modules/module-manifest.md`, schéma JSON `@liorian/sdk/schemas/module.schema.json`)
 > et la distribution des responsabilités Connect / Store / Core
 > (`docs/specs/applications/module-distribution.md`, `docs/modules/store.md`, `docs/specs/applications/liorian-connect.md`).
+>
+> Chaîne d'installation des modules tiers (`docs/specs/applications/module-installation.md`,
+> `docs/specs/modules/module-installation/module.spec.md`, statut `EXÉCUTÉ` 0.49.0–0.50.0) :
+> la CLI en est le premier maillon côté éditeur — artefact `.liozip` (ADR-003), signature Ed25519
+> obligatoire de la charge utile canonique (ADR-010, §7.1), manifeste canonique (`compatibility`,
+> `oauth`, `capabilities`, permissions `Role:Verbe`), types d'exécution (`CONFIGURATION`,
+> `WEB_APP_LOCAL`, … — ADR-004/ADR-011) et vérification fail-closed (SEC-001, §7.2).
 
 ---
 
@@ -27,14 +34,14 @@
 
 | Propriété | Valeur |
 |-----------|--------|
-| Identifiant | `liorian` |
-| Nom | Lior CLI |
-| Rôle | Outil CLI pour le cycle de vie complet des modules Liorian |
+| Identifiant | `liora` |
+| Nom | Liora CLI |
+| Rôle | Outil CLI pour le cycle de vie complet des modules Liora |
 | Type de spécification | Application Spec |
 | Version de spécification | `0.1.0` (candidate) |
 | Statut de la version | `active` (spec) — implémentée (rel. 0.20.0) |
 | Langue | Document en français ; interface bilingue fr-FR / en-US (i18n §11.2) |
-| Emplacement cible (SpecKit) | `liorian.md` |
+| Emplacement cible (SpecKit) | `liora.md` |
 
 ---
 
@@ -42,8 +49,8 @@
 
 ### 1.1 Objectif
 
-Lior CLI est l'outil de développement unique pour tout développeur souhaitant créer, maintenir
-et publier des modules dans l'écosystème Liorian. Elle couvre le cycle de vie complet :
+Liora CLI est l'outil de développement unique pour tout développeur souhaitant créer, maintenir
+et publier des modules dans l'écosystème Liora. Elle couvre le cycle de vie complet :
 
 ```
 init → create → develop → debug → audit → pack → sign → link → publish
@@ -55,7 +62,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 | Acteur | Usage |
 |--------|-------|
-| Développeur Liorian | Initialiser un projet, créer/modifier des modules, publier sur le store |
+| Développeur Liora | Initialiser un projet, créer/modifier des modules, publier sur le store |
 | Équipe interne | Audit automatique, validation des conventions, debug |
 
 ### 1.3 Valeur ajoutée
@@ -63,7 +70,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 - **Zéro configuration manuelle** : détection automatique des outils disponibles sur la machine
 - **Sécurité native** : credentials chiffrés, MFA supportée, token rotation
 - **Validation continue** : audit des règles Clean Architecture + conformité manifest
-- **Intégration Liorian Connect** : publication one-shot vers le store
+- **Intégration Liora Connect** : publication one-shot vers le store
 
 ---
 
@@ -71,24 +78,24 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ### Dans le périmètre (In Scope)
 
-- `liorian init` — Initialisation d'un projet Liorian (téléchargement de la release template + deps + `.env`)
-- `liorian create module` — Création de module dans `library/modules/`
-- `liorian create view` — Création d'une vue de présentation dans un module existant
-- `liorian connect` — Authentification développeur (credentials + MFA)
-- `liorian auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
-- `liorian disconnect` — Suppression des credentials
-- `liorian pack` — Build + compression d'un module (`.SenMod`)
-- `liorian sign` — Signature numérique Ed25519 des archives `.SenMod` (keygen / sign / verify)
-- `liorian publish` — Publication dans le store via Liorian Connect
-- `liorian link` — Liaison module local ↔ module en ligne
-- `liorian unlink` — Dé liaison module local ↔ module en ligne
-- `liorian debug <module>` — Debug d'un ou tous les modules
-- `liorian test <module>` — Exécution des tests d'un ou tous les modules
-- `liorian audit <module>` — Audit de conformité d'un ou tous les modules
-- `liorian repair [module]` — Réparation automatique des anomalies bloquantes d'un ou tous les modules
-- `liorian dev|build|start|check` — Outillage applicatif (spécifié dans `docs/specs/liorian-toolchain.md`)
-- `liorian help` — Affichage de l'aide
-- `liorian -v | --version` — Affichage de la version
+- `liora init` — Initialisation d'un projet Liora (téléchargement de la release template + deps + `.env`)
+- `liora create module` — Création de module dans `library/modules/`
+- `liora create view` — Création d'une vue de présentation dans un module existant
+- `liora connect` — Authentification développeur (credentials + MFA)
+- `liora auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
+- `liora disconnect` — Suppression des credentials
+- `liora pack` — Build + compression d'un module (`.liozip`)
+- `liora sign` — Signature numérique Ed25519 des archives `.liozip` (keygen / sign / verify)
+- `liora publish` — Publication dans le store via Liora Connect
+- `liora link` — Liaison module local ↔ module en ligne
+- `liora unlink` — Dé liaison module local ↔ module en ligne
+- `liora debug <module>` — Debug d'un ou tous les modules
+- `liora test <module>` — Exécution des tests d'un ou tous les modules
+- `liora audit <module>` — Audit de conformité d'un ou tous les modules
+- `liora repair [module]` — Réparation automatique des anomalies bloquantes d'un ou tous les modules
+- `liora dev|build|start|check` — Outillage applicatif (spécifié dans `docs/specs/liora-toolchain.md`)
+- `liora help` — Affichage de l'aide
+- `liora -v | --version` — Affichage de la version
 
 ### Hors périmètre (Out of Scope)
 
@@ -99,7 +106,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 
 ### Périmètre futur (Future Scope)
 
-- Catalogue de modules tiers distribué (le storefront `liorian marketplace` est disponible en lecture/installation)
+- Catalogue de modules tiers distribué (le storefront `liora marketplace` est disponible en lecture/installation)
 
 ---
 
@@ -110,37 +117,37 @@ init → create → develop → debug → audit → pack → sign → link → p
 | ID | Description |
 |----|-------------|
 | FR-001 | La CLI détecte automatiquement les gestionnaires de paquets disponibles (bun, pnpm, yarn, npm) et propose le choix à l'utilisateur |
-| FR-002 | `liorian init` télécharge la release (ZIP) du template `protorians/liorian-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
-| FR-003 | `liorian init` installe les dépendances avec le gestionnaire choisi |
-| FR-004 | `liorian create module` crée un module dans `library/modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
-| FR-005 | `liorian create module` génère un token UUID unique dans `manifest.json` et un manifeste conforme au schéma du workspace (`module-manifest.schema.json`, `schemaVersion: 1`) |
-| FR-006 | `liorian connect` authentifie le développeur via `liorian-connect` (email + mot de passe) |
-| FR-007 | `liorian connect` supporte le MFA (TOTP, backup codes) |
-| FR-008 | `liorian connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
-| FR-009 | `liorian disconnect` supprime toutes les credentials stockées |
-| FR-010 | `liorian pack` compresse `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.SenMod` |
-| FR-011 | `liorian pack` déplace l'archive vers `.lorian/build/` |
-| FR-012 | `liorian publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
-| FR-013 | `liorian publish` demande les métadonnées du module si non définies |
-| FR-014 | `liorian link` lie un module local à un module distant (token produit, mode CI `link <module> <token>`) et persiste l'état dans `.lorian/links.json` |
-| FR-015 | `liorian unlink` délie un module local de `liorian-connect` (option `--sync-remote` pour synchroniser les métadonnées locales) |
-| FR-016 | `liorian debug` lance le debug d'un module ou de tous les modules |
-| FR-017 | `liorian audit` vérifie la conformité Clean Architecture, `manifest.json` et `index.tsx` |
-| FR-018 | `liorian audit` vérifie que les `requirements` existent et que les `dependencies` du `package.json` sont installées |
-| FR-019 | `liorian help` affiche l'aide contextuelle des commandes |
-| FR-020 | `liorian -v` / `liorian --version` affiche la version actuelle |
-| FR-021 | `liorian sign keygen` génère une paire de clés Ed25519 et la stocke dans le keychain système |
-| FR-022 | `liorian sign <module>` signe l'archive `.SenMod` du module et produit un fichier `.sig` |
-| FR-023 | `liorian sign verify <module>` vérifie la validité de la signature `.sig` d'un module |
-| FR-024 | `liorian sign` affiche le fingerprint SHA-256 de la clé publique du développeur |
+| FR-002 | `liora init` télécharge la release (ZIP) du template `protorians/liorian-socle` dans le répertoire courant, selon un canal (`stable` par défaut, `alpha`, `beta`, `rc`) |
+| FR-003 | `liora init` installe les dépendances avec le gestionnaire choisi |
+| FR-004 | `liora create module` crée un module dans `library/modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
+| FR-005 | `liora create module` génère un token UUID unique dans `manifest.json` et un manifeste conforme au schéma du workspace (`module-manifest.schema.json`, `schemaVersion: 1`) |
+| FR-006 | `liora connect` authentifie le développeur via `liorian-connect` (email + mot de passe) |
+| FR-007 | `liora connect` supporte le MFA (TOTP, backup codes) |
+| FR-008 | `liora connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
+| FR-009 | `liora disconnect` supprime toutes les credentials stockées |
+| FR-010 | `liora pack` compresse `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.liozip` (manifeste canonique à la racine) |
+| FR-011 | `liora pack` déplace l'archive vers `.lorian/build/` (`--out` pour un chemin personnalisé, `--version` pour forcer la version) |
+| FR-012 | `liora publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
+| FR-013 | `liora publish` demande les métadonnées du module si non définies |
+| FR-014 | `liora link` lie un module local à un module distant (token produit, mode CI `link <module> <token>`) et persiste l'état dans `.lorian/links.json` |
+| FR-015 | `liora unlink` délie un module local de `liorian-connect` (option `--sync-remote` pour synchroniser les métadonnées locales) |
+| FR-016 | `liora debug` lance le debug d'un module ou de tous les modules |
+| FR-017 | `liora audit` vérifie la conformité Clean Architecture, `manifest.json` et `index.tsx` |
+| FR-018 | `liora audit` vérifie que les `requirements` existent et que les `dependencies` du `package.json` sont installées |
+| FR-019 | `liora help` affiche l'aide contextuelle des commandes |
+| FR-020 | `liora -v` / `liora --version` affiche la version actuelle |
+| FR-021 | `liora sign keygen` génère une paire de clés Ed25519 et la stocke dans le keychain système |
+| FR-022 | `liora sign <module\|archive>` signe la charge utile canonique de publication du module et produit un fichier `.sig` |
+| FR-023 | `liora sign verify <module>` vérifie la validité de la signature `.sig` d'un module |
+| FR-024 | `liora sign` affiche le fingerprint SHA-256 de la clé publique du développeur |
 | FR-025 | La langue de l'interface est résolue dans l'ordre : `--lang` → `LIORIAN_CLI_LANG` → `cli.lang` de `lorian.config.json` → locale OS (LC_ALL/LC_MESSAGES/LANG), avec repli sur `en-US` |
-| FR-026 | `liorian auth` authentifie le développeur via le flux OAuth2 **code d'autorisation + PKCE** (navigateur + serveur local en boucle), complément du `liorian connect` (email/mot de passe) |
-| FR-027 | `liorian auth` stocke la session OAuth (`access_token`, `refresh_token`, expiration) dans le keychain (repli vault chiffré) et la partage avec les commandes authentifiées |
-| FR-028 | `liorian init` génère le `.env` depuis le fichier d'exemple du template (`.env-sample` & co) : clé applicative, nom/slug du projet et paire VAPID synthétisés, variables restantes proposées avec leur valeur suggérée ; un `.env` existant n'est jamais écrasé |
-| FR-029 | `liorian init` accepte `--auto-env` (ou `LIORIAN_CLI_ENV_AUTO`) pour ne poser aucune question (nom du projet, gestionnaire de paquets, `.env`) et accepter les valeurs suggérées ; sans cette option, une confirmation globale est proposée puis un prompt par variable (Échap = accepter le reste) |
-| FR-030 | `liorian create view <module> [name]` génère une vue de présentation `presentation/views/<name>.view.tsx` depuis le mockup embarqué (composant, titre, description renommés) |
-| FR-031 | `liorian repair [module]` répare automatiquement les anomalies bloquantes d'un audit (champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé), re-audite puis liste en instructions les points non réparables |
-| FR-032 | `liorian dev`, `build`, `start` et `check` proxient les scripts `package.json` du projet et exécutent l'`audit` de conformité des modules en pre-flight (`dev`/`build`/`start`) — spécifié dans `docs/specs/liorian-toolchain.md` (TFC-001 → TFC-017) |
+| FR-026 | `liora auth` authentifie le développeur via le flux OAuth2 **code d'autorisation + PKCE** (navigateur + serveur local en boucle), complément du `liora connect` (email/mot de passe) |
+| FR-027 | `liora auth` stocke la session OAuth (`access_token`, `refresh_token`, expiration) dans le keychain (repli vault chiffré) et la partage avec les commandes authentifiées |
+| FR-028 | `liora init` génère le `.env` depuis le fichier d'exemple du template (`.env-sample` & co) : clé applicative, nom/slug du projet et paire VAPID synthétisés, variables restantes proposées avec leur valeur suggérée ; un `.env` existant n'est jamais écrasé |
+| FR-029 | `liora init` accepte `--auto-env` (ou `LIORIAN_CLI_ENV_AUTO`) pour ne poser aucune question (nom du projet, gestionnaire de paquets, `.env`) et accepter les valeurs suggérées ; sans cette option, une confirmation globale est proposée puis un prompt par variable (Échap = accepter le reste) |
+| FR-030 | `liora create view <module> [name]` génère une vue de présentation `presentation/views/<name>.view.tsx` depuis le mockup embarqué (composant, titre, description renommés) |
+| FR-031 | `liora repair [module]` répare automatiquement les anomalies bloquantes d'un audit (champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé), re-audite puis liste en instructions les points non réparables |
+| FR-032 | `liora dev`, `build`, `start` et `check` proxient les scripts `package.json` du projet et exécutent l'`audit` de conformité des modules en pre-flight (`dev`/`build`/`start`) — spécifié dans `docs/specs/liora-toolchain.md` (TFC-001 → TFC-017) |
 
 ### Exigences non-fonctionnelles
 
@@ -164,9 +171,9 @@ init → create → develop → debug → audit → pack → sign → link → p
 | SEC-004 | Chiffrement des données sensibles au repos (AES-256-GCM pour les caches) |
 | SEC-005 | Validation stricte des inputs (UUID, noms de module, URLs) |
 | SEC-006 | Mode MFA obligatoire si activé sur le compte développeur |
-| SEC-007 | Les archives `.SenMod` ne contiennent jamais de credentials ou tokens |
+| SEC-007 | Les archives `.liozip` ne contiennent jamais de credentials ou tokens |
 | SEC-008 | Les clés de signature Ed25519 sont stockées dans le keychain OS, jamais en clair sur disque |
-| SEC-009 | La signature numérique garantit l'intégrité et l'authenticité des archives `.SenMod` avant publication |
+| SEC-009 | La signature numérique Ed25519 de la charge utile canonique garantit l'intégrité et l'authenticité des archives `.liozip` avant publication (obligatoire, ADR-010) |
 
 ### Exigences techniques
 
@@ -193,23 +200,23 @@ lior-cli/
 ├── main.go                        # Point d'entrée (variables version/commit/date + //go:embed app.config.json)
 ├── cmd/                           # Commandes CLI (couche présentation, Cobra)
 │   ├── root.go                    # Commande racine (flags --verbose, --no-color, --lang, update check)
-│   ├── init.go                    # liorian init (--channel alpha|beta|rc|stable, --auto-env)
+│   ├── init.go                    # liora init (--channel alpha|beta|rc|stable, --auto-env)
 │   ├── init_env.go                # Génération du .env depuis l'exemple du template (FR-028/-029)
-│   ├── create.go                  # liorian create module
-│   ├── create_view.go             # liorian create view (FR-030)
-│   ├── connect.go                 # liorian connect
-│   ├── auth.go                    # liorian auth (OAuth2 code + PKCE)
-│   ├── disconnect.go              # liorian disconnect
-│   ├── pack.go                    # liorian pack
-│   ├── sign.go                    # liorian sign (keygen / sign / verify)
-│   ├── publish.go                 # liorian publish
-│   ├── link.go                    # liorian link + unlink (--sync-remote)
-│   ├── marketplace.go             # liorian marketplace search|install
-│   ├── debug.go                   # liorian debug
-│   ├── test.go                    # liorian test
-│   ├── audit.go                   # liorian audit (--output table|json)
-│   ├── repair.go                  # liorian repair (--dry-run, --warnings, --no-install, …)
-│   ├── toolchain.go               # liorian dev|build|start|check
+│   ├── create.go                  # liora create module
+│   ├── create_view.go             # liora create view (FR-030)
+│   ├── connect.go                 # liora connect
+│   ├── auth.go                    # liora auth (OAuth2 code + PKCE)
+│   ├── disconnect.go              # liora disconnect
+│   ├── pack.go                    # liora pack
+│   ├── sign.go                    # liora sign (keygen / sign / verify)
+│   ├── publish.go                 # liora publish
+│   ├── link.go                    # liora link + unlink (--sync-remote)
+│   ├── marketplace.go             # liora marketplace search|install
+│   ├── debug.go                   # liora debug
+│   ├── test.go                    # liora test
+│   ├── audit.go                   # liora audit (--output table|json)
+│   ├── repair.go                  # liora repair (--dry-run, --warnings, --no-install, …)
+│   ├── toolchain.go               # liora dev|build|start|check
 │   ├── gate.go                    # Porte de santé des modules (pre-flight audit)
 │   ├── modules.go                 # Helpers de résolution projet/module (code 3)
 │   └── localize.go                # Helpers i18n (MessageKey, résolution langue)
@@ -234,18 +241,18 @@ lior-cli/
 │   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence)
 │   │   ├── mockups/               # hello-world/ + page.tsx + view.tsx (mockups embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
-│   │   ├── packer.go              # Compression .SenMod (limite 50 MB)
+│   │   ├── packer.go              # Compression .liozip (limite 50 MB, quotas, manifest racine)
 │   │   ├── linker.go              # Liaison local ↔ distant + état .lorian/links.json
 │   │   ├── validator.go           # Validation module
 │   │   └── module_test.go         # Tests unitaires
 │   ├── repair/                    # Réparation automatique des anomalies d'audit (FR-031)
 │   │   └── repair.go              # Repairer (dry-run, warnings, no-install, rename)
-│   ├── toolchain/                 # Outillage dev/build/start/check (docs/specs/liorian-toolchain.md)
+│   ├── toolchain/                 # Outillage dev/build/start/check (docs/specs/liora-toolchain.md)
 │   │   └── toolchain.go           # Résolution de script, hooks, exécution passthrough
-│   ├── moduletest/                # Exécution des tests de module (liorian test)
+│   ├── moduletest/                # Exécution des tests de module (liora test)
 │   │   ├── testrunner.go          # Détection runner + streaming des logs
 │   │   └── catalog.go             # Catalogue de packages de test
-│   ├── catalog/                   # Catalogue public (liorian marketplace)
+│   ├── catalog/                   # Catalogue public (liora marketplace)
 │   │   ├── catalog.go             # Recherche dans le storefront
 │   │   └── install.go             # Installation vérifiée/signée d'un module
 │   ├── runner/                    # Exécution de processus (groupes POSIX/Windows)
@@ -311,7 +318,7 @@ lior-cli/
 | `net/http` | Client API (stdlib) | — |
 | `crypto/aes`, `crypto/cipher` | Chiffrement (stdlib) | — |
 | `crypto/ed25519` | Signature numérique Ed25519 (stdlib) | — |
-| `archive/zip` | Compression .SenMod (stdlib) | — |
+| `archive/zip` | Compression .liozip (stdlib) | — |
 
 > Le parsing TOML (`BurntSushi/toml`) a été retiré : la configuration est uniquement JSON
 > (`lorian.config.json`). `lorian.config.toml` ne sert plus que de marqueur de projet.
@@ -343,11 +350,11 @@ Utilisateur
 
 ---
 
-### 5.1 `liorian init`
+### 5.1 `liora init`
 
 #### Purpose
 
-Initialiser un nouveau projet Liorian en téléchargeant la release (ZIP) du template
+Initialiser un nouveau projet Liora en téléchargeant la release (ZIP) du template
 `protorians/liorian-socle` et en installant les dépendances. La source est `--channel`
 ("stable" par défaut) ; `LIORIAN_CLI_TEMPLATE_REPO` peut la remplacer par une URL GitHub,
 une URL ZIP directe ou un répertoire local (tests/miroirs). Le `.env` du projet est généré
@@ -423,13 +430,13 @@ Destination : /chemin/vers/mon-projet
 
   Prochaines étapes :
     cd mon-projet
-    liorian connect
-    liorian create module
+    liora connect
+    liora create module
 ```
 
 ---
 
-### 5.2 `liorian create module`
+### 5.2 `liora create module`
 
 #### Purpose
 
@@ -440,7 +447,7 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
 
 #### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Liorian (`lorian.config.json`,
+1. **Vérifier le contexte** : être à la racine d'un projet Liora (`lorian.config.json`,
    `lorian.config.toml` ou présence de `library/modules/`)
 2. **Demander l'identité** du module (chaque prompt a un flag équivalent) :
    - **domaine** reverse-DNS (`--domain`, ex. `com.organization.domain`) — validation `ValidateDomain`,
@@ -453,7 +460,7 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
    - **url** de page (`--url`, défaut : identifiant) → `manifest.uri = /<url>` et
      `src/app/<url>/page.tsx`
    - **description** (`--description`)
-   - **type** de distribution (`--type`, `INTERNAL` ou `EXTERNAL`, défaut `EXTERNAL`)
+   - **type** de distribution (`--type`, enum canonique `ModuleType`, défaut `WEB_APP_LOCAL` ; `CONFIGURATION` recommandé pour les modules déclaratifs sans code — ADR-011, §7.5 de la spec installation)
    - **catégorie** de store (`--category`, enum `ModuleCategory`, défaut `SYSTEM`)
 3. **Résoudre la source du mockup module** (ordre de priorité) :
    - `--mockup` (champ `Creator.MockupDir`)
@@ -537,7 +544,8 @@ du socle `liorian-socle`, conforme au contrat canonique du workspace) et réécr
   "description": "<description>",
   "version": "<SemVer>",
   "icon": "<IconName>",
-  "type": "<EXTERNAL|INTERNAL>",
+  "type": "<ModuleType : CONFIGURATION par défaut recommandé pour le déclaratif, WEB_APP_LOCAL pour le code scaffoldé>",
+  "external": true,
   "entry": "index.tsx",
   "uri": "/<url>",
   "category": "<Catégorie>",
@@ -546,18 +554,15 @@ du socle `liorian-socle`, conforme au contrat canonique du workspace) et réécr
   "platforms": {
     "web": { "supported": true, "modes": ["web"] },
     "desktop": { "supported": true, "modes": ["local-webview"], "os": ["windows", "macos", "linux"] },
-    "mobile": { "supported": true, "modes": ["local-webview"], "os": ["android"], "iosSupported": false }
+    "mobile": { "supported": true, "modes": ["local-webview"], "os": ["android"] }
   },
-  "managerCompatibility": { "min": "0.17.1", "max": "0.17.x" },
-  "apiCompatibility": { "min": "0.27.0", "max": "0.27.x" },
-  "permissions": ["<id>.read", "<id>.write", "<id>.manage"],
-  "apiScopes": ["<id>.read", "<id>.write"],
-  "capabilities": {
-    "needsNetwork": true,
-    "supportsOffline": false,
-    "requiresOrganization": true,
-    "requiresAuthenticatedUser": true
+  "compatibility": {
+    "socle": { "min": "0.17.1", "max": "0.17.x" },
+    "api": { "min": "0.27.0", "max": "0.27.x" }
   },
+  "permissions": ["User:Get", "Editor:Post", "Editor:Put", "Admin:Delete"],
+  "oauth": { "scopes": ["openid", "profile", "email", "organizations"] },
+  "capabilities": ["core:default"],
   "isEnabled": true,
   "isDefault": false,
   "requirements": { "organization": ">=1.0.0", "identity": ">=1.0.0" },
@@ -651,14 +656,14 @@ export default function <PascalId>Page() {
   ✓ Page : src/app/blog-manager/page.tsx
 
   Prochaines étapes :
-    liorian connect
-    liorian pack com.example.blog-manager
-    liorian publish
+    liora connect
+    liora pack com.example.blog-manager
+    liora publish
 ```
 
 ---
 
-### 5.3 `liorian connect`
+### 5.3 `liora connect`
 
 #### Purpose
 
@@ -699,7 +704,7 @@ manière sécurisée.
 
 - **Plus jamais** de credentials en clair sur disque
 - Session **à jeton unique** : le token Bearer est rafraîchi à l'expiration — par `POST /oauth/token`
-  (`grant_type=refresh_token`, rotation) quand la session provient du flux OAuth `liorian auth`,
+  (`grant_type=refresh_token`, rotation) quand la session provient du flux OAuth `liora auth`,
   sinon par `POST /api/auth/sessions/refresh` (session legacy)
 - Le `mfa_secret` (si TOTP enrollment local) est chiffré dans le keychain
 - Après 5 échecs de connexion → temporaire (5 min) avec message clair
@@ -724,7 +729,7 @@ manière sécurisée.
 
 ---
 
-### 5.4 `liorian disconnect`
+### 5.4 `liora disconnect`
 
 #### Purpose
 
@@ -757,11 +762,11 @@ Supprimer toutes les credentials stockées et déconnecter le développeur.
 
 ---
 
-### 5.5 `liorian pack`
+### 5.5 `liora pack`
 
 #### Purpose
 
-Construire le build d'un module et créer une archive `.SenMod` compressée.
+Construire le build d'un module et créer une archive `.liozip` compressée.
 
 #### Comportement
 
@@ -776,16 +781,16 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
    - Source assets : `public/assets/<module>/` (si existe)
    - Destination : `.lorian/build/`
 5. **Créer l'archive ZIP** :
-   - Nom : `<module>-<version>.SenMod` (le `.SenMod` est un ZIP renommé)
+   - Nom : `<module>-<version>.liozip` (le `.liozip` est un ZIP renommé, extension canonique ADR-003 ; `.SenMod`/`.smp` restent lus en legacy, jamais produits)
    - Contenu : dossiers `library/modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>` (si existe)
    - Préfixe dans l'archive : `library/modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>`
 6. **Déplacer** l'archive vers `.lorian/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
-#### Structure de l'archive `.SenMod`
+#### Structure de l'archive `.liozip`
 
 ```
-<SenMod-file>.SenMod (ZIP)
+<archive>.liozip (ZIP)
 ├── library/modules/<module>/
 │   ├── manifest.json
 │   ├── index.tsx
@@ -799,12 +804,20 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
     └── ...
 ```
 
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--out <path>` | écrire l'archive vers un chemin personnalisé (ex. `--out acme-crm.liozip`, flux release §16) |
+| `--version <semver>` | forcer la version du build (prioritaire sur le suffixe `@<version>`) |
+
 #### Contraintes
 
 - Le dossier `.lorian/build/` est créé automatiquement s'il n'existe pas
 - Si une archive du même nom existe → demander confirmation (écraser)
 - Le `manifest.json` doit être valide avant le pack
-- La taille maximale de l'archive est de 50 MB (limite store)
+- Quotas d'archive (spec installation NFR-006..008, audit fail-closed §7.2) : 50 MB max, 5 000 entrées max, ratio de décompression max 100:1, 10 Mo par fichier ; symlinks et exécutables (`.so`, `.dll`, `.exe`, `.sh`, …) refusés
+- Le `manifest.json` canonique est embarqué à la racine de l'archive (TECH-002) ; le résumé affiche les empreintes SHA-256 (archive + manifeste) et le nombre de fichiers
 
 #### Sortie TUI
 
@@ -816,13 +829,13 @@ Construire le build d'un module et créer une archive `.SenMod` compressée.
 
   ✓ Archive créée avec succès
     Module : blog-manager v0.1.0
-    Fichier : .lorian/build/blog-manager-0.1.0.SenMod
+    Fichier : .lorian/build/blog-manager-0.1.0.liozip
     Taille : 12.4 KB
 ```
 
 ---
 
-### 5.6 `liorian publish`
+### 5.6 `liora publish`
 
 #### Purpose
 
@@ -831,16 +844,25 @@ Construire et publier un module dans le store via l'API `liorian-connect`.
 #### Comportement
 
 1. **Vérifier l'authentification** : token Bearer valide dans le keychain
-   - Si non connecté → `liorian connect` automatique
+   - Si non connecté → `liora connect` automatique
 2. **Identifier le module** : sélecteur Bubbletea si non fourni
-3. **Vérifier le `manifest.json`** :
-   - Si les métadonnées sont incomplètes (champs vides) → **demander** :
+3. **Compléter le `manifest.json`** :
+   - **Résoudre l'identité développeur** (jamais saisie manuellement) :
+     `GET /api/developer-store/accounts/me` → `{id, name}`. `publisher.id` est
+     l'identifiant de compte Liorian que `liorian-connect` utilise pour scoper
+     les ressources (`DeveloperProduct.developerId`, extrait du JWT de session
+     par `DeveloperAuthMiddleware`) — **ce n'est ni l'identifiant Apple ni celui
+     d'un autre constructeur**, et c'est le serveur qui l'attribue. Repli sur
+     l'`id` de session (keychain) si l'endpoint est injoignable. Le bloc
+     `publisher` n'étant pas transmis au store (`CreateModuleProductDto` ne
+     l'expose pas), il reste une métadonnée locale alignée sur le compte
+     distant — résolu, pas demandé.
+   - Si les métadonnées restantes sont incomplètes (champs vides) → **demander** :
      - `name` : nom affiché du module
      - `description` : description courte
-     - `publisher.id` : identifiant développeur
-     - `publisher.name` : nom affiché du développeur
+     - `publisher.name` : nom affiché du développeur (uniquement si non résolu)
    - Proposer de mettre à jour le `manifest.json` local
-4. **Exécuter `liorian pack`** en interne (construction de l'archive)
+4. **Exécuter `liora pack`** en interne (construction de l'archive)
 5. **Envoyer l'archive** à l'API developer-store (`liorian-api-connect`, §8.2 ;
    `docs/specs/applications/liorian-connect.md`) en 3 étapes :
    - Résoudre le **produit module** : réutiliser le produit lié (`manifest.token`) sinon le créer
@@ -850,7 +872,7 @@ Construire et publier un module dans le store via l'API `liorian-connect`.
      `{versionString, buildNumber, …}` ; `buildNumber` = dernière build + 1, résolue via
      `GET …/versions`)
    - **Déclarer l'artefact** (`POST /api/developer-store/modules/:id/versions/:versionId/artifact` —
-     `manifest` JSON, `checksum` SHA-256 hex, `signature` base64 (.SenMod.sig), `size`)
+     `manifest` JSON, `checksum` SHA-256 hex, `manifestChecksum` (SHA-256 du manifeste canonique), `signature` base64 (charge utile canonique §7.1), `signatureKeyId` (fingerprint), `size`) — signature **obligatoire** (ADR-010, `--allow-unsigned` en dev uniquement)
    - Headers : `Authorization: Bearer <token>`
 6. **Gérer la réponse** :
    - **Succès** → afficher l'URL du module dans le store
@@ -858,11 +880,20 @@ Construire et publier un module dans le store via l'API `liorian-connect`.
    - **Erreur** → afficher le message d'erreur détaillé
 7. **Mettre à jour le `manifest.json`** local avec la version publiée et le token distant résolu
 
+#### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--file <archive.liozip>` | publier une archive pré-construite au lieu d'emballer (flux release §16) |
+| `--version <semver>` | figer la version publiée (met à jour `manifest.json`) |
+| `--allow-unsigned` | publier sans signature (dev uniquement — le store refuse les artefacts non signés, ADR-010) |
+
 #### Contraintes
 
 - L'authentification est **obligatoire**
+- La signature Ed25519 de la charge utile canonique est **obligatoire** (ADR-010) : sans clé (`liora sign keygen`), la publication échoue sauf `--allow-unsigned` explicite
 - La version doit être supérieure à la dernière version publiée (SemVer)
-- Le module doit passer l'audit (`liorian audit`) avant la publication
+- Le module doit passer l'audit (`liora audit`) avant la publication
 - Si l'audit échoue → proposer de corriger avant de publier
 
 #### Sortie TUI
@@ -886,9 +917,19 @@ Construire et publier un module dans le store via l'API `liorian-connect`.
   URL : https://store.liorian.dev/modules/blog-manager
 ```
 
+#### Session de release (spec installation §16)
+
+```text
+$ liora pack ./acme-crm --version 1.3.0 --out acme-crm.liozip
+$ liora sign  acme-crm.liozip --key ~/.acme/ed25519
+$ liora publish mod.acme.crm --version 1.3.0 --file acme-crm.liozip
+  → 201 · signatureKeyId (fingerprint) · checksum SHA-256 · manifestChecksum · état READY
+  → review → APPROVED → RELEASED → distribution catalogue (outbox)
+```
+
 ---
 
-### 5.7 `liorian link`
+### 5.7 `liora link`
 
 #### Purpose
 
@@ -896,12 +937,12 @@ Lier un module créé dans `liorian-connect` avec le module en local, via son to
 
 #### Comportement
 
-1. **Vérifier le contexte projet** (racine + `library/modules/`) et l'authentification (sinon → `liorian connect`)
+1. **Vérifier le contexte projet** (racine + `library/modules/`) et l'authentification (sinon → `liora connect`)
 2. **Sélectionner le module local** : argument positionnel ou sélecteur Bubbletea
 3. **Lister les modules en ligne** via API `GET /api/developer-store/modules`, proposer une sélection
    (items au format `token — name vversion`)
 4. **Résoudre le token distant** :
-   - En mode CI (non-interactif) : `liorian link <module> <token>` en arguments
+   - En mode CI (non-interactif) : `liora link <module> <token>` en arguments
    - En interactif : choix dans la liste
 5. **Valider le token** via `GET /api/developer-store/modules/<id>` (existe + appartient au développeur)
 6. **Mettre à jour le `manifest.json` local** : `token` remplacé par le token distant, métadonnées
@@ -926,7 +967,7 @@ Lier un module créé dans `liorian-connect` avec le module en local, via son to
 
 ---
 
-### 5.8 `liorian unlink`
+### 5.8 `liora unlink`
 
 #### Purpose
 
@@ -959,7 +1000,7 @@ Délier un module local de son correspondant dans `liorian-connect`.
 
 ---
 
-### 5.9 `liorian debug <module>`
+### 5.9 `liora debug <module>`
 
 #### Purpose
 
@@ -1081,11 +1122,11 @@ avec tail de sortie).
 
 ---
 
-### 5.10 `liorian audit <module>`
+### 5.10 `liora audit <module>`
 
 #### Purpose
 
-Auditer la conformité d'un ou tous les modules par rapport aux règles du système Liorian.
+Auditer la conformité d'un ou tous les modules par rapport aux règles du système Liora.
 
 #### Comportement
 
@@ -1165,7 +1206,7 @@ réussis, puis la carte `✓ Audit passed — no errors, no warnings`.
 
 ---
 
-### 5.11 `liorian help`
+### 5.11 `liora help`
 
 #### Purpose
 
@@ -1180,13 +1221,13 @@ Afficher l'aide contextuelle de la CLI.
 
 ```
 ┌───────────────┐
-│ ⬢ liorian   │   ← wordmark (badge brand, dégrade en texte sous --no-color)
+│ ⬢ liora   │   ← wordmark (badge brand, dégrade en texte sous --no-color)
 └───────────────┘
 
-Lior CLI — Development tool for Liorian modules
+Liora CLI — Development tool for Liora modules
 
 Usage:
-  liorian [command]
+  liora [command]
 
 Available Commands:
   audit       Audit a module's conformance
@@ -1194,42 +1235,42 @@ Available Commands:
   build       Build the application for production (project `build` script)
   check       Run the project checks (project `lint` script)
   completion  Generate the autocompletion script for the specified shell
-  connect     Connect to Liorian Connect
+  connect     Connect to Liora Connect
   create      Create a new module
   debug       Debug a module or all modules
   dev         Start the development server (project `dev` script)
   disconnect  Disconnect
   help        Help about any command
-  init        Initialize a new Liorian project
+  init        Initialize a new Liora project
   link        Link a local module to a remote module
   marketplace Search and install modules from the public catalog
-  pack        Build a module archive (.SenMod)
+  pack        Build a module archive (.liozip)
   publish     Publish a module to the store
   repair      Repair a module's audit failures
-  sign        Sign .SenMod archives (Ed25519)
+  sign        Sign .liozip archives (Ed25519)
   start       Start the built application (project `start` script)
   test        Run the tests of a module or all modules
   unlink      Unlink a local module from liorian-connect
 
 Flags:
-      --help     help for liorian
-  -v, --version  version for liorian
+      --help     help for liora
+  -v, --version  version for liora
 
 Global Flags:
       --lang string    language / UI locale (fr-FR, en-US, …)
       --no-color       disable colors
       --verbose        enable verbose logs
 
-Use "liorian [command] --help" for more information about a command.
+Use "liora [command] --help" for more information about a command.
 
 Exemples:
-  liorian init
-  liorian create module
-  liorian connect
-  liorian pack blog-manager
-  liorian sign blog-manager
-  liorian publish blog-manager
-  liorian audit
+  liora init
+  liora create module
+  liora connect
+  liora pack blog-manager
+  liora sign blog-manager
+  liora publish blog-manager
+  liora audit
 ```
 
 > Le help est thématisé : labels de section teintés (accent), wordmark brand en tête ;
@@ -1237,7 +1278,7 @@ Exemples:
 
 ---
 
-### 5.12 `liorian -v` / `liorian --version`
+### 5.12 `liora -v` / `liora --version`
 
 #### Purpose
 
@@ -1246,21 +1287,21 @@ Afficher la version actuelle de la CLI.
 #### Comportement
 
 1. Lire la version compilée dans le binaire — alignée sur `app.config.json` (`main.version`, `main.branch`, `main.commit`, `main.date`), surchargée par `ldflags` au build de release
-2. Afficher : `liorian v<version> (<os>/<arch>) <branch> (<commit>)` (template de version Cobra)
+2. Afficher : `liora v<version> (<os>/<arch>) <branch> (<commit>)` (template de version Cobra)
 
 #### Sortie
 
 ```
-liorian v0.20.0 (darwin/arm64) alpha (e7cbd2f)
+liora v0.20.0 (darwin/arm64) alpha (e7cbd2f)
 ```
 
 ---
 
-### 5.13 `liorian sign`
+### 5.13 `liora sign`
 
 #### Purpose
 
-Gérer les signatures numériques Ed25519 des modules : générer des clés, signer les archives `.SenMod`
+Gérer les signatures numériques Ed25519 des modules : générer des clés, signer les archives `.liozip`
 et vérifier les signatures. La signature garantit l'intégrité et l'authenticité des modules
 avant publication.
 
@@ -1268,13 +1309,13 @@ avant publication.
 
 | Sous-commande | Description |
 |---------------|-------------|
-| `liorian sign keygen` | Générer une paire de clés Ed25519 et la stocker dans le keychain |
-| `liorian sign <module>` | Signer l'archive `.SenMod` d'un module |
-| `liorian sign verify <module>` | Vérifier la signature d'un module |
+| `liora sign keygen` | Générer une paire de clés Ed25519 et la stocker dans le keychain |
+| `liora sign <module>` | Signer l'archive `.liozip` d'un module |
+| `liora sign verify <module\|archive>` | Vérifier la signature d'un module |
 
 ---
 
-##### 5.13.1 `liorian sign keygen`
+##### 5.13.1 `liora sign keygen`
 
 ###### Comportement
 
@@ -1304,26 +1345,26 @@ avant publication.
 
 ---
 
-##### 5.13.2 `liorian sign <module>`
+##### 5.13.2 `liora sign <module>`
 
 ###### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Liorian
+1. **Vérifier le contexte** : être à la racine d'un projet Liora
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.SenMod` existe** dans `.lorian/build/`
-   - Si absente → erreur avec suggestion d'exécuter `liorian pack <module>`
+4. **Vérifier que l'archive `.liozip` existe** dans `.lorian/build/` (`.SenMod`/`.smp` historiques acceptés en lecture)
+   - Si absente → erreur avec suggestion d'exécuter `liora pack <module>`
 5. **Charger la clé privée** depuis le keychain
-   - Si absente → erreur avec suggestion d'exécuter `liorian sign keygen`
+   - Si absente → erreur avec suggestion d'exécuter `liora sign keygen`
 6. **Signer l'archive** :
-   - Lire le contenu de l'archive `.SenMod`
-   - Signer avec `ed25519.Sign(privateKey, archiveData)`
+   - Calculer l'empreinte SHA-256 de l'archive et l'empreinte du manifeste canonique, construire la charge utile canonique `{moduleIdentifier, version, checksum, manifestChecksum, entry, type}` (spec installation §7.1)
+   - Signer avec `ed25519.Sign(privateKey, payload)`
    - Écrire la signature dans `<archive>.sig` (même dossier que l'archive)
 7. **Afficher le résumé** : module, version, fingerprint du signataire, chemin du `.sig`
 
 ###### Contraintes
 
-- L'archive `.SenMod` doit exister (résultat de `liorian pack`)
+- L'archive `.liozip` doit exister (résultat de `liora pack`)
 - La clé privée doit exister dans le keychain
 - Si un fichier `.sig` existe déjà pour cette archive → demander confirmation (écraser)
 - Le fichier `.sig` est un binaire contenant uniquement la signature Ed25519 (64 octets)
@@ -1337,31 +1378,30 @@ avant publication.
 
   ✓ Archive signée avec succès
     Module   : blog-manager v0.1.0
-    Archive  : .lorian/build/blog-manager-0.1.0.SenMod
-    Signature : .lorian/build/blog-manager-0.1.0.SenMod.sig
+    Archive  : .lorian/build/blog-manager-0.1.0.liozip
+    Signature : .lorian/build/blog-manager-0.1.0.liozip.sig
     Signataire : a1b2c3d4... (fingerprint SHA-256)
 ```
 
 ---
 
-##### 5.13.3 `liorian sign verify <module>`
+##### 5.13.3 `liora sign verify <module>`
 
 ###### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Liorian
+1. **Vérifier le contexte** : être à la racine d'un projet Liora
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.SenMod` et le fichier `.sig` existent**
+4. **Vérifier que l'archive `.liozip` et le fichier `.sig` existent**
 5. **Charger la clé publique** depuis le keychain
-   - Si absente → erreur avec suggestion d'exécuter `liorian sign keygen`
+   - Si absente → erreur avec suggestion d'exécuter `liora sign keygen`
 6. **Vérifier la signature** :
-   - Lire l'archive `.SenMod` et le fichier `.sig`
-   - Vérifier avec `ed25519.Verify(publicKey, archiveData, signature)`
+   - Recalculer la charge utile canonique (empreintes sur les octets reçus) et vérifier avec `ed25519.Verify(publicKey, payload, signature)` ; repli migration : signature historique sur octets bruts (signalée `legacy`)
 7. **Afficher le résultat** : ✓ Signature valide ou ✗ Signature invalide
 
 ###### Contraintes
 
-- L'archive `.SenMod` ET le fichier `.sig` doivent exister
+- L'archive `.liozip` ET le fichier `.sig` doivent exister
 - La clé publique doit exister dans le keychain
 - En cas de signature invalide → afficher un message d'erreur explicite (possiblement archive corrompue ou clé incorrecte)
 
@@ -1373,7 +1413,7 @@ avant publication.
 
   ✓ Signature valide
     Module    : blog-manager v0.1.0
-    Archive   : .lorian/build/blog-manager-0.1.0.SenMod
+    Archive   : .lorian/build/blog-manager-0.1.0.liozip
     Signataire : a1b2c3d4...
 ```
 
@@ -1385,18 +1425,18 @@ avant publication.
 
   ✗ Signature invalide
     Module   : blog-manager v0.1.0
-    Archive  : .lorian/build/blog-manager-0.1.0.SenMod
+    Archive  : .lorian/build/blog-manager-0.1.0.liozip
     → L'archive a pu être modifiée ou la clé de vérification est incorrecte.
 ```
 
 ---
 
-### 5.14 `liorian auth`
+### 5.14 `liora auth`
 
 #### Purpose
 
 Authentifier le développeur via le flux OAuth2 **code d'autorisation + PKCE** (RFC 7636),
-en passant par le navigateur. Complément du `liorian connect` (email/mot de passe), le
+en passant par le navigateur. Complément du `liora connect` (email/mot de passe), le
 flux ouvre la page d'autorisation de `liorian-auth`, reçoit la redirection sur un serveur
 local en boucle, échange le code contre des jetons, puis stocke la session de façon
 sécurisée.
@@ -1455,7 +1495,7 @@ erreur catégorisée (exit 2).
 
 ---
 
-### 5.15 `liorian test <module>`
+### 5.15 `liora test <module>`
 
 #### Purpose
 
@@ -1475,7 +1515,7 @@ réel** et un **récapitulatif de sévérité** en fin d'exécution. L'exécutio
    avec le décompte `N erreur(s), M avertissement(s)` ; chaque règle en échec alimente le
    récapitulatif par sa propre sévérité. Si erreurs → statut `ERROR` et arrêt du module.
 3. **Résoudre le gestionnaire de paquets** : celui **choisi à l'installation** (`project.packageManager`
-   écrit par `liorian init`), puis une surcharge `test.packageManager`, puis la détection PATH
+   écrit par `liora init`), puis une surcharge `test.packageManager`, puis la détection PATH
    (bun → pnpm → yarn → npm) ; l'étape rapporte la source (« choisi à l'installation » ou
    « détecté »). Aucun → statut `WARNING` (étape en avertissement).
 4. **Résoudre le package de test** (étape rapportée), par ordre de priorité :
@@ -1561,7 +1601,7 @@ avec mise à jour en place des étapes portant un identifiant.
 
 ---
 
-### 5.16 `liorian create view <module> [name]`
+### 5.16 `liora create view <module> [name]`
 
 #### Purpose
 
@@ -1572,7 +1612,7 @@ FR-030.
 
 #### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Liorian
+1. **Vérifier le contexte** : être à la racine d'un projet Liora
 2. **Résoudre le module cible** : argument positionnel `[module]`, sinon sélection interactive
    parmi les modules de `library/modules/`
 3. **Résoudre l'identifiant de vue** : `--name`, ou second argument positionnel, sinon prompt
@@ -1607,17 +1647,17 @@ FR-030.
 
 ---
 
-### 5.17 `liorian repair [module]`
+### 5.17 `liora repair [module]`
 
 #### Purpose
 
-Réparer automatiquement les anomalies **bloquantes** signalées par `liorian audit` sur un module
+Réparer automatiquement les anomalies **bloquantes** signalées par `liora audit` sur un module
 (ou tous), puis re-auditer ; les points qui exigent une modification de code sont restitués en
 **instructions pas à pas**. FR-031.
 
 #### Comportement
 
-1. **Vérifier le contexte** : être à la racine d'un projet Liorian
+1. **Vérifier le contexte** : être à la racine d'un projet Liora
 2. **Analyser** le(s) module(s) via le pipeline d'audit
 3. **Appliquer les correctifs automatiques** :
    - champs de manifeste (`id`, `name`, `version`, `token`, `entry`, `permissions`, `platforms`,
@@ -1660,13 +1700,13 @@ Réparer automatiquement les anomalies **bloquantes** signalées par `liorian au
 
 ---
 
-### 5.18 `liorian dev|build|start|check`
+### 5.18 `liora dev|build|start|check`
 
 L'outillage applicatif (`dev`, `build`, `start`, `check`) proxie les scripts `package.json` du
 projet via le gestionnaire de paquets choisi à l'installation, avec hooks `before`/`after` et une
 **porte de santé** (audit des modules) en pre-flight pour `dev`/`build`/`start`. La spécification
 complète (correspondance commandes → scripts, résolution, passthrough d'arguments, codes de
-sortie, configuration `toolchain`) est dans **`docs/specs/liorian-toolchain.md`** (TFC-001 →
+sortie, configuration `toolchain`) est dans **`docs/specs/liora-toolchain.md`** (TFC-001 →
 TFC-017).
 
 ---
@@ -1675,7 +1715,7 @@ TFC-017).
 
 ### 6.1 Fichier `lorian.config.json` (optionnel)
 
-Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
+Placé à la racine du projet Liora, ce fichier permet de configurer la CLI.
 
 ```json
 {
@@ -1709,13 +1749,13 @@ Placé à la racine du projet Liorian, ce fichier permet de configurer la CLI.
 
 > La configuration est **JSON uniquement** (le parser TOML a été retiré en 0.0.9). Le fichier
 > historique `lorian.config.toml` ne sert plus que de marqueur de projet (racine) pour
-> `create`/`link`/etc., et `lorian.config.json` est écrit par `liorian init`.
+> `create`/`link`/etc., et `lorian.config.json` est écrit par `liora init`.
 > `cli.lang` force la langue d'interface (NFR-007, FR-025) ; un champ vide garde l'auto-détection
 > (`LIORIAN_CLI_LANG` / locale OS). `cli.noColor` désactive les couleurs de sortie. `--lang`,
 > `--no-color` et `--verbose` **persistent** leur choix dans ce fichier à chaque exécution dans le
 > projet (`cli.lang`, `cli.noColor`, `debug.verbose`), la priorité restant flag → env → config.
 >
-> La section `test` est **écrite automatiquement** par `liorian test` : `packageManager` reprend
+> La section `test` est **écrite automatiquement** par `liora test` : `packageManager` reprend
 > le gestionnaire choisi à l'installation (ou celui réellement utilisé), `runner` mémorise le
 > package de test par défaut et `modules.<domaine>.runner` surcharge un module. Les valeurs
 > `runner` acceptées sont un package du catalogue (`vitest`, `jest`, `mocha`, `ava`), un package
@@ -1730,7 +1770,7 @@ catalogue backend. Les dépendances npm sont portées par le `package.json` du m
 
 - **Schéma canonique** : `schemaVersion: 1`, publié avec le SDK
   (`@liorian/sdk`, `docs/modules/module-manifest.md`), validé en CI. La structure complète
-  est décrite en §5.2 (`liorian create module`).
+  est décrite en §5.2 (`liora create module`).
 - **Identité stable** : `id`, `domain`, `key`, `name`, `permissions` ne changent jamais (le
   catalogue, les activations et les contrôles d'accès en dépendent) ; `version` ne bouge que par
   incrément SemVer.
@@ -1750,11 +1790,11 @@ lorian-cli/
 ├── user_id           # ID du développeur
 ├── user_email        # Email du développeur
 ├── mfa_secret        # Secret TOTP (si enrollment local)
-└── oauth_refresh_token  # Refresh token OAuth2 (flux `liorian auth`)
+└── oauth_refresh_token  # Refresh token OAuth2 (flux `liora auth`)
 
 lorian-cli-signing/
 ├── signing_public_key   # Clé publique Ed25519 (fingerprint du développeur)
-└── signing_private_key  # Clé privée Ed25519 (signature des archives .SenMod)
+└── signing_private_key  # Clé privée Ed25519 (signature des archives .liozip)
 ```
 
 ---
@@ -1780,7 +1820,7 @@ lorian-cli-signing/
 
 ### 7.2 Chiffrement des archives
 
-- Les archives `.SenMod` ne contiennent **jamais** de credentials, tokens ou données sensibles
+- Les archives `.liozip` ne contiennent **jamais** de credentials, tokens ou données sensibles
 - Le `manifest.json` ne contient que les métadonnées publiques du module
 - Le token UUID est un identifiant public, pas un secret
 
@@ -1801,7 +1841,7 @@ lorian-cli-signing/
 
 ### 7.5 MFA
 
-- Si le compte développeur a la MFA activée, `liorian connect` **exige** la vérification
+- Si le compte développeur a la MFA activée, `liora connect` **exige** la vérification
 - Le secret TOTP peut être géré côté serveur (recommandé) ou stocké localement (optionnel)
 - Les backup codes sont utilisables uniquement en secours
 
@@ -1814,7 +1854,7 @@ lorian-cli-signing/
 - L'algorithme utilisé est **Ed25519** (signatures compactes de 64 octets, clés de 32 octets)
 - Les fichiers `.sig` sont des binaires contenant uniquement la signature Ed25519
 - La vérification de signature utilise la clé publique stockée dans le keychain
-- En cas de perte de clés, `liorian sign keygen` permet de régénérer une nouvelle paire
+- En cas de perte de clés, `liora sign keygen` permet de régénérer une nouvelle paire
 
 ---
 
@@ -1921,8 +1961,8 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
 | `manifest` | JSON | oui | Contenu du `manifest.json` |
-| `checksum` | string | oui | SHA-256 hex de l'archive `.SenMod` |
-| `signature` | string | non | Signature Ed25519 (base64 du `.SenMod.sig`, vide si non signé) |
+| `checksum` | string | oui | SHA-256 hex de l'archive `.liozip` (recalculé serveur) |
+| `signature` | string | oui | Signature Ed25519 base64 de la charge utile canonique (§7.1) |
 | `size` | number | non | Taille de l'archive en octets (défaut 0) |
 | `storageKey` | string | non | Clé de stockage blob (téléversement binaire — réservé) |
 
@@ -2003,7 +2043,7 @@ before:
 
 builds:
   - main: .
-    binary: liorian
+    binary: liora
     env:
       - CGO_ENABLED=0
     goos:
@@ -2063,15 +2103,15 @@ npm install -g @liorian/cli
 npx @liorian/cli
 
 # macOS / Linux
-curl -sSL https://get.liorian.dev/cli | sh
+curl -sSL https://get.liora.dev/cli | sh
 
 # Windows (PowerShell)
-iwr -useb https://get.liorian.dev/cli.ps1 | iex
+iwr -useb https://get.liora.dev/cli.ps1 | iex
 
-# Homebrew (tap = dépôt protorians/lior-cli, formula `Formula/liorian.rb`)
+# Homebrew (tap = dépôt protorians/lior-cli, formula `Formula/liora.rb`)
 brew tap protorians/lior-cli https://github.com/protorians/lior-cli.git
-brew install protorians/lior-cli/liorian
-# (après ce tap, `brew install protorians/lior-cli/liorian` suffit ensuite.
+brew install protorians/lior-cli/liora
+# (après ce tap, `brew install protorians/lior-cli/liora` suffit ensuite.
 #  La forme courte `brew install protorians/lior-cli` n'est PAS valide dans
 #  Homebrew : une référence de tap exige 3 segments `user/repo/formula`, et
 #  l'auto-tap `brew install user/repo/formula` sans `brew tap` vise le repo
@@ -2128,7 +2168,7 @@ Exemple :
 
 ```
 ✗ Authentication : Token expired
-  → Run 'liorian connect' to sign in again.
+  → Run 'liora connect' to sign in again.
 ```
 
 ---
@@ -2144,7 +2184,7 @@ Exemple :
 | E2E | `testscript` (txtar) contre une **mock API** `httptest` (`e2e/mockapi`) | Toutes les commandes |
 
 L'harness E2E (`e2e/e2e_test.go`) compile le binaire à partir de la racine, expose la CLI sous
-`$LIORIAN`, pointe `LIORIAN_AUTH_API` vers la mock API (une par script), force le vault fichier
+`$LIORA`, pointe `LIORIAN_AUTH_API` vers la mock API (une par script), force le vault fichier
 (`LIORIAN_CLI_STORE=file`), désactive l'update check (`LIORIAN_CLI_SKIP_UPDATE=1`), injecte des
 fixtures portables `bun/npm/tsc/node` et donne un `HOME` isolé writable par script.
 
@@ -2156,55 +2196,55 @@ Suite E2E réelle (16 scripts txtar) : `01_help_version`, `02_init`, `02b_init_b
 
 | ID | Scénario |
 |----|----------|
-| TC-001 | `liorian init` avec bun détecté (et génération du `.env` depuis l'exemple) |
-| TC-002 | `liorian init` avec aucun gestionnaire détecté |
-| TC-003 | `liorian create module` avec nom invalide |
-| TC-004 | `liorian create module` avec nom valide |
-| TC-005 | `liorian connect` succès sans MFA |
-| TC-006 | `liorian connect` avec MFA TOTP |
-| TC-007 | `liorian connect` échec (mauvais identifiants) |
-| TC-008 | `liorian disconnect` avec confirmation |
-| TC-009 | `liorian pack` module existant |
-| TC-010 | `liorian pack` module avec assets |
-| TC-011 | `liorian publish` succès |
-| TC-012 | `liorian publish` version existante |
-| TC-013 | `liorian link` succès |
-| TC-014 | `liorian unlink` succès |
-| TC-015 | `liorian debug` module unique |
-| TC-016 | `liorian debug` tous les modules |
-| TC-017 | `liorian audit` module conforme |
-| TC-018 | `liorian audit` module avec erreurs |
-| TC-019 | `liorian help` sans argument |
-| TC-020 | `liorian help` avec commande |
-| TC-021 | `liorian -v` affiche la version |
-| TC-022 | `liorian sign keygen` génère et stocke les clés Ed25519 |
-| TC-023 | `liorian sign <module>` signe l'archive `.SenMod` et produit un `.sig` |
-| TC-024 | `liorian sign verify <module>` vérifie une signature valide |
-| TC-025 | `liorian sign verify <module>` échoue sur archive modifiée ou signature invalide |
-| TC-026 | `liorian auth` échange un code d'autorisation (OAuth2 + PKCE) et stocke la session |
-| TC-027 | `liorian auth` en mode non-interactif sans `LIORIAN_CLI_AUTH_CODE` → erreur catégorisée (exit 2) |
-| TC-028 | `liorian test` module unique (script `test` → OK) |
-| TC-029 | `liorian test` tous les modules ; suite en échec → exit 13 |
+| TC-001 | `liora init` avec bun détecté (et génération du `.env` depuis l'exemple) |
+| TC-002 | `liora init` avec aucun gestionnaire détecté |
+| TC-003 | `liora create module` avec nom invalide |
+| TC-004 | `liora create module` avec nom valide |
+| TC-005 | `liora connect` succès sans MFA |
+| TC-006 | `liora connect` avec MFA TOTP |
+| TC-007 | `liora connect` échec (mauvais identifiants) |
+| TC-008 | `liora disconnect` avec confirmation |
+| TC-009 | `liora pack` module existant |
+| TC-010 | `liora pack` module avec assets |
+| TC-011 | `liora publish` succès |
+| TC-012 | `liora publish` version existante |
+| TC-013 | `liora link` succès |
+| TC-014 | `liora unlink` succès |
+| TC-015 | `liora debug` module unique |
+| TC-016 | `liora debug` tous les modules |
+| TC-017 | `liora audit` module conforme |
+| TC-018 | `liora audit` module avec erreurs |
+| TC-019 | `liora help` sans argument |
+| TC-020 | `liora help` avec commande |
+| TC-021 | `liora -v` affiche la version |
+| TC-022 | `liora sign keygen` génère et stocke les clés Ed25519 |
+| TC-023 | `liora sign <module\|archive>` signe la charge utile canonique et produit un `.sig` (64 octets) |
+| TC-024 | `liora sign verify <module>` vérifie une signature valide |
+| TC-025 | `liora sign verify <module>` échoue sur archive modifiée ou signature invalide |
+| TC-026 | `liora auth` échange un code d'autorisation (OAuth2 + PKCE) et stocke la session |
+| TC-027 | `liora auth` en mode non-interactif sans `LIORIAN_CLI_AUTH_CODE` → erreur catégorisée (exit 2) |
+| TC-028 | `liora test` module unique (script `test` → OK) |
+| TC-029 | `liora test` tous les modules ; suite en échec → exit 13 |
 
 Scénarios des scripts récents (identifiants préfixés par le numéro du script, `13_` → `15_`) :
 
 | ID | Scénario |
 |----|----------|
-| 13/TC-030 | `liorian marketplace search` liste le catalogue |
-| 13/TC-031 | `liorian marketplace install` d'un module non signé |
+| 13/TC-030 | `liora marketplace search` liste le catalogue |
+| 13/TC-031 | `liora marketplace install` refuse un module non signé (fail-closed) ; `--allow-unsigned` en dev |
 | 13/TC-032 | Installation d'un module signé : vérification Ed25519 |
-| 14/TC-031 | `liorian dev` résout le script `dev` et diffuse la sortie (porte ignorée sans module) |
-| 14/TC-031b | `liorian dev -p 5010` transmet les flags sans `--` |
-| 14/TC-031c | `liorian dev -- --port 3000` retire le séparateur `--` |
-| 14/TC-032 | `liorian check` mappe sur le script `lint` par défaut |
-| 14/TC-033 | `liorian build` exécute les hooks `before`/`after` autour du script |
-| 14/TC-034 | `liorian start` résout le script `start` |
+| 14/TC-031 | `liora dev` résout le script `dev` et diffuse la sortie (porte ignorée sans module) |
+| 14/TC-031b | `liora dev -p 5010` transmet les flags sans `--` |
+| 14/TC-031c | `liora dev -- --port 3000` retire le séparateur `--` |
+| 14/TC-032 | `liora check` mappe sur le script `lint` par défaut |
+| 14/TC-033 | `liora build` exécute les hooks `before`/`after` autour du script |
+| 14/TC-034 | `liora start` résout le script `start` |
 | 14/TC-035 | Script absent du `package.json` → échec de résolution (exit 1) |
 | 14/TC-036 | Le code de sortie de la commande moteur est propagé (passthrough) |
 | 14/TC-037 | La porte de santé (audit) annule `dev` sur module en erreur |
-| 15/TC-038 | `liorian repair` corrige automatiquement les anomalies bloquantes |
-| 15/TC-039 | `liorian repair` restitue les points non réparables en instructions (exit non nul) |
-| 15/TC-040 | `liorian repair --no-interaction` renomme le dossier sur le domaine du manifeste |
+| 15/TC-038 | `liora repair` corrige automatiquement les anomalies bloquantes |
+| 15/TC-039 | `liora repair` restitue les points non réparables en instructions (exit non nul) |
+| 15/TC-040 | `liora repair --no-interaction` renomme le dossier sur le domaine du manifeste |
 
 ---
 
@@ -2215,38 +2255,38 @@ Scénarios des scripts récents (identifiants préfixés par le numéro du scrip
 > `docs/rapport-implementation.md` (§5).
 
 ```
-Product: liorian-cli v1.0.0
+Product: liora-cli v1.0.0
 │
 ├── Release 0.1.0 (MVP)
 │   │
 │   ├── Epic E-001 : Initialisation & Création
-│   │   ├── Story S-001 : `liorian init` (clone + deps)
-│   │   └── Story S-002 : `liorian create module`
+│   │   ├── Story S-001 : `liora init` (clone + deps)
+│   │   └── Story S-002 : `liora create module`
 │   │
 │   ├── Epic E-002 : Authentification
-│   │   ├── Story S-003 : `liorian connect` (email/password)
-│   │   ├── Story S-004 : `liorian connect` (MFA TOTP)
-│   │   └── Story S-005 : `liorian disconnect`
+│   │   ├── Story S-003 : `liora connect` (email/password)
+│   │   ├── Story S-004 : `liora connect` (MFA TOTP)
+│   │   └── Story S-005 : `liora disconnect`
 │   │
 │   └── Epic E-003 : Build & Informations
-│       ├── Story S-006 : `liorian pack`
-│       └── Story S-007 : `liorian -v` + `liorian help`
+│       ├── Story S-006 : `liora pack`
+│       └── Story S-007 : `liora -v` + `liora help`
 │
 ├── Release 0.2.0 (Store)
 │   │
 │   ├── Epic E-004 : Publication
-│   │   ├── Story S-008 : `liorian publish`
-│   │   ├── Story S-009 : `liorian link`
-│   │   └── Story S-010 : `liorian unlink`
+│   │   ├── Story S-008 : `liora publish`
+│   │   ├── Story S-009 : `liora link`
+│   │   └── Story S-010 : `liora unlink`
 │   │
 │   ├── Epic E-005 : Validation
-│   │   ├── Story S-011 : `liorian audit`
-│   │   └── Story S-012 : `liorian debug`
+│   │   ├── Story S-011 : `liora audit`
+│   │   └── Story S-012 : `liora debug`
 │   │
 │   └── Epic E-008 : Signature numérique
-│       ├── Story S-019 : `liorian sign keygen` (génération clés Ed25519)
-│       ├── Story S-020 : `liorian sign <module>` (signature archive .SenMod)
-│       └── Story S-021 : `liorian sign verify <module>` (vérification signature)
+│       ├── Story S-019 : `liora sign keygen` (génération clés Ed25519)
+│       ├── Story S-020 : `liora sign <module>` (signature canonique .liozip)
+│       └── Story S-021 : `liora sign verify <module>` (vérification signature)
 │
 └── Release 0.3.0 (Qualité)
     │
@@ -2272,7 +2312,7 @@ Product: liorian-cli v1.0.0
 | R-003 | Taille du binaire trop élevée | Faible | Faible | `ldflags -s -w`, UPX compression optionnelle |
 | R-004 | Breaking changes API `liorian-connect` | Faible | Élevé | Versioning API, détection automatique de la version |
 | R-005 | Conflits de noms de modules | Moyenne | Moyen | Validation stricte, vérification d'unicité avant création |
-| R-006 | Archive `.SenMod` corrompue ou falsifiée | Faible | Élevé | Signature numérique Ed25519 (`liorian sign`), vérification avant publication |
+| R-006 | Archive `.liozip` corrompue ou falsifiée | Faible | Élevé | Signature canonique Ed25519 (`liora sign`), vérification avant publication (obligatoire) |
 | R-007 | MFA bloquant (appareil perdu) | Faible | Élevé | Backup codes, procédure de récupération via `liorian-connect` web |
 
 ---
@@ -2281,7 +2321,7 @@ Product: liorian-cli v1.0.0
 
 ### ADR-001 : Go + Bubbletea comme stack technique
 
-**Contexte** : Choisir la stack technique pour la CLI Liorian.
+**Contexte** : Choisir la stack technique pour la CLI Liora.
 
 **Options considérées** :
 - **Option A** : Go + Cobra + Bubbletea

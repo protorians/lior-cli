@@ -43,8 +43,10 @@ exec grep -q '"dependencies"' package.json
 exec grep -q '"$schema"' manifest.json
 exec grep -q '"optionalRequirements": {}' manifest.json
 exec grep -q '"platforms"' manifest.json
-exec grep -q '"iosSupported"' manifest.json
-exec grep -q '"type": "EXTERNAL"' manifest.json
+exec grep -q '"compatibility"' manifest.json
+exec grep -q '"oauth"' manifest.json
+exec grep -q '"capabilities"' manifest.json
+exec grep -q '"type": "WEB_APP_LOCAL"' manifest.json
 exec grep -q '"category": "SYSTEM"' manifest.json
 
 # The manifest is the single source of truth: no dependencies in index.tsx.

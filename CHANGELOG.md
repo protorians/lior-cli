@@ -6,12 +6,31 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **Commande `liorian module` (cycle de vie Developer Store)** — sous-commandes `knowledge`,
+- **Chaîne de signature alignée sur le serveur** — `internal/pkg.CanonicalJSON` sérialise la charge
+  signée en JSON canonique (clés triées récursivement, sans échappement HTML), contrepartie Go
+  attendue du `canonicalJson` partagé côté serveur : toute divergence de sérialisation rendait
+  l'artefact invérifiable (spec module-installation §7.1). `internal/signing` tient un registre
+  local de liaisons (`signing-bindings.json`, sans secret) associant chaque domaine
+  `mod.<publisher>.<module>` à la clé qui le publie (empreinte, id de clé, date). `liora sign`
+  accepte un module ou un chemin d'archive, signe la charge canonique en Ed25519 (empreinte
+  SHA-256 de l'archive + manifeste), synchronise la clé publique sur le serveur en meilleur
+  effort et lie la clé au domaine (rotation confirmée si une autre clé était déjà liée) ;
+  `liora pack` signe l'archive fraîchement produite et `liora verify` retrouve la clé liée au
+  domaine.
+- **Identité développeur résoluée à la publication** — `internal/store/publisher.go` expose
+  `Client.GetMyAccount()` (`GET /api/developer-store/accounts/me`, réponse `DeveloperAccountVm`)
+  et `cmd/publish.go` s'en sert pour remplir `manifest.publisher` : `publisher.id` est
+  l'identifiant de compte Liora que `liorian-connect` scope sur
+  `DeveloperProduct.developerId`, **pas l'identifiant Apple ni celui d'un autre
+  constructeur**. Repli sur l'`id` de session (keychain) si l'endpoint est injoignable, et
+  court-circuit quand le manifeste est déjà complet. Le récapitulatif affiche désormais
+  l'éditeur (`label.publisher`).
+- **Commande `liora module` (cycle de vie Developer Store)** — sous-commandes `knowledge`,
   `workflows`, `channels`, `platforms`, `requirements`, `signing-keys`, `accreditations`,
   `variables`, `github` (option `--connect`) et `observer`/`usage`, adossées aux endpoints
   `/api/developer-store/*` de `liorian-api-connect` (client `internal/store/platform.go`). Le
   module local est résolu par son token de manifeste, l'authentification réutilise la session
-  `liorian connect`, et la sortie est restituée en tableaux `tui`.
+  `liora connect`, et la sortie est restituée en tableaux `tui`.
 - **Contrat CLI complet du cycle de vie (E-008)** — les commandes deviennent opérationnelles et
   plus seulement en lecture : `module list`, `knowledge list|add|publish [--draft]`,
   `workflow list|run|delete`, `channels list|publish|rollback|pause`,
@@ -29,28 +48,62 @@ All notable changes to this project will be documented in this file.
   `signing-keys create|delete` et `accreditations delete` (avec `--status`/`--expires-at`).
   Les identifiants sont passés via `--id` (non interactif) et les suppressions/purges exigent
   `--force`.
-- **Signature des archives à la publication** — `liorian publish` signe désormais l'archive
-  `.SenMod` avec la clé de signature locale avant l'envoi et vérifie la signature produite ; en
+- **Signature des archives à la publication** — `liora publish` signe désormais l'archive
+  `.liozip` avec la clé de signature locale avant l'envoi et vérifie la signature produite ; en
   l'absence de clé, la publication se poursuit non signée avec un avertissement (spec §5.6 /
   SEC-009).
 - **Flag `--color`** — force l'activation des couleurs (profil le plus riche supporté par le
   terminal), y compris lorsque la sortie est redirigée ou que `NO_COLOR` est défini. `--no-color`
   reste prioritaire lorsque les deux flags sont fournis ; la préférence est persistée dans
   `lorian.config.json` sous `cli.noColor`.
-- **Révocation OAuth2 à la déconnexion** — `liorian disconnect` révoque les jetons d'accès et de
+- **Révocation OAuth2 à la déconnexion** — `liora disconnect` révoque les jetons d'accès et de
   rafraîchissement auprès de l'endpoint `/oauth/revoke` (RFC 7009), en meilleur effort
   (spec §8.1 / §6.3).
 - **Developer Store adossé à `liorian-connect`** — le store résout sa base URL depuis
   `app.config.json` (`liorian-connect`) ou la variable `LIORIAN_CONNECT_API`, et expose des
   métadonnées enrichies : statut du produit, développeur et dernière version publiée par module.
 
+### Changed
+- **Le CLI s'appelle `liora` (rupture)** — le binaire, la formule Homebrew (`Formula/liora.rb`)
+  et toute la documentation passent de `liorian` à `liora` ; les applications décrites dans
+  `app.config.json` sont rebaptisées « Liora Socle / Connect / Console / Store / Auth ».
+  L'installateur npm (`lib/install.js`) conserve toutefois un alias `liorian` vers le même
+  binaire pour préserver les scripts et la CI existants. Les identifiants techniques ne bougent
+  pas (`liorian-connect`, variables `LIORIAN_*`).
+- **Les archives passent au format `.liozip` (rupture)** — ADR-003 de la spec module-installation :
+  `liora pack` produit désormais `<name>-<version>.liozip` (un ZIP renommé) au lieu de `.SenMod` ;
+  les extensions `.SenMod`/`.smp` restent acceptées en entrée (recherche de signature,
+  installation marketplace) mais ne sont plus produites.
+- **`liora publish` ne demande plus l'identifiant développeur** — l'invite `publish.prompt.dev_id`
+  est retirée (clés `fr-FR`/`en-US` supprimées) : la valeur était saisie à l'aveugle alors que le
+  bloc `publisher` n'est jamais transmis au store (`CreateModuleProductDto` ne l'expose pas).
+  Seuls `name`, `description` et `publisher.name` restent demandés, et le `manifest.json` est
+  désormais persisté hors mode interactif.
+
 ### Fixed
+- **Publication : `POST /api/developer-store/modules` renvoyait 404** — `app.config.json` pointait
+  `liorian-connect.api.baseUrl` sur `https://localhost:5711` (`liorian-api-core`) au lieu de
+  `https://localhost:5721` (`liorian-api-connect`). Le client de publication CreateProduct
+  interrogeait donc un service qui n'expose pas le developer store, et `liora publish` échouait
+  sur `failed to create the remote module: Not Found (HTTP 404)`. `liorian-console.api.baseUrl`
+  était aligné sur la même valeur erronée (`https://localhost:5741` attendu).
+- **Diagnostic trompeur sur une 404 de publication** — une 404 sur la route de collection est
+  désormais signalée par l'erreur sentinelle `store.ErrNoStoreRoute` (citant l'URL de base
+  utilisée) au lieu d'un « Not Found » brut, et `cmd/publish.go` affiche une piste dédiée
+  (`publish.error.no_route.fix`) : l'URL de base résolue n'expose pas le developer store, il faut
+  viser `liorian-api-connect` via `app.config.json` ou `LIORIAN_CONNECT_API` — ce n'est pas un
+  problème de connexion.
 - **Erreurs applicatives Raiton en HTTP 200** — une enveloppe Raiton `error: true` (validation
   DTO, erreur métier) renvoyée avec un statut HTTP 200 est désormais remontée comme `APIError`
   avec son code et son message, au lieu de produire un `data: null` silencieux et une 404
   trompeuse en aval.
 
 ### Technical Details
+- `internal/pkg/canonical.go` : `CanonicalJSON` (JSON canonique identique à l'implémentation
+  serveur) ; `internal/signing/bindings.go` : registre `signing-bindings.json` (`LookupBinding`,
+  `BindBinding`, `RemoveBinding`, `ListBindings`) ; `cmd/sign.go` : `resolveSignTarget`,
+  `signingPayload`, `bindModuleKey`, `rotatePreviousKey`, `verifyTarget`, signature de l'archive
+  fraîchement packée dans `cmd/pack.go`.
 - `internal/store/platform.go` : modèles `DevBuild`, `Fingerprint`, `CacheEntry` et opérations
   d'écriture du cycle de vie (`CreateKnowledgeArticle`, `PublishKnowledgeArticle`,
   `DeleteKnowledgeArticle`, `Create`/`Update`/`DeleteWorkflow`, `Create`/`DeleteDevBuild`,
@@ -75,6 +128,8 @@ All notable changes to this project will be documented in this file.
 - `internal/store/publisher.go` : client Developer Store dédié (`liorian-connect`),
   `LIORIAN_CONNECT_API`, métadonnées produit enrichies.
 - `internal/appconfig/appconfig.go` : constante `ConnectAppID`.
+- `go.mod` : `golang.org/x/text` devient une dépendance directe (normalisation Unicode dans
+  `internal/store/publisher.go`).
 
 ## [v0.21.0] - 2026-09-21
 

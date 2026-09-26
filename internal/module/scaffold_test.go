@@ -11,7 +11,7 @@ import (
 )
 
 // writeScaffoldFixture builds a minimal hello-world-style module mockup plus a
-// page mockup, mirroring the reference mockups used by `liorian create module`.
+// page mockup, mirroring the reference mockups used by `liora create module`.
 func writeScaffoldFixture(t *testing.T) (mockupDir, pageMockup string) {
 	t.Helper()
 	base := t.TempDir()
@@ -356,7 +356,7 @@ func TestCreateFromEmbeddedMockupManifestIsCanonical(t *testing.T) {
 	assertFileContains(t, manifestPath,
 		`"$schema"`,
 		`"optionalRequirements": {}`,
-		`"type": "EXTERNAL"`,
+		`"type": "WEB_APP_LOCAL"`,
 		`"category": "SYSTEM"`,
 	)
 	rawManifest, err := os.ReadFile(manifestPath)
@@ -379,7 +379,7 @@ func TestCreateFromEmbeddedMockupManifestIsCanonical(t *testing.T) {
 			t.Errorf("index.tsx ne doit pas déclarer %q:\n%s", forbidden, data)
 		}
 	}
-	assertFileContains(t, indexPath, "type: 'EXTERNAL'", "category: 'SYSTEM'")
+	assertFileContains(t, indexPath, "type: 'WEB_APP_LOCAL'", "category: 'SYSTEM'")
 }
 
 func TestCreateRespectsTypeAndCategoryFlags(t *testing.T) {

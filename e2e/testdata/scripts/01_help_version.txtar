@@ -1,18 +1,18 @@
-# TC-019 — `liorian help` without arguments prints the general help.
+# TC-019 — `liora help` without arguments prints the general help.
 exec $LIORIAN --no-color help
-stdout 'Lior CLI is the one development tool'
+stdout 'Liora CLI is the one development tool'
 stdout 'Available Commands:'
 stdout '  pack '
 
-# TC-020 — `liorian help` with a command prints that command's help.
+# TC-020 — `liora help` with a command prints that command's help.
 exec $LIORIAN --no-color help pack
 stdout 'Builds a module'
 stdout 'Usage:'
-stdout '  liorian pack \[<module>\[@<version>\]\] \[flags\]'
+stdout '  liora pack \[<module>\[@<version>\]\] \[flags\]'
 
-# TC-021 — `liorian -v` / `--version` affiche la version alignée sur
+# TC-021 — `liora -v` / `--version` affiche la version alignée sur
 # `app.config.json` (le build dev sans ldflags remonte la version du fichier).
 exec $LIORIAN --no-color -v
-stdout '^liorian v[0-9]+\.[0-9]+\.[0-9]+'
+stdout '^liora v[0-9]+\.[0-9]+\.[0-9]+'
 exec $LIORIAN --no-color --version
-stdout '^liorian v[0-9]+\.[0-9]+\.[0-9]+'
+stdout '^liora v[0-9]+\.[0-9]+\.[0-9]+'

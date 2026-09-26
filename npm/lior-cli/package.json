@@ -1,7 +1,7 @@
 {
   "name": "@liorian/cli",
-  "version": "0.21.0",
-  "description": "Lior CLI - Create, maintain, and publish modules in the Liorian ecosystem",
+  "version": "0.24.0",
+  "description": "Liora CLI - Create, maintain, and publish modules in the Liora ecosystem",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -13,6 +13,7 @@
     "url": "https://github.com/protorians/lior-cli/issues"
   },
   "bin": {
+    "liora": "bin/liora",
     "liorian": "bin/liorian"
   },
   "scripts": {
@@ -24,6 +25,7 @@
   ],
   "keywords": [
     "lior",
+    "liora",
     "liorian",
     "cli",
     "module",

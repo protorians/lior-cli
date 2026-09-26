@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# dev-install.sh — Builds the `liorian` binary (dev mode), then installs it
+# dev-install.sh — Builds the `liora` binary (dev mode), then installs it
 # so it is available for the whole machine session (global PATH).
 #
 # The build is always performed first, separately from the installation.
@@ -24,7 +24,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BINARY="liorian"
+BINARY="liora"
+LEGACY_BINARY="liorian"
 BUILD_DIR="$ROOT_DIR/dist"
 BUILD_BIN="$BUILD_DIR/$BINARY"
 
@@ -80,6 +81,9 @@ install_binary() {
   echo "=== Step 2/2 — Install ==="
   install -m 0755 "$BUILD_BIN" "$INSTALL_DIR/$BINARY"
 
+  # Legacy alias: keep `liorian` working for existing scripts/CI.
+  ln -sf "$BINARY" "$INSTALL_DIR/$LEGACY_BINARY"
+
   # Current session PATH
   case ":$PATH:" in
     *":$INSTALL_DIR:"*) ;;
@@ -89,7 +93,7 @@ install_binary() {
   echo ""
   echo "Installed: $INSTALL_DIR/$BINARY"
   "$INSTALL_DIR/$BINARY" --version
-  echo "Available in this session as: liorian"
+  echo "Available in this session as: liora (legacy alias: liorian)"
 
   if [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
     echo ""

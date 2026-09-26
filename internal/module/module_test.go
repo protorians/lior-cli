@@ -265,12 +265,18 @@ func TestValidateModuleWarnsOnMissingCanonicalFields(t *testing.T) {
 		}
 	}
 	for _, rule := range []string{
-		"optionalRequirements", "platforms", "capabilities", "publisher",
+		"optionalRequirements", "platforms", "capabilities",
 		"apiCompatibility", "managerCompatibility",
 	} {
 		if !warned[rule] {
 			t.Errorf("règle %q doit produire un WARNING, findings: %+v", rule, res.Findings)
 		}
+	}
+	// The canonical schema no longer requires a publisher block: an absent
+	// publisher is valid (completed at publish time), but a half-filled one
+	// still warns.
+	if warned["publisher"] {
+		t.Errorf("un publisher absent ne doit pas produire de WARNING, findings: %+v", res.Findings)
 	}
 }
 
@@ -350,10 +356,10 @@ func TestLinkMergesAbsentRemoteMetadata(t *testing.T) {
 	if m.Description != "Gestion de blog et d'articles" {
 		t.Errorf("Description = %q, want Gestion de blog et d'articles", m.Description)
 	}
-	// Publisher comes from the reference mockup (present locally), so the
-	// remote publisher (dev_42) must NOT overwrite it.
-	if m.Publisher.ID != "liorian" || m.Publisher.Name != "Liorian Workspace" {
-		t.Errorf("Publisher = %+v, want liorian/Liorian Workspace (valeur locale préservée)", m.Publisher)
+	// Publisher is absent from the canonical mockup, so the remote publisher
+	// fills the empty local fields (spec §5.7 step 6: merge into absent fields).
+	if m.Publisher.ID != "dev_42" || m.Publisher.Name != "Jane Doe" {
+		t.Errorf("Publisher = %+v, want dev_42/Jane Doe (distant fusionné dans les champs absents)", m.Publisher)
 	}
 
 	// Existing local metadata must NOT be overwritten.

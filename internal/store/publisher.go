@@ -6,23 +6,40 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/protorians/lior-cli/internal/appconfig"
 	"github.com/protorians/lior-cli/internal/auth"
 	"github.com/protorians/lior-cli/internal/module"
 	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/signing"
 )
 
 // Developer store API paths (Raiton envelope, `/api` prefix).
 const modulesPath = "/api/developer-store/modules"
 
+// accountsPath is the Developer Store account root, serving the developer's own
+// editor account (`DeveloperAccountVm`).
+const accountsPath = "/api/developer-store/accounts"
+
 // EnvConnectAPI overrides the resolved Developer Store (liorian-connect) base URL.
 const EnvConnectAPI = "LIORIAN_CONNECT_API"
+
+// ErrNoStoreRoute reports that the resolved Developer Store base URL answered 404
+// on the `/api/developer-store/*` routes: the URL points at a service that does
+// not expose the developer store (typically `liorian-api-core` instead of
+// `liorian-api-connect`), so the failure is a configuration problem, not a
+// connectivity one.
+var ErrNoStoreRoute = errors.New("the resolved Developer Store base URL does not serve " + modulesPath)
 
 // DeveloperModuleType enum values exposed by the store.
 const (
@@ -85,6 +102,15 @@ type RemoteModule struct {
 	Description string `json:"description"`
 	Version     string `json:"version"`
 	Status      string `json:"status"`
+}
+
+// DeveloperAccount is the developer's own store account (`DeveloperAccountVm`).
+// `ID` is the Liorian account identifier the store scopes every resource to
+// (`DeveloperProduct.developerId`) — never an Apple or third-party developer id.
+type DeveloperAccount struct {
+	ID   string `json:"id"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
 }
 
 // RemoteModuleResponse is the detailed remote module returned by GetModule.
@@ -209,6 +235,21 @@ func (c *Client) ListModules(ctx context.Context) ([]RemoteModule, error) {
 	return modules, nil
 }
 
+// GetMyAccount returns the editor account behind the session token
+// (`GET /api/developer-store/accounts/me`). The endpoint provisions the account
+// on first access, so `ID` is always resolvable once authenticated. It is the
+// canonical developer identifier to record in `manifest.publisher`.
+func (c *Client) GetMyAccount(ctx context.Context) (*DeveloperAccount, error) {
+	var out DeveloperAccount
+	if err := c.http().Do(ctx, "GET", accountsPath+"/me", nil, &out); err != nil {
+		return nil, fmt.Errorf("failed to fetch the developer account: %w", err)
+	}
+	if strings.TrimSpace(out.ID) == "" {
+		return nil, errors.New("the developer account has no id")
+	}
+	return &out, nil
+}
+
 // GetModule returns a remote module by its id (product id).
 func (c *Client) GetModule(ctx context.Context, id string) (*RemoteModuleResponse, error) {
 	var product Product
@@ -282,8 +323,8 @@ func (c *Client) UpdateModule(ctx context.Context, id string, m *module.Manifest
 	return nil
 }
 
-// Publish registers the module product, creates its version and declares the
-// archive artifact (spec connect §21): product → version → artifact.
+// Publish registers the module product, creates its version and uploads the
+// archive artifact (spec connect §21): product → version → S3-backed artifact.
 func (c *Client) Publish(ctx context.Context, archivePath string, manifest *module.Manifest) (*PublishResponse, error) {
 	// 1. Resolve (or create) the remote product behind the manifest token.
 	productID, err := c.resolveProduct(ctx, manifest)
@@ -297,8 +338,9 @@ func (c *Client) Publish(ctx context.Context, archivePath string, manifest *modu
 		return nil, err
 	}
 
-	// 3. Declare the artifact: manifest, SHA-256 checksum, signature, size.
-	artifact, err := c.declareArtifact(ctx, productID, version.ID, archivePath, manifest)
+	// 3. Upload the archive binary. The API writes it to the configured storage
+	// driver (S3 in production) before persisting its metadata.
+	artifact, err := c.uploadArtifact(ctx, productID, version.ID, archivePath, manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +357,12 @@ func (c *Client) Publish(ctx context.Context, archivePath string, manifest *modu
 func (c *Client) createProduct(ctx context.Context, m *module.Manifest) (*Product, error) {
 	var out Product
 	if err := c.http().Do(ctx, "POST", modulesPath, createProductRequest(m), &out); err != nil {
+		// A 404 on the collection route is never a payload problem: the resolved
+		// base URL does not expose the developer store at all. Say so, with the
+		// URL that was used, instead of surfacing a bare "Not Found".
+		if pkg.IsNotFound(err) {
+			return nil, fmt.Errorf("%w (base URL: %s)", ErrNoStoreRoute, c.http().BaseURL)
+		}
 		return nil, fmt.Errorf("failed to create the remote module: %w", err)
 	}
 	return &out, nil
@@ -351,14 +399,16 @@ func isNotFound(err error) bool {
 
 func (c *Client) createVersion(ctx context.Context, productID string, m *module.Manifest) (*Version, error) {
 	releaseNotes := json.RawMessage(`{}`)
+	socle := m.EffectiveSocle()
+	api := m.EffectiveAPI()
 	body := createVersionRequest{
 		VersionString:     m.Version,
 		BuildNumber:       c.nextBuildNumber(ctx, productID),
 		ReleaseNotes:      &releaseNotes,
-		MinManager:        m.ManagerCompat.Min,
-		MaxManager:        m.ManagerCompat.Max,
-		MinAPI:            m.APICompat.Min,
-		MaxAPI:            m.APICompat.Max,
+		MinManager:        socle.Min,
+		MaxManager:        socle.Max,
+		MinAPI:            api.Min,
+		MaxAPI:            api.Max,
 		SupportedRuntimes: supportedRuntimes(m),
 	}
 	var out Version
@@ -368,7 +418,7 @@ func (c *Client) createVersion(ctx context.Context, productID string, m *module.
 	return &out, nil
 }
 
-func (c *Client) declareArtifact(ctx context.Context, productID, versionID, archivePath string, m *module.Manifest) (*Artifact, error) {
+func (c *Client) uploadArtifact(ctx context.Context, productID, versionID, archivePath string, m *module.Manifest) (*Artifact, error) {
 	data, err := os.ReadFile(archivePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the archive: %w", err)
@@ -379,22 +429,36 @@ func (c *Client) declareArtifact(ctx context.Context, productID, versionID, arch
 	if merr != nil {
 		return nil, fmt.Errorf("failed to serialize the manifest: %w", merr)
 	}
-	body := declareArtifactRequest{
-		Manifest:  manifestJSON,
-		Checksum:  hex.EncodeToString(checksum[:]),
-		Signature: signature,
-		SizeBytes: int64(len(data)),
+	fields := map[string]string{
+		"manifest":  string(manifestJSON),
+		"checksum":  hex.EncodeToString(checksum[:]),
+		"signature": signature,
 	}
 	var out Artifact
-	if err := c.http().Do(ctx, "POST",
-		modulesPath+"/"+productID+"/versions/"+versionID+"/artifact", body, &out); err != nil {
-		return nil, fmt.Errorf("failed to declare the artifact: %w", err)
+	if err := c.http().DoMultipart(ctx,
+		modulesPath+"/"+productID+"/versions/"+versionID+"/artifact/upload",
+		fields, "file", filepath.Base(archivePath), data, &out); err != nil {
+		return nil, fmt.Errorf("failed to upload the artifact: %w", err)
 	}
 	return &out, nil
 }
 
-// artifactSignature base64-encodes the `.SenMod.sig` signature file when present
-// (produced by `liorian sign`). The signature stays empty when absent.
+// artifactSignatureKeyID returns the fingerprint of the local developer
+// public key: the `signatureKeyId` distributed with the artefact (spec §7.1,
+// trousseau pinning). Empty when no signing key exists (unsigned publish).
+func artifactSignatureKeyID() string {
+	ks := signing.NewKeyStore()
+	pub, err := ks.GetPublicKey()
+	if err != nil || len(pub) == 0 {
+		return ""
+	}
+	return signing.Fingerprint(pub)
+}
+
+// artifactSignature base64-encodes the `.liozip.sig` signature file when
+// present (produced by `liora sign`). The signature stays empty when absent
+// (unsigned publish — refused by the server per ADR-010 unless explicitly
+// allowed with `--allow-unsigned`).
 func artifactSignature(archivePath string) (string, error) {
 	raw, err := os.ReadFile(archivePath + ".sig")
 	if err != nil {
@@ -406,12 +470,85 @@ func artifactSignature(archivePath string) (string, error) {
 	return base64.StdEncoding.EncodeToString(raw), nil
 }
 
+// catalogIdentifierNamespace is the canonical catalogue identifier prefix
+// (`mod.<publisher>.<module>`) shared with the server
+// (`catalogIdentifier` in api-resources).
+const catalogIdentifierNamespace = "mod"
+
+// defaultPublisherSlug is the publisher slug fallback used when the developer
+// account exposes no slug (mirrors DEFAULT_PUBLISHER_SLUG server-side).
+const defaultPublisherSlug = "developer"
+
+// CatalogSlug normalizes a string into the kebab-case slug the catalogue
+// identifiers use (counterpart of `toCatalogSlug` server-side: NFKD
+// normalization, diacritics stripped, non-alphanumerics collapsed to `-`).
+func CatalogSlug(input string) string {
+	decomposed := norm.NFKD.String(strings.ToLower(strings.TrimSpace(input)))
+	var b strings.Builder
+	lastDash := true // trim leading dashes
+	for _, r := range decomposed {
+		// Diacritics surface as combining marks after NFKD: dropped, exactly
+		// like the server-side `replace(/[\u0300-\u036f]/g, '')`.
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			lastDash = false
+		default:
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
+}
+
+// CatalogIdentifier computes the canonical module identifier the store
+// recomputes to verify the artefact signature:
+// `mod.<publisherSlug>.<moduleSlug>`. It must stay byte-identical to the
+// server-side `catalogIdentifier(developerSlug, slug)`.
+func CatalogIdentifier(developerSlug, moduleSlug string) string {
+	publisher := CatalogSlug(developerSlug)
+	if publisher == "" {
+		publisher = defaultPublisherSlug
+	}
+	return fmt.Sprintf("%s.%s.%s", catalogIdentifierNamespace, publisher, CatalogSlug(moduleSlug))
+}
+
+// EnsureSigningKey synchronizes the local signing key with the store: it
+// returns the existing ACTIVE key carrying this exact public key, or
+// registers a new ACTIVE key (`POST /developer-store/signing-keys`) when the
+// account has none. Without this synchronization the server rejects the
+// signed upload (`422` — no ACTIVE public key for the account).
+func (c *Client) EnsureSigningKey(ctx context.Context, publicKeyPEM string) (*SigningKey, bool, error) {
+	keys, err := c.ListSigningKeys(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to list the signing keys: %w", err)
+	}
+	for _, key := range keys {
+		if key.Status == "ACTIVE" && key.PublicKey != nil && strings.TrimSpace(*key.PublicKey) == strings.TrimSpace(publicKeyPEM) {
+			return &key, false, nil
+		}
+	}
+	created, err := c.CreateSigningKey(ctx, CreateSigningKeyRequest{
+		Algorithm: "Ed25519",
+		PublicKey: publicKeyPEM,
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to register the signing key: %w", err)
+	}
+	return created, true, nil
+}
+
 // createProductRequest maps the manifest to CreateModuleProductDto. The
 // manifest token is forwarded so the store can reuse the product on subsequent
 // publishes (idempotence), alongside the descriptive metadata.
 func createProductRequest(m *module.Manifest) map[string]string {
 	body := productMetadata(m)
-	body["slug"] = slugFor(m)
+	body["slug"] = ProductSlug(m)
 	return body
 }
 
@@ -477,15 +614,17 @@ type createVersionRequest struct {
 }
 
 type declareArtifactRequest struct {
-	Manifest  json.RawMessage `json:"manifest"`
-	Checksum  string          `json:"checksum"`
-	Signature string          `json:"signature"`
-	SizeBytes int64           `json:"size"`
+	Manifest         json.RawMessage `json:"manifest"`
+	Checksum         string          `json:"checksum"`
+	ManifestChecksum string          `json:"manifestChecksum"`
+	Signature        string          `json:"signature"`
+	SignatureKeyID   string          `json:"signatureKeyId,omitempty"`
+	SizeBytes        int64           `json:"size"`
 }
 
-// slugFor derives the product slug from the manifest id (kebab-case), a unique
-// per-account module identifier.
-func slugFor(m *module.Manifest) string {
+// ProductSlug derives the product slug from the manifest id (kebab-case), a
+// unique per-account module identifier.
+func ProductSlug(m *module.Manifest) string {
 	if id := strings.TrimSpace(m.ID); id != "" {
 		return id
 	}
@@ -497,41 +636,83 @@ func slugFor(m *module.Manifest) string {
 }
 
 // developerTypeFor maps the manifest module type to a DeveloperModuleType.
-// Remote web apps are the default (the "EXTERNAL" module type published in the
-// storefront consumes a remote frontend served by Liorian).
+// The canonical `ModuleType` values pass through unchanged; the legacy
+// `EXTERNAL` (remotely-served web app) maps to `WEB_APP_REMOTE` and
+// `INTERNAL` (socle-bundled) to `WEB_APP_LOCAL`.
 func developerTypeFor(manifestType string) string {
 	switch strings.ToUpper(strings.TrimSpace(manifestType)) {
-	case "", "EXTERNAL", "WEB", "WEB_APP", "WEB_APP_REMOTE":
-		return ModuleTypeWebAppRemote
-	case "EXTERNAL_URL", "REMOTE_FRONTEND":
-		return ModuleTypeExternalURL
 	case "CONFIGURATION":
 		return ModuleTypeConfiguration
+	case "EXTERNAL_URL", "REMOTE_FRONTEND":
+		return ModuleTypeExternalURL
 	case "WEB_APP_CACHED":
 		return ModuleTypeWebAppCached
-	case "WEB_APP_LOCAL":
+	case "WEB_APP_LOCAL", "INTERNAL":
 		return ModuleTypeWebAppLocal
+	case "", "EXTERNAL", "WEB", "WEB_APP", "WEB_APP_REMOTE":
+		return ModuleTypeWebAppRemote
 	default:
 		return ModuleTypeWebAppRemote
 	}
 }
 
-// supportedRuntimes lists the runtimes enabled in the manifest platforms.
+// supportedRuntimes lists the canonical runtime identifiers enabled in the
+// manifest platforms (spec `module-installation.md` §4.3, ADR-004):
+// `web`, `tauri-desktop-{windows,macos,linux}` and
+// `tauri-mobile-{android,ios}`.
 func supportedRuntimes(m *module.Manifest) []string {
 	if m == nil {
 		return nil
 	}
 	var runtimes []string
 	if m.Platforms.Web.Supported {
-		runtimes = append(runtimes, "WEB")
+		runtimes = append(runtimes, "web")
 	}
 	if m.Platforms.Desktop.Supported {
-		runtimes = append(runtimes, "DESKTOP")
+		runtimes = append(runtimes, desktopRuntimes(m.Platforms.Desktop.OS)...)
 	}
 	if m.Platforms.Mobile.Supported {
-		runtimes = append(runtimes, "MOBILE")
+		runtimes = append(runtimes, mobileRuntimes(m.Platforms.Mobile.OS)...)
 	}
 	return runtimes
+}
+
+// desktopRuntimes expands a desktop `os` list to canonical runtime ids.
+// An empty list means every desktop OS.
+func desktopRuntimes(osList []string) []string {
+	if len(osList) == 0 {
+		return []string{"tauri-desktop-windows", "tauri-desktop-macos", "tauri-desktop-linux"}
+	}
+	var out []string
+	for _, osName := range osList {
+		switch strings.ToLower(strings.TrimSpace(osName)) {
+		case "windows":
+			out = append(out, "tauri-desktop-windows")
+		case "macos", "darwin":
+			out = append(out, "tauri-desktop-macos")
+		case "linux":
+			out = append(out, "tauri-desktop-linux")
+		}
+	}
+	return out
+}
+
+// mobileRuntimes expands a mobile `os` list to canonical runtime ids.
+// An empty list means every mobile OS.
+func mobileRuntimes(osList []string) []string {
+	if len(osList) == 0 {
+		return []string{"tauri-mobile-android", "tauri-mobile-ios"}
+	}
+	var out []string
+	for _, osName := range osList {
+		switch strings.ToLower(strings.TrimSpace(osName)) {
+		case "android":
+			out = append(out, "tauri-mobile-android")
+		case "ios":
+			out = append(out, "tauri-mobile-ios")
+		}
+	}
+	return out
 }
 
 // remoteFromProduct maps a Product entity to the lightweight RemoteModule shape.

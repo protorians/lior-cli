@@ -1,8 +1,12 @@
 package signing
 
 import (
+	"crypto/ed25519"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/protorians/lior-cli/internal/pkg"
@@ -137,5 +141,112 @@ func TestSignAndVerifyArchive(t *testing.T) {
 	}
 	if valid {
 		t.Fatal("la signature ne devrait plus être valide après modification de l'archive")
+	}
+}
+
+func TestLoadPrivateKeyFileFormats(t *testing.T) {
+	pub, priv, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := []byte(priv.Seed())
+
+	write := func(content []byte) string {
+		p := filepath.Join(t.TempDir(), "key")
+		if err := os.WriteFile(p, content, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	// A 64-char hex seed must decode to the seed, not be mistaken for a raw
+	// 64-byte private key.
+	hexSeed := []byte(hex.EncodeToString(seed))
+	loaded, err := LoadPrivateKeyFile(write(hexSeed))
+	if err != nil {
+		t.Fatalf("hex seed: %v", err)
+	}
+	if !loaded.Public().(ed25519.PublicKey).Equal(pub) {
+		t.Error("hex seed loads a different key pair")
+	}
+	// Raw 64-byte private key.
+	loaded, err = LoadPrivateKeyFile(write([]byte(priv)))
+	if err != nil {
+		t.Fatalf("raw key: %v", err)
+	}
+	if string(loaded) != string(priv) {
+		t.Error("raw private key not preserved")
+	}
+	// Garbage is refused.
+	if _, err := LoadPrivateKeyFile(write([]byte("not-a-key"))); err == nil {
+		t.Error("garbage key file must be refused")
+	}
+}
+
+func TestCanonicalPayloadDeterministic(t *testing.T) {
+	p := CanonicalPayload{
+		ModuleIdentifier: "mod.acme.demo", Version: "1.3.0",
+		Checksum: "aa", ManifestChecksum: "bb", Entry: "index.tsx", Type: "WEB_APP_LOCAL",
+	}
+	a, b := CanonicalPayloadBytes(p), CanonicalPayloadBytes(p)
+	if string(a) != string(b) {
+		t.Error("canonical payload encoding is not deterministic")
+	}
+
+	_, priv, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig := SignPayload(a, priv)
+	pub := priv.Public().(ed25519.PublicKey)
+	if !VerifyPayload(a, sig, pub) {
+		t.Error("produced signature does not verify")
+	}
+	sig[0] ^= 0xff
+	if VerifyPayload(a, sig, pub) {
+		t.Error("tampered signature must not verify")
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(a, &raw); err != nil {
+		t.Errorf("canonical payload is not valid JSON: %v", err)
+	}
+}
+
+// TestCanonicalPayloadMatchesServerContract pins the byte-level signature
+// contract shared with `buildSignedArtifactPayload`
+// (api-resources/module-artifact-crypto.util): keys sorted alphabetically,
+// no whitespace. Go struct-order json.Marshal would emit
+// {"moduleIdentifier":...,"version":...} and invalidate every signature.
+func TestCanonicalPayloadMatchesServerContract(t *testing.T) {
+	payload := CanonicalPayloadBytes(CanonicalPayload{
+		ModuleIdentifier: "mod.acme.crm",
+		Version:          "1.0.0",
+		Checksum:         "abc",
+		ManifestChecksum: "def",
+		Entry:            "index.html",
+		Type:             "WEB_APP_REMOTE",
+	})
+	want := `{"checksum":"abc","entry":"index.html","manifestChecksum":"def","moduleIdentifier":"mod.acme.crm","type":"WEB_APP_REMOTE","version":"1.0.0"}`
+	if string(payload) != want {
+		t.Fatalf("payload diverges from the server contract:\n got: %s\nwant: %s", payload, want)
+	}
+}
+
+func TestPublicKeyPEMIsValidSPKI(t *testing.T) {
+	pub, priv, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair: %v", err)
+	}
+	pemKey, err := PublicKeyPEM(pub)
+	if err != nil {
+		t.Fatalf("PublicKeyPEM: %v", err)
+	}
+	if !strings.Contains(pemKey, "-----BEGIN PUBLIC KEY-----") {
+		t.Fatalf("expected an SPKI PEM block, got: %s", pemKey)
+	}
+	// The exported key must verify a signature made with the private key.
+	payload := CanonicalPayloadBytes(CanonicalPayload{ModuleIdentifier: "m"})
+	if !VerifyPayload(payload, SignPayload(payload, priv), pub) {
+		t.Fatal("round-trip verification failed")
 	}
 }

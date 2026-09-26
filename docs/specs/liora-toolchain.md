@@ -1,9 +1,9 @@
-# Lior CLI — Outillage applicatif (`dev`, `build`, `start`, `check`)
+# Liora CLI — Outillage applicatif (`dev`, `build`, `start`, `check`)
 
 > **Statut : CANDIDATE — à implémenter**
 >
 > Cette spécification décrit l'alignement des commandes du **moteur applicatif du socle**
-> (le framework web du template `protorians/liorian-socle`) sous la CLI `liorian`. Ces
+> (le framework web du template `protorians/liorian-socle`) sous la CLI `liora`. Ces
 > commandes restent la passerelle unique vers les scripts d'application déclarés dans le
 > `package.json` du projet, afin de permettre, aujourd'hui comme demain, d'exécuter des
 > **actions avant et/ou après** la commande du moteur (passerelle extensible).
@@ -14,7 +14,7 @@
 
 ### 1.1 Contexte
 
-Le projet initialisé par `liorian init` est une application web dont les scripts
+Le projet initialisé par `liora init` est une application web dont les scripts
 `package.json` (`dev`, `build`, `start`, `lint`, …) délèguent au moteur applicatif.
 Aujourd'hui, un développeur lance directement `bun run dev`, `bun run build`, etc. **en
 dehors de la CLI** : il n'existe aucun point d'entrée unique permettant d'injecter de la
@@ -48,10 +48,10 @@ développer, construire, démarrer ou vérifier le socle lui-même.
 
 ### Dans le périmètre (In Scope)
 
-- `liorian dev` — Passerelle vers le serveur de développement (script `dev`).
-- `liorian build` — Passerelle vers la construction de production (script `build`).
-- `liorian start` — Passerelle vers le serveur de production (script `start`).
-- `liorian check` — Passerelle vers l'analyse statique (script `lint`).
+- `liora dev` — Passerelle vers le serveur de développement (script `dev`).
+- `liora build` — Passerelle vers la construction de production (script `build`).
+- `liora start` — Passerelle vers le serveur de production (script `start`).
+- `liora check` — Passerelle vers l'analyse statique (script `lint`).
 - Hooks `before` / `after` configurables par commande.
 - Passthrough d'arguments (séparés par `--`) vers le script.
 - Sortie mise en flux, annulation (Ctrl+C / Esc) et codes de sortie prédictibles.
@@ -63,7 +63,7 @@ développer, construire, démarrer ou vérifier le socle lui-même.
   v1 s'appuie exclusivement sur les scripts `package.json`, garantissant la neutralité.
 - Lancement avec **timeout** imposé par la CLI — futur (CI responsable du timeout).
 - Gestion de plusieurs moteurs/versions (matrice) — hors périmètre produit.
-- Les commandes **modules** (`debug`, `test`, `pack`, `audit`) — couvertes par la spec `liorian.md`.
+- Les commandes **modules** (`debug`, `test`, `pack`, `audit`) — couvertes par la spec `liora.md`.
 
 ---
 
@@ -73,13 +73,13 @@ développer, construire, démarrer ou vérifier le socle lui-même.
 
 | ID | Description |
 |----|-------------|
-| TFC-001 | `liorian dev` exécute le script `package.json` `dev` via le gestionnaire de paquets choisi à l'installation (project.packageManager), sinon détecté (bun → pnpm → yarn → npm) |
-| TFC-002 | `liorian build` exécute le script `package.json` `build` via le même gestionnaire |
-| TFC-003 | `liorian start` exécute le script `package.json` `start` via le même gestionnaire |
-| TFC-004 | `liorian check` exécute le script `package.json` `lint` via le même gestionnaire |
-| TFC-005 | `liorian dev`/`start` exécute une commande **longue** (serveur) : sans plafond, arrêtée à la sortie du processus ou à l'annulation utilisateur (Ctrl+C / Esc) |
-| TFC-006 | `liorian build`/`check` exécute une commande **one-shot** : terminée quand le processus se termine |
-| TFC-007 | Les arguments positionnels sont transmis **tels quels** à la commande, sans exiger le séparateur `--` (ex. `liorian dev -p 5010 --experimental-https` et `liorian dev -- -p 5010` sont équivalents) ; un `--` optionnel est retiré |
+| TFC-001 | `liora dev` exécute le script `package.json` `dev` via le gestionnaire de paquets choisi à l'installation (project.packageManager), sinon détecté (bun → pnpm → yarn → npm) |
+| TFC-002 | `liora build` exécute le script `package.json` `build` via le même gestionnaire |
+| TFC-003 | `liora start` exécute le script `package.json` `start` via le même gestionnaire |
+| TFC-004 | `liora check` exécute le script `package.json` `lint` via le même gestionnaire |
+| TFC-005 | `liora dev`/`start` exécute une commande **longue** (serveur) : sans plafond, arrêtée à la sortie du processus ou à l'annulation utilisateur (Ctrl+C / Esc) |
+| TFC-006 | `liora build`/`check` exécute une commande **one-shot** : terminée quand le processus se termine |
+| TFC-007 | Les arguments positionnels sont transmis **tels quels** à la commande, sans exiger le séparateur `--` (ex. `liora dev -p 5010 --experimental-https` et `liora dev -- -p 5010` sont équivalents) ; un `--` optionnel est retiré |
 | TFC-007b | Les flags du script (ex. `-p`, `--experimental-https`) ne sont **jamais** parsés par la CLI : seule la commande les revendique (analyse de flags désactivée, TFC-014) |
 | TFC-008 | Le code de sortie de la CLI reflète le code de sortie de la commande sous-jacente (passthrough fidèle) ; l'annulation renvoie `130` |
 | TFC-009 | La sortie standard et d'erreur est **mise en flux temps réel** (étape `RUNNING` avec queue de sortie) |
@@ -88,8 +88,8 @@ développer, construire, démarrer ou vérifier le socle lui-même.
 | TFC-012 | `toolchain.commands.<cmd>` permet de surcharger le nom du script `package.json` qui sauvegarde chaque commande (ex. `"check": "typecheck"`) |
 | TFC-013 | Si un script requis est absent du `package.json` du projet, la CLI rend une erreur catégorisée avec indice de correction (code de sortie `1`) |
 | TFC-014 | Aucun mot-clé du moteur applicatif n'apparaît dans les commandes, flags, aide ou messages (CI-TOOL-01) |
-| TFC-015 | `liorian dev` exécute d'abord l'**audit** de conformité sur tous les modules (`library/modules/`), puis le script `dev` ; un audit en erreur annule la commande |
-| TFC-016 | `liorian build`/`start` exécutent d'abord l'**audit** de conformité sur tous les modules, puis le script ; un audit en erreur annule la commande |
+| TFC-015 | `liora dev` exécute d'abord l'**audit** de conformité sur tous les modules (`library/modules/`), puis le script `dev` ; un audit en erreur annule la commande |
+| TFC-016 | `liora build`/`start` exécutent d'abord l'**audit** de conformité sur tous les modules, puis le script ; un audit en erreur annule la commande |
 | TFC-017 | Les contrôles de santé sont ignorés quand le projet ne contient aucun module ; les **warnings** d'un contrôle ne bloquent jamais (seules les **erreurs** annulent) |
 
 ### Exigences non-fonctionnelles
@@ -110,7 +110,7 @@ noms de commandes, aliases, libellés, `Short`/`Long`, messages i18n, exemples d
 
 | Surface | Règle | Exemple conforme |
 |---------|-------|------------------|
-| Noms de commandes | `dev`, `build`, `start`, `check` | `liorian dev` |
+| Noms de commandes | `dev`, `build`, `start`, `check` | `liora dev` |
 | Noms de scripts projet référencés | `dev`, `build`, `start`, `lint` (surchargeables dans la config) | `"check": "lint"` |
 | Messages i18n | « moteur applicatif », « outillage », « socle », jamais le nom du moteur | `The application build finished` |
 | Code interne | le nom du moteur ne doit pas être injecté dans des chaînes utilisateur | constante interne générique `binaryName` (non utilisée en v1) |
@@ -127,10 +127,10 @@ camouflage structurel et non cosmétique.
 
 | Commande CLI | Script par défaut | Type | Sémantique |
 |--------------|-------------------|------|------------|
-| `liorian dev` | `dev` | serveur (longue) | Serveur de développement |
-| `liorian build` | `build` | one-shot | Construction de production de l'application |
-| `liorian start` | `start` | serveur (longue) | Serveur de production |
-| `liorian check` | `lint` | one-shot | Analyse statique / vérifications |
+| `liora dev` | `dev` | serveur (longue) | Serveur de développement |
+| `liora build` | `build` | one-shot | Construction de production de l'application |
+| `liora start` | `start` | serveur (longue) | Serveur de production |
+| `liora check` | `lint` | one-shot | Analyse statique / vérifications |
 
 > Distinction avec les commandes modules : `dev`/`build`/`start`/`check` opèrent au niveau
 > **application** (racine du projet) ; `debug` (build des modules), `pack` (archive `.SenMod`)
@@ -153,13 +153,13 @@ La CLI **ne crée, ni ne modifie aucun fichier** lors de la résolution (TNF-04)
 
 - Tous les arguments positionnels passés à la commande sont transmis au script, **tels quels**,
   sans exiger le séparateur `--` : l'analyse de flags de la CLI est désactivée sur `dev`, `build`,
-  `start` et `check`, donc `liorian dev -p 5010 --experimental-https` transmet bien
+  `start` et `check`, donc `liora dev -p 5010 --experimental-https` transmet bien
   `-p 5010 --experimental-https` au script (les flags du moteur ne sont jamais interprétés ni
   rejetés par la CLI).
-- Séparateur `--` : `liorian build -- --no-lint` → `<pm> run build [--] --no-lint` (le `--`
-  optionnel est retiré avant transmission ; `liorian build --no-lint` est équivalent).
+- Séparateur `--` : `liora build -- --no-lint` → `<pm> run build [--] --no-lint` (le `--`
+  optionnel est retiré avant transmission ; `liora build --no-lint` est équivalent).
 - Les flags **globaux** de la CLI restent utilisables avant la commande
-  (`liorian --no-color dev`, `liorian --lang fr-FR build`) : l'analyse des flags racine précède la
+  (`liora --no-color dev`, `liora --lang fr-FR build`) : l'analyse des flags racine précède la
   descente dans la sous-commande.
 - Pour `npm`, un séparateur `--` est interposé avant les arguments (convention npm) ;
   `bun`, `pnpm`, `yarn` reçoivent les arguments tels quels.
@@ -213,10 +213,10 @@ la porte se limite à un **audit** (TFC-015/-016, TFC-017) — elle ne lance plu
 
 | Commande | Contrôle exécuté avant |
 |----------|------------------------|
-| `liorian dev` | `audit` |
-| `liorian build` | `audit` |
-| `liorian start` | `audit` |
-| `liorian check` | aucun |
+| `liora dev` | `audit` |
+| `liora build` | `audit` |
+| `liora start` | `audit` |
+| `liora check` | aucun |
 
 Comportement :
 
@@ -226,7 +226,7 @@ Comportement :
   il n'y a rien à vérifier, la commande s'exécute normalement.
 - La porte est **non interactive**.
 - Un audit en erreur affiche ses détails (tableau d'audit), puis la CLI renvoie une erreur
-  catégorisée `Toolchain` avec indice menant vers la commande standalone (`liorian audit`).
+  catégorisée `Toolchain` avec indice menant vers la commande standalone (`liora audit`).
 - L'annulation (Ctrl+C / Esc) pendant un contrôle renvoie `130` (même flux que la commande).
 
 > Les éventuels hooks `before` de la commande (`toolchain.before`) s'exécutent **après** la
@@ -260,8 +260,8 @@ Nouvelle section optionnelle `toolchain` (sauvegardée telle quelle, aucune ré�
 
 | Clé | Type | Rôle |
 |-----|------|------|
-| `toolchain.commands` | `map<string,string>` | Sur -charge du nom de script par commande liorian (`dev`, `build`, `start`, `check`) |
-| `toolchain.before` | `map<string,string[]>` | Scripts `package.json` lancés avant la commande (clés : mêmes noms de commandes liorian) |
+| `toolchain.commands` | `map<string,string>` | Sur -charge du nom de script par commande liora (`dev`, `build`, `start`, `check`) |
+| `toolchain.before` | `map<string,string[]>` | Scripts `package.json` lancés avant la commande (clés : mêmes noms de commandes liora) |
 | `toolchain.after` | `map<string,string[]>` | Scripts `package.json` lancés après la commande |
 
 Toute clé inconnue d'une autre section est ignorée (structure Go `omitempty`, decodage strict
@@ -293,23 +293,23 @@ Nouvel ensemble de clés (catalogues `fr-FR`/`en-US`) :
 | `toolchain.error.no_script` | « Aucun script « %s » dans package.json » (+ fix) | « No "%s" script in package.json » (+ fix) |
 | `gate.spinner.audit` | « Audit de conformité des modules (audit) » | « Checking module conformance (audit) » |
 | `gate.failed.audit` | « le contrôle audit … a échoué : %d erreur(s) » | « module audit check failed: %d error(s) » |
-| `gate.failed.fix` | « Corrigez … ou exécutez `liorian %s` » | « fix …, or run `liorian %s` » |
+| `gate.failed.fix` | « Corrigez … ou exécutez `liora %s` » | « fix …, or run `liora %s` » |
 | `gate.cancelled` | « Contrôles des modules interrompus » | « Module checks interrupted » |
 
 ---
 
 ## 8. Périmètre futur
 
-- **Diagnostics `info` / télémétrie** : passerelle `liorian info` (script `info` absent de
+- **Diagnostics `info` / télémétrie** : passerelle `liora info` (script `info` absent de
   base → nécessite `toolchain.commands.info`). Non implémenté en v1.
 - **Exécution directe du binaire** : résolution `node_modules/.bin/<tool>` puis PATH lorsque
   aucun script n'existe — à sécuriser vis-à-vis de CI-TOOL-01 (détail résolu via un libellé
   neutre).
 - **Timeout CLI** : option `--timeout` pour les one-shot (proxy) — la CI reste responsable
   du timeout en v1.
-- **Hooks liorian-complets** : exécuter des sous-commandes liorian (`liorian audit`) en hook
+- **Hooks liora-complets** : exécuter des sous-commandes liora (`liora audit`) en hook
   sans passer par un script `package.json` (exécuteur de ligne de commande portant le shell).
-- **Passerelle générique** : `liorian run <script>` à liste blanche de scripts d'application.
+- **Passerelle générique** : `liora run <script>` à liste blanche de scripts d'application.
 
 ---
 
@@ -339,4 +339,4 @@ Nouvel ensemble de clés (catalogues `fr-FR`/`en-US`) :
 - [ ] `gofmt -l .` propre · `go vet ./...` propre · `go test ./...` vert · `go test ./e2e/ -run TestScripts` vert.
 - [ ] Aucun mot-clé du moteur dans les surfaces utilisateur (`rg` sur `cmd/`, `internal/toolchain/`, i18n).
 - [ ] `README.md` (table des commandes) et `CHANGELOG.md` documentent les 4 commandes.
-- [ ] Spec actuelle (`docs/specs/liorian.md`) référence `docs/specs/liorian-toolchain.md`.
+- [ ] Spec actuelle (`docs/specs/liora.md`) référence `docs/specs/liora-toolchain.md`.

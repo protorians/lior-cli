@@ -15,44 +15,55 @@ import (
 	"github.com/protorians/lior-cli/internal/pkg"
 )
 
-// Manifest is the metadata file of a Liorian module (`manifest.json`).
+// Manifest is the metadata file of a Liora module (`manifest.json`).
 //
 // The canonical schema (`@liorian/sdk/schemas/module.schema.json`) admits
 // additional properties: unknown top-level fields are preserved in Extra and
 // re-emitted on Marshal so a round-trip never loses forward-compatible data.
+//
+// Canonical reference: `docs/modules/module-manifest.md` (workspace) and the
+// installation chain (`docs/specs/applications/module-installation.md` §7.5).
+// Legacy workspace forms (`managerCompatibility` / `apiCompatibility`,
+// `apiScopes`, boolean-object `capabilities`, `INTERNAL` / `EXTERNAL` types)
+// are accepted on read and normalized; Marshal emits the canonical form.
 type Manifest struct {
-	Schema               string            `json:"$schema,omitempty"`
-	SchemaVersion        int               `json:"schemaVersion"`
-	ID                   string            `json:"id"`
-	Domain               string            `json:"domain"`
-	Key                  string            `json:"key"`
-	Name                 string            `json:"name"`
-	Description          string            `json:"description"`
-	Version              string            `json:"version"`
-	Icon                 string            `json:"icon"`
-	Logo                 *string           `json:"logo,omitempty"`
-	Banner               *string           `json:"banner,omitempty"`
-	Type                 string            `json:"type"`
-	Entry                string            `json:"entry"`
-	URI                  string            `json:"uri"`
-	Category             string            `json:"category,omitempty"`
-	Token                string            `json:"token"`
-	Publisher            Publisher         `json:"publisher"`
-	Platforms            Platforms         `json:"platforms"`
-	ManagerCompat        Compatibility     `json:"managerCompatibility"`
-	APICompat            Compatibility     `json:"apiCompatibility"`
-	Permissions          []string          `json:"permissions"`
-	APIScopes            []string          `json:"apiScopes"`
-	Capabilities         Capabilities      `json:"capabilities"`
-	IsEnabled            bool              `json:"isEnabled"`
-	IsDefault            bool              `json:"isDefault"`
-	Requirements         map[string]any    `json:"requirements"`
-	OptionalRequirements map[string]string `json:"optionalRequirements"`
-	Widgets              []string          `json:"widgets"`
-	Routines             []string          `json:"routines"`
-	Providers            []string          `json:"providers,omitempty"`
-	ConfigSettings       []ConfigSetting   `json:"configSettings,omitempty"`
-	Menu                 Menu              `json:"menu"`
+	Schema               string               `json:"$schema,omitempty"`
+	SchemaVersion        int                  `json:"schemaVersion"`
+	ID                   string               `json:"id"`
+	Domain               string               `json:"domain"`
+	Key                  string               `json:"key"`
+	Name                 string               `json:"name"`
+	Description          string               `json:"description"`
+	Version              string               `json:"version"`
+	Icon                 string               `json:"icon"`
+	Logo                 *string              `json:"logo,omitempty"`
+	Banner               *string              `json:"banner,omitempty"`
+	Type                 string               `json:"type"`
+	External             bool                 `json:"external,omitempty"`
+	Entry                string               `json:"entry"`
+	URI                  string               `json:"uri"`
+	Category             string               `json:"category,omitempty"`
+	Token                string               `json:"token"`
+	Publisher            Publisher            `json:"publisher"`
+	Platforms            Platforms            `json:"platforms"`
+	Compatibility        *ModuleCompatibility `json:"compatibility,omitempty"`
+	ManagerCompat        Compatibility        `json:"managerCompatibility,omitempty"`
+	APICompat            Compatibility        `json:"apiCompatibility,omitempty"`
+	Permissions          []string             `json:"permissions"`
+	OAuth                *ModuleOAuth         `json:"oauth,omitempty"`
+	APIScopes            []string             `json:"apiScopes,omitempty"`
+	Capabilities         Capabilities         `json:"capabilities"`
+	IsEnabled            bool                 `json:"isEnabled"`
+	IsDefault            bool                 `json:"isDefault"`
+	Requirements         map[string]any       `json:"requirements"`
+	OptionalRequirements map[string]string    `json:"optionalRequirements"`
+	DataModel            []DataModelResource  `json:"dataModel,omitempty"`
+	Declarative          *DeclarativeConfig   `json:"declarative,omitempty"`
+	Widgets              []string             `json:"widgets"`
+	Routines             []string             `json:"routines"`
+	Providers            []string             `json:"providers,omitempty"`
+	ConfigSettings       []ConfigSetting      `json:"configSettings,omitempty"`
+	Menu                 Menu                 `json:"menu"`
 
 	// Extra preserves unknown top-level fields (schema additionalProperties).
 	Extra map[string]json.RawMessage `json:"-"`
@@ -87,21 +98,142 @@ type Platform struct {
 // Compatibility expresses a semver window. A complete `max` range is required
 // by the schema (e.g. `0.17.x` rather than `0.17.0`); `strict` turns an out-of-
 // range version into a hard failure rather than a warning.
+//
+// Legacy form (`managerCompatibility` / `apiCompatibility`). The canonical
+// form is `compatibility: { socle: {...}, api: {...} }` (see
+// ModuleCompatibility); both are accepted on read.
 type Compatibility struct {
 	Min    string `json:"min"`
 	Max    string `json:"max,omitempty"`
 	Strict bool   `json:"strict,omitempty"`
 }
 
-// Capabilities declares module capabilities.
-type Capabilities struct {
-	NeedsNetwork              bool `json:"needsNetwork"`
-	SupportsOffline           bool `json:"supportsOffline"`
-	RequiresOrganization      bool `json:"requiresOrganization"`
-	RequiresAuthenticatedUser bool `json:"requiresAuthenticatedUser"`
-	RequiresAdmin             bool `json:"requiresAdmin,omitempty"`
-	SupportsRealtime          bool `json:"supportsRealtime,omitempty"`
-	ProcessesLocalData        bool `json:"processesLocalData,omitempty"`
+// CompatibilityRange is one side of the canonical `compatibility` object: a
+// semver window (`min`, optional `max`) for the socle/manager or the API.
+type CompatibilityRange struct {
+	Min    string `json:"min"`
+	Max    string `json:"max,omitempty"`
+	Strict bool   `json:"strict,omitempty"`
+}
+
+// ModuleCompatibility is the canonical compatibility declaration
+// (`docs/modules/module-manifest.md` §6.4): accepted socle (manager) and API
+// version windows. Out-of-range versions mark the module `incompatible` at
+// resolution time (spec `module-installation.md` §7.1, step 6).
+type ModuleCompatibility struct {
+	Socle CompatibilityRange `json:"socle"`
+	API   CompatibilityRange `json:"api"`
+}
+
+// ModuleOAuth carries the OAuth scopes negotiated at access time. Scopes must
+// stay within the catalogue authorized by the OAuth server (`openid`,
+// `profile`, `email`, `organizations`, `roles`, `permissions`).
+type ModuleOAuth struct {
+	Scopes []string `json:"scopes"`
+}
+
+// Capabilities declares the module capabilities as a list of Tauri permission
+// identifiers (`core:default`, `notification:default`, `core:<plugin>:<perm>`).
+//
+// Canonical form (`docs/modules/module-manifest.md` §6.6). The legacy
+// boolean-object form (`{"needsNetwork": true, ...}`) is accepted on read and
+// normalized to the enabled flag names; Marshal always emits the canonical
+// array (the legacy flags were removed from the schema).
+type Capabilities []string
+
+// UnmarshalJSON accepts the canonical string array and the legacy
+// boolean-object form.
+func (c *Capabilities) UnmarshalJSON(data []byte) error {
+	var ids []string
+	if err := json.Unmarshal(data, &ids); err == nil {
+		*c = ids
+		return nil
+	}
+	var legacy map[string]any
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	out := make([]string, 0, len(legacy))
+	for k, v := range legacy {
+		if b, ok := v.(bool); ok && !b {
+			continue
+		}
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	*c = out
+	return nil
+}
+
+// DataModelField is one field of a `dataModel` resource (spec
+// `module-installation.md` §7.5): the shape of the auto-generated CRUD.
+type DataModelField struct {
+	Key      string   `json:"key"`
+	Type     string   `json:"type,omitempty"`
+	Label    string   `json:"label,omitempty"`
+	Required bool     `json:"required,omitempty"`
+	ReadOnly bool     `json:"readOnly,omitempty"`
+	Options  []string `json:"options,omitempty"`
+}
+
+// DataModelPermissionSet maps CRUD operations to `Role:Verbe` permission
+// codes required to call them.
+type DataModelPermissionSet struct {
+	Read   string `json:"read,omitempty"`
+	Create string `json:"create,omitempty"`
+	Update string `json:"update,omitempty"`
+	Delete string `json:"delete,omitempty"`
+}
+
+// DataModelResource declares one CRUD resource of a `CONFIGURATION` module.
+type DataModelResource struct {
+	Resource    string                 `json:"resource"`
+	Label       string                 `json:"label,omitempty"`
+	Fields      []DataModelField       `json:"fields,omitempty"`
+	Permissions DataModelPermissionSet `json:"permissions,omitempty"`
+}
+
+// DeclarativeColumn is one column of a `datagrid` block.
+type DeclarativeColumn struct {
+	Field    string `json:"field"`
+	Label    string `json:"label,omitempty"`
+	Type     string `json:"type,omitempty"`
+	Sortable bool   `json:"sortable,omitempty"`
+}
+
+// DeclarativeBlock is one UI block of a `CONFIGURATION` module page
+// (`kpi`, `datagrid`, `form`, `chart`, `settings`). Only the fields relevant
+// to the block `kind` are set; unknown block fields are ignored by the CLI
+// (the SDK engine owns the rendering).
+type DeclarativeBlock struct {
+	ID        string              `json:"id,omitempty"`
+	Kind      string              `json:"kind"`
+	Resource  string              `json:"resource,omitempty"`
+	Mode      string              `json:"mode,omitempty"`
+	Aggregate string              `json:"aggregate,omitempty"`
+	Label     string              `json:"label,omitempty"`
+	Title     string              `json:"title,omitempty"`
+	Chart     string              `json:"chart,omitempty"`
+	X         string              `json:"x,omitempty"`
+	Y         string              `json:"y,omitempty"`
+	Columns   []DeclarativeColumn `json:"columns,omitempty"`
+	Actions   []string            `json:"actions,omitempty"`
+	Fields    []DataModelField    `json:"fields,omitempty"`
+}
+
+// DeclarativePage is one page of the `declarative` section.
+type DeclarativePage struct {
+	ID     string             `json:"id"`
+	Path   string             `json:"path,omitempty"`
+	Title  string             `json:"title,omitempty"`
+	Blocks []DeclarativeBlock `json:"blocks,omitempty"`
+}
+
+// DeclarativeConfig is the `declarative` section of a `CONFIGURATION`
+// manifest: natively rendered pages plus dashboard `widgets`.
+type DeclarativeConfig struct {
+	Pages   []DeclarativePage  `json:"pages,omitempty"`
+	Widgets []DeclarativeBlock `json:"widgets,omitempty"`
 }
 
 // Menu holds menu entries declared by the module.
@@ -216,6 +348,10 @@ func (m Manifest) MarshalJSON() ([]byte, error) {
 }
 
 // NewManifest builds a fresh manifest for a module.
+//
+// The manifest follows the canonical contract (`docs/modules/module-manifest.md`,
+// `schemaVersion: 1`): `compatibility.{socle,api}` windows, `oauth.scopes`,
+// `capabilities` as Tauri permission ids, and `Role:Verbe` permissions.
 func NewManifest(name, description string) Manifest {
 	upperKey := upperSnake(name)
 	return Manifest{
@@ -227,7 +363,8 @@ func NewManifest(name, description string) Manifest {
 		Description:   description,
 		Version:       "0.1.0",
 		Icon:          "PuzzleIcon",
-		Type:          "EXTERNAL",
+		Type:          "WEB_APP_LOCAL",
+		External:      true,
 		Entry:         "index.tsx",
 		URI:           "/" + name,
 		Category:      "SYSTEM",
@@ -235,29 +372,56 @@ func NewManifest(name, description string) Manifest {
 		Publisher:     Publisher{ID: "", Name: ""},
 		Platforms: Platforms{
 			Web:     Platform{Supported: true, Modes: []string{"web"}},
-			Desktop: Platform{Supported: false},
-			Mobile:  Platform{Supported: false},
+			Desktop: Platform{Supported: true, Modes: []string{"local-webview"}, OS: []string{"windows", "macos", "linux"}},
+			Mobile:  Platform{Supported: true, Modes: []string{"local-webview"}, OS: []string{"android"}},
 		},
-		ManagerCompat: Compatibility{Min: "0.0.0"},
-		APICompat:     Compatibility{Min: "0.0.0"},
-		Permissions:   []string{},
-		APIScopes:     []string{},
+		Compatibility: &ModuleCompatibility{
+			Socle: CompatibilityRange{Min: "0.17.1", Max: "0.17.x"},
+			API:   CompatibilityRange{Min: "0.27.0", Max: "0.27.x"},
+		},
+		Permissions: []string{"User:Get", "Editor:Post", "Editor:Put", "Admin:Delete"},
+		OAuth:       &ModuleOAuth{Scopes: []string{"openid", "profile", "email", "organizations"}},
 		Capabilities: Capabilities{
-			NeedsNetwork:              true,
-			SupportsOffline:           false,
-			RequiresOrganization:      false,
-			RequiresAuthenticatedUser: true,
+			"core:default",
 		},
 		IsEnabled:            true,
 		IsDefault:            false,
 		Requirements:         map[string]any{},
 		OptionalRequirements: map[string]string{},
+		DataModel:            []DataModelResource{},
 		Widgets:              []string{},
 		Routines:             []string{},
 		Providers:            []string{},
 		ConfigSettings:       []ConfigSetting{},
 		Menu:                 Menu{Items: []MenuItem{}},
 	}
+}
+
+// EffectiveSocle returns the socle/manager compatibility window, preferring
+// the canonical `compatibility.socle` over the legacy `managerCompatibility`.
+func (m *Manifest) EffectiveSocle() CompatibilityRange {
+	if m.Compatibility != nil && strings.TrimSpace(m.Compatibility.Socle.Min) != "" {
+		return m.Compatibility.Socle
+	}
+	return CompatibilityRange{Min: m.ManagerCompat.Min, Max: m.ManagerCompat.Max, Strict: m.ManagerCompat.Strict}
+}
+
+// EffectiveAPI returns the API compatibility window, preferring the canonical
+// `compatibility.api` over the legacy `apiCompatibility`.
+func (m *Manifest) EffectiveAPI() CompatibilityRange {
+	if m.Compatibility != nil && strings.TrimSpace(m.Compatibility.API.Min) != "" {
+		return m.Compatibility.API
+	}
+	return CompatibilityRange{Min: m.APICompat.Min, Max: m.APICompat.Max, Strict: m.APICompat.Strict}
+}
+
+// EffectiveOAuthScopes returns the negotiated OAuth scopes, preferring the
+// canonical `oauth.scopes` over the legacy `apiScopes`.
+func (m *Manifest) EffectiveOAuthScopes() []string {
+	if m.OAuth != nil && m.OAuth.Scopes != nil {
+		return m.OAuth.Scopes
+	}
+	return m.APIScopes
 }
 
 // LoadManifest reads and decodes a manifest.json file.
@@ -332,8 +496,72 @@ func ValidateIcon(icon string) error {
 	return errors.New(i18n.T("module.error.icon"))
 }
 
-// ModuleTypes is the set of distribution types accepted by the schema.
-var ModuleTypes = map[string]bool{"INTERNAL": true, "EXTERNAL": true}
+// ModuleTypes is the set of distribution/execution types accepted by the
+// canonical schema (`docs/modules/module-manifest.md` §6.2). `INTERNAL` and
+// `EXTERNAL` are legacy aliases (deprecated, still accepted): `INTERNAL`
+// denotes a socle-bundled module, `EXTERNAL` a remotely-served web app.
+var ModuleTypes = map[string]bool{
+	"CONFIGURATION":   true,
+	"EXTERNAL_URL":    true,
+	"WEB_APP_REMOTE":  true,
+	"WEB_APP_CACHED":  true,
+	"WEB_APP_LOCAL":   true,
+	"REMOTE_FRONTEND": true,
+	"SYSTEM":          true,
+	"SERVICE":         true,
+	"WIDGET":          true,
+	"THEME":           true,
+	"INTERNAL":        true,
+	"EXTERNAL":        true,
+}
+
+// LegacyModuleTypes lists the pre-canonical distribution types. They remain
+// accepted for existing projects but trigger a migration warning at audit
+// time; new modules should use the canonical `ModuleType` enum.
+var LegacyModuleTypes = map[string]bool{"INTERNAL": true, "EXTERNAL": true}
+
+// IsLegacyModuleType reports whether t is a deprecated distribution type.
+func IsLegacyModuleType(moduleType string) bool {
+	return LegacyModuleTypes[strings.ToUpper(strings.TrimSpace(moduleType))]
+}
+
+// ModuleRoles is the catalogue of backend roles usable in `permissions`
+// (`<ROLE>:<VERBE>`, `docs/modules/module-manifest.md` §6.5).
+var ModuleRoles = []string{
+	"Root", "SuperAdmin", "Admin", "Manager", "Editor", "Moderator",
+	"Analyst", "Commercial", "Operator", "Contributor", "Caissier",
+	"User", "Guest", "Viewer",
+}
+
+// ModuleVerbs maps Raiton controller verbs to permission verbs.
+var ModuleVerbs = []string{"Get", "Post", "Put", "Delete"}
+
+// permissionCodeRE matches a canonical permission code (`<ROLE>:<VERBE>`).
+var permissionCodeRE = regexp.MustCompile(`^(Root|SuperAdmin|Admin|Manager|Editor|Moderator|Analyst|Commercial|Operator|Contributor|Caissier|User|Guest|Viewer):(Get|Post|Put|Delete)$`)
+
+// IsPermissionCode reports whether s is a canonical `<ROLE>:<VERBE>`
+// permission code.
+func IsPermissionCode(s string) bool {
+	return permissionCodeRE.MatchString(strings.TrimSpace(s))
+}
+
+// ValidatePermissionCode checks one permission entry of a manifest.
+func ValidatePermissionCode(code string) error {
+	if IsPermissionCode(code) {
+		return nil
+	}
+	return errors.New(i18n.Tf("module.error.permission", code))
+}
+
+// canonicalDomainRE matches the canonical module domain
+// (`mod.<éditeur>.<module>`, spec `module-installation.md` §4.3).
+var canonicalDomainRE = regexp.MustCompile(`^mod\.[a-z0-9]+(\.[a-z0-9-]+)*$`)
+
+// IsCanonicalDomain reports whether domain follows the canonical
+// `mod.<éditeur>.<module>` form.
+func IsCanonicalDomain(domain string) bool {
+	return canonicalDomainRE.MatchString(strings.TrimSpace(domain))
+}
 
 // ModuleCategories is the set of store categories accepted by the schema.
 var ModuleCategories = map[string]bool{
@@ -347,8 +575,12 @@ var ModuleCategories = map[string]bool{
 	"SYSTEM":         true,
 }
 
-// ValidateType checks an optional module distribution type. An empty type is
-// accepted (the creation default EXTERNAL applies).
+// ValidateType checks an optional module distribution type against the
+// canonical `ModuleType` enum (`CONFIGURATION`, `EXTERNAL_URL`,
+// `WEB_APP_REMOTE`, `WEB_APP_CACHED`, `WEB_APP_LOCAL`, `REMOTE_FRONTEND`,
+// `SYSTEM`, `SERVICE`, `WIDGET`, `THEME`). The legacy `INTERNAL` / `EXTERNAL`
+// values are still accepted (migration warning at audit time). An empty type
+// is accepted (the creation default applies).
 func ValidateType(moduleType string) error {
 	if moduleType == "" || ModuleTypes[strings.ToUpper(strings.TrimSpace(moduleType))] {
 		return nil

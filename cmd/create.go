@@ -30,7 +30,7 @@ the manifest.json uri of the deployed module (default: the identifier).
 
 The module's unique UUID token is generated automatically.
 
-Usage : liorian create module [name] [--domain com.org.app] [--id hello-world]`,
+Usage : liora create module [name] [--domain com.org.app] [--id hello-world]`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runCreate(cmd, args)
@@ -177,9 +177,9 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 	fmt.Println(s.SuccessPanel(panel))
 	fmt.Println(s.StepsList(i18n.T("init.next"),
-		s.Info.Render("liorian connect"),
-		s.Info.Render("liorian pack "+result.Name),
-		s.Info.Render("liorian publish"),
+		s.Info.Render("liora connect"),
+		s.Info.Render("liora pack "+result.Name),
+		s.Info.Render("liora publish"),
 	))
 	fmt.Println()
 	return nil

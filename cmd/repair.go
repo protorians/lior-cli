@@ -42,7 +42,7 @@ var repairCmd = &cobra.Command{
 	Use:   "repair [module]",
 	Short: "Repair a module's audit failures",
 	Long: `Automatically repairs the failing (blocking) points reported by
-'liorian audit' for one (or all) module(s): manifest metadata (id, name,
+'liora audit' for one (or all) module(s): manifest metadata (id, name,
 version, token, entry, permissions, platforms, compatibility, capabilities,
 category, domain), the module directory name (proposed with a tab-to-fill
 prompt, applied directly with --no-interaction), missing npm dependencies and

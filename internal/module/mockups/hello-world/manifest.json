@@ -8,13 +8,10 @@
   "description": "Module d'exemple pour l'onboarding des développeurs",
   "version": "1.0.0",
   "icon": "WandSparklesIcon",
-  "type": "INTERNAL",
+  "type": "WEB_APP_LOCAL",
+  "external": false,
   "entry": "index.tsx",
   "uri": "/hello-world",
-  "publisher": {
-    "id": "liorian",
-    "name": "Liorian Workspace"
-  },
   "platforms": {
     "web": {
       "supported": true,
@@ -28,26 +25,24 @@
     "mobile": {
       "supported": true,
       "modes": ["local-webview"],
-      "os": ["android"],
-      "iosSupported": false
+      "os": ["android"]
     }
   },
-  "managerCompatibility": {
-    "min": "0.17.1",
-    "max": "0.17.x"
+  "compatibility": {
+    "socle": {
+      "min": "0.17.1",
+      "max": "0.17.x"
+    },
+    "api": {
+      "min": "0.27.0",
+      "max": "0.27.x"
+    }
   },
-  "apiCompatibility": {
-    "min": "0.27.0",
-    "max": "0.27.x"
+  "permissions": ["User:Get", "Editor:Post", "Editor:Put", "Admin:Delete"],
+  "oauth": {
+    "scopes": ["openid", "profile", "email", "organizations"]
   },
-  "permissions": ["hello-world.read", "hello-world.write", "hello-world.manage"],
-  "apiScopes": ["hello-world.read", "hello-world.write"],
-  "capabilities": {
-    "needsNetwork": true,
-    "supportsOffline": false,
-    "requiresOrganization": true,
-    "requiresAuthenticatedUser": true
-  },
+  "capabilities": ["core:default"],
   "isEnabled": true,
   "isDefault": false,
   "requirements": {

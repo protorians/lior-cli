@@ -1,4 +1,4 @@
-// Package i18n provides the internationalisation mechanism for the Liorian
+// Package i18n provides the internationalisation mechanism for the Liora
 // CLI. Message catalogs are embedded in locales/*.json (en-US ships as the
 // default, fr-FR ships as the first translation) and are selected at runtime
 // from, in order of precedence:

@@ -40,3 +40,70 @@ exec sh -c '$LIORIAN --no-color repair mod.liorian.blog-manager --no-interaction
 stdout 'renamed the module directory to "com.example.blog-manager"'
 exists library/modules/com.example.blog-manager/manifest.json
 ! exists library/modules/mod.liorian.blog-manager/manifest.json
+
+# TC-041 — a legacy permission list is migrated to canonical Role:Verbe codes
+# without losing the codes the mapping cannot resolve.
+mkdir -p library/modules/mod.liorian.perms
+exec sh -c 'printf "export default { identifier: \"mod.liorian.perms\", widgets: {} };\n" > library/modules/mod.liorian.perms/index.tsx'
+exec sh -c 'printf "{\n  \"id\": \"perms\",\n  \"domain\": \"mod.liorian.perms\",\n  \"name\": \"Perms\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [\"user.read\", \"admin.delete\", \"editor.write\"],\n  \"capabilities\": [\"core:default\"]\n}\n" > library/modules/mod.liorian.perms/manifest.json'
+exec $LIORIAN --no-color repair mod.liorian.perms --warnings --no-install
+# The resolvable codes are migrated...
+grep '"User:Get"' library/modules/mod.liorian.perms/manifest.json
+grep '"Admin:Delete"' library/modules/mod.liorian.perms/manifest.json
+# ...and the ambiguous one is kept, never dropped.
+grep '"editor.write"' library/modules/mod.liorian.perms/manifest.json
+stdout 'left untouched'
+
+# TC-042 — the platform declaration is completed, never narrowed: a module
+# serving desktop keeps doing so.
+mkdir -p library/modules/mod.liorian.plat
+exec sh -c 'printf "export default { identifier: \"mod.liorian.plat\", widgets: {} };\n" > library/modules/mod.liorian.plat/index.tsx'
+exec sh -c 'printf "{\n  \"id\": \"plat\",\n  \"domain\": \"mod.liorian.plat\",\n  \"name\": \"Plat\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [],\n  \"capabilities\": [\"core:default\"],\n  \"platforms\": {\n    \"web\": {\"supported\": true},\n    \"desktop\": {\"supported\": true, \"os\": [\"macos\"]},\n    \"mobile\": {\"supported\": false}\n  }\n}\n" > library/modules/mod.liorian.plat/manifest.json'
+exec $LIORIAN --no-color repair mod.liorian.plat --warnings --no-install
+stdout 'added the missing mode\(s\)'
+grep '"desktop"' library/modules/mod.liorian.plat/manifest.json
+grep '"local-webview"' library/modules/mod.liorian.plat/manifest.json
+grep '"macos"' library/modules/mod.liorian.plat/manifest.json
+
+# TC-043 — a deprecated distribution type is migrated to its canonical value.
+mkdir -p library/modules/mod.liorian.legacy-type
+exec sh -c 'printf "export default { identifier: \"mod.liorian.legacy-type\", widgets: {} };\n" > library/modules/mod.liorian.legacy-type/index.tsx'
+exec sh -c 'printf "{\n  \"id\": \"legacy-type\",\n  \"domain\": \"mod.liorian.legacy-type\",\n  \"name\": \"Legacy Type\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"INTERNAL\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [],\n  \"capabilities\": [\"core:default\"]\n}\n" > library/modules/mod.liorian.legacy-type/manifest.json'
+exec $LIORIAN --no-color repair mod.liorian.legacy-type --warnings --no-install
+stdout 'migrated type "INTERNAL" to "SYSTEM"'
+grep '"type": "SYSTEM"' library/modules/mod.liorian.legacy-type/manifest.json
+
+# TC-044 — a legacy reverse-DNS domain is migrated to the canonical
+# `mod.<éditeur>.<module>` form, and the module directory follows it.
+mkdir -p library/modules/com.example.crm
+exec sh -c 'printf "export default { identifier: \"mod.example.crm\", widgets: {} };\n" > library/modules/com.example.crm/index.tsx'
+exec sh -c 'printf "{\n  \"id\": \"crm\",\n  \"domain\": \"com.example.crm\",\n  \"name\": \"Crm\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [],\n  \"capabilities\": [\"core:default\"]\n}\n" > library/modules/com.example.crm/manifest.json'
+exec $LIORIAN --no-color repair com.example.crm --warnings --no-install --no-interaction
+stdout 'migrated domain to "mod.example.crm"'
+exists library/modules/mod.example.crm/manifest.json
+! exists library/modules/com.example.crm/manifest.json
+grep '"domain": "mod.example.crm"' library/modules/mod.example.crm/manifest.json
+
+# TC-045 — a CONFIGURATION module is repaired towards its declarative entry,
+# never the React one, and its dataModel is reported with guidance.
+mkdir -p library/modules/mod.acme.crm
+exec sh -c 'printf "{}\n" > library/modules/mod.acme.crm/index.json'
+exec sh -c 'printf "{\n  \"id\": \"crm\",\n  \"domain\": \"mod.acme.crm\",\n  \"name\": \"Crm\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"CONFIGURATION\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [],\n  \"capabilities\": [\"core:default\"]\n}\n" > library/modules/mod.acme.crm/manifest.json'
+exec $LIORIAN --no-color repair mod.acme.crm --warnings --no-install
+stdout 'set entry to "index.json"'
+grep '"entry": "index.json"' library/modules/mod.acme.crm/manifest.json
+stdout 'the CONFIGURATION module declares no dataModel'
+
+# TC-046 — a finding is reported once, not once per pass.
+exec sh -c '$LIORIAN --no-color repair mod.liorian.perms --warnings --no-install --output json > report.json'
+grep -count=1 'not canonical Role:Verbe' report.json
+
+# TC-047 — a repair never injects the zero value of an absent field: an empty
+# publisher block would raise a warning no repair can clear.
+! grep '"publisher"' library/modules/mod.liorian.perms/manifest.json
+! grep '"isEnabled"' library/modules/mod.liorian.perms/manifest.json
+! grep '"menu"' library/modules/mod.liorian.perms/manifest.json
+
+# A second pass has nothing left to do.
+exec sh -c '$LIORIAN --no-color repair mod.liorian.perms --warnings --no-install --output json > report2.json'
+grep '"actions": null' report2.json

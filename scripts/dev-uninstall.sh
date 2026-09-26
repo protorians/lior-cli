@@ -15,7 +15,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BINARY="liorian"
+BINARY="liora"
+LEGACY_BINARY="liorian"
 BUILD_DIR="$ROOT_DIR/dist"
 
 PREFIX=""
@@ -45,11 +46,17 @@ INSTALL_PATH="$INSTALL_DIR/$BINARY"
 
 # ---- Remove installed binary -----------------------------------------------
 
-if [ -f "$INSTALL_PATH" ]; then
-  rm "$INSTALL_PATH"
+if [ -f "$INSTALL_PATH" ] || [ -L "$INSTALL_PATH" ]; then
+  rm -f "$INSTALL_PATH"
   echo "Removed: $INSTALL_PATH"
 else
   echo "Nothing to remove: $INSTALL_PATH does not exist."
+fi
+
+LEGACY_PATH="$INSTALL_DIR/$LEGACY_BINARY"
+if [ -f "$LEGACY_PATH" ] || [ -L "$LEGACY_PATH" ]; then
+  rm -f "$LEGACY_PATH"
+  echo "Removed: $LEGACY_PATH"
 fi
 
 # ---- Optionally clean build directory -------------------------------------

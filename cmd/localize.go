@@ -145,7 +145,7 @@ func colorPreferenceFromArgs(args []string) (noColor bool, set bool) {
 }
 
 // configLang reads the `"cli".lang` key from the project config when the
-// current directory sits inside a Liorian project.
+// current directory sits inside a Liora project.
 func configLang() (string, bool) {
 	cfg, ok := cliSettings()
 	if !ok {
@@ -158,7 +158,7 @@ func configLang() (string, bool) {
 }
 
 // configNoColor reads the `"cli".noColor` key from the project config when the
-// current directory sits inside a Liorian project.
+// current directory sits inside a Liora project.
 func configNoColor() bool {
 	cfg, ok := cliSettings()
 	if !ok {
@@ -168,7 +168,7 @@ func configNoColor() bool {
 }
 
 // cliSettings loads the project config (from the current directory upward)
-// when an explicit Liorian project root exists.
+// when an explicit Liora project root exists.
 func cliSettings() (config.Config, bool) {
 	cwd, err := os.Getwd()
 	if err != nil {

@@ -29,7 +29,7 @@ type Finding struct {
 	Message  string `json:"message"`
 }
 
-// Validator validates a module against the Liorian rules.
+// Validator validates a module against the Liora rules.
 type Validator struct {
 	Root string
 }
@@ -124,25 +124,74 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	addLevel(res, "manifest.json", "platforms",
 		rawHasKey(manifestPath, "platforms") && platformsHaveModes(manifest.Platforms),
 		"platforms present with modes for supported platforms", LevelWarning)
-	// compatibility windows present and complete (`0.17.x`, not `0.17.0`)
-	addLevel(res, "manifest.json", "managerCompatibility", compatibilityComplete(manifest.ManagerCompat),
-		"managerCompatibility range present and complete", LevelWarning)
-	addLevel(res, "manifest.json", "apiCompatibility", compatibilityComplete(manifest.APICompat),
-		"apiCompatibility range present and complete", LevelWarning)
-	// capabilities present (schema-required)
+	// canonical compatibility (`compatibility.{socle,api}`) preferred; the
+	// legacy `managerCompatibility` / `apiCompatibility` windows are still
+	// accepted (migration warning).
+	if hasCanonicalCompatibility(manifestPath) {
+		addLevel(res, "manifest.json", "compatibility", compatibilityRangeComplete(manifest.EffectiveSocle()) && compatibilityRangeComplete(manifest.EffectiveAPI()),
+			"compatibility range present and complete", LevelWarning)
+	} else {
+		addLevel(res, "manifest.json", "managerCompatibility", compatibilityComplete(manifest.ManagerCompat),
+			"managerCompatibility range present and complete (legacy: migrate to compatibility.socle)", LevelWarning)
+		addLevel(res, "manifest.json", "apiCompatibility", compatibilityComplete(manifest.APICompat),
+			"apiCompatibility range present and complete (legacy: migrate to compatibility.api)", LevelWarning)
+	}
+	// canonical OAuth scopes preferred; legacy `apiScopes` still accepted.
+	if rawHasKey(manifestPath, "oauth") {
+		addLevel(res, "manifest.json", "oauth.scopes", oauthScopesValid(manifest.EffectiveOAuthScopes()),
+			"oauth.scopes within the authorized catalogue", LevelWarning)
+	} else if rawHasKey(manifestPath, "apiScopes") {
+		addLevel(res, "manifest.json", "apiScopes",
+			true, "apiScopes present (legacy: migrate to oauth.scopes)", LevelWarning)
+	} else {
+		addLevel(res, "manifest.json", "oauth.scopes", false,
+			"oauth.scopes present", LevelWarning)
+	}
+	// capabilities present (canonical Tauri permission ids; the legacy
+	// boolean object is normalized on load).
 	addLevel(res, "manifest.json", "capabilities", rawHasKey(manifestPath, "capabilities"),
 		"capabilities present", LevelWarning)
+	// permissions: canonical `Role:Verbe` codes; legacy dotted scopes trigger
+	// a migration warning (the installation review requires canonical codes).
+	addLevel(res, "manifest.json", "permissions", permissionsCanonical(manifest.Permissions),
+		"permissions use canonical Role:Verbe codes", LevelWarning)
+	// distribution type: canonical enum; legacy INTERNAL/EXTERNAL accepted
+	// with a migration warning.
+	addLevel(res, "manifest.json", "type",
+		manifest.Type == "" || ModuleTypes[strings.ToUpper(manifest.Type)],
+		"type in the allowed enum", LevelWarning)
+	if IsLegacyModuleType(manifest.Type) {
+		addLevel(res, "manifest.json", "type", false,
+			"type uses the canonical ModuleType enum (legacy INTERNAL/EXTERNAL)", LevelWarning)
+	}
 	// category within the ModuleCategory enum (optional field)
 	addLevel(res, "manifest.json", "category",
 		manifest.Category == "" || ModuleCategories[strings.ToUpper(manifest.Category)],
 		"category in the allowed enum", LevelWarning)
-	// publisher present (schema-required)
-	addLevel(res, "manifest.json", "publisher", manifest.Publisher.ID != "" && manifest.Publisher.Name != "",
-		"publisher present", LevelWarning)
-	// entry default export present in index.tsx
-	indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
-	addLevel(res, "index.tsx", "export", pkg.FileExists(indexPath) && containsDefaultExport(indexPath),
-		"index.tsx file with default export", LevelError)
+	// publisher: optional in the canonical schema (completed at publish
+	// time); a half-filled publisher block is a warning.
+	if rawHasKey(manifestPath, "publisher") {
+		addLevel(res, "manifest.json", "publisher", manifest.Publisher.ID != "" && manifest.Publisher.Name != "",
+			"publisher complete (id and name)", LevelWarning)
+	}
+	// domain: canonical `mod.<éditeur>.<module>` preferred (spec
+	// module-installation §4.3); any reverse-DNS form stays accepted.
+	addLevel(res, "manifest.json", "canonical domain", IsCanonicalDomain(manifest.Domain),
+		"domain in canonical mod.<éditeur>.<module> form", LevelWarning)
+	// CONFIGURATION modules carry their UI in the manifest itself
+	// (`entry: index.json` + `dataModel`/`declarative`): no React entry needed.
+	if strings.EqualFold(strings.TrimSpace(manifest.Type), "CONFIGURATION") {
+		addLevel(res, "manifest.json", "entry", manifest.Entry == "index.json",
+			"CONFIGURATION entry is index.json", LevelWarning)
+		addLevel(res, "manifest.json", "dataModel",
+			manifest.DataModel != nil,
+			"CONFIGURATION dataModel present", LevelWarning)
+	} else {
+		// entry default export present in index.tsx
+		indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
+		addLevel(res, "index.tsx", "export", pkg.FileExists(indexPath) && containsDefaultExport(indexPath),
+			"index.tsx file with default export", LevelError)
+	}
 
 	return res, nil
 }
@@ -204,6 +253,67 @@ func compatibilityComplete(c Compatibility) bool {
 	}
 	if c.Max != "" && exactVersionRE.MatchString(c.Max) {
 		return false
+	}
+	return true
+}
+
+// compatibilityRangeComplete is the canonical-form counterpart of
+// compatibilityComplete (see ModuleCompatibility).
+func compatibilityRangeComplete(c CompatibilityRange) bool {
+	if strings.TrimSpace(c.Min) == "" {
+		return false
+	}
+	if c.Max != "" && exactVersionRE.MatchString(c.Max) {
+		return false
+	}
+	return true
+}
+
+// hasCanonicalCompatibility reports whether a manifest declares the canonical
+// `compatibility` object (raw JSON inspection: the typed struct cannot tell an
+// absent object from a zero value).
+func hasCanonicalCompatibility(manifestPath string) bool {
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return false
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false
+	}
+	_, ok := raw["compatibility"]
+	return ok
+}
+
+// OAuthScopes is the catalogue of OAuth scopes the server may grant
+// (`docs/modules/module-manifest.md` §6.5).
+var OAuthScopes = map[string]bool{
+	"openid": true, "profile": true, "email": true,
+	"organizations": true, "roles": true, "permissions": true,
+}
+
+// oauthScopesValid reports whether every scope belongs to the catalogue
+// authorized by the OAuth server.
+func oauthScopesValid(scopes []string) bool {
+	if scopes == nil {
+		return false
+	}
+	for _, s := range scopes {
+		if !OAuthScopes[strings.TrimSpace(s)] {
+			return false
+		}
+	}
+	return true
+}
+
+// permissionsCanonical reports whether every permission entry uses the
+// canonical `Role:Verbe` form. An empty list is accepted here (publish-time
+// review covers the security semantics); only malformed entries warn.
+func permissionsCanonical(permissions []string) bool {
+	for _, p := range permissions {
+		if !IsPermissionCode(p) {
+			return false
+		}
 	}
 	return true
 }

@@ -32,8 +32,11 @@ type ModuleSpec struct {
 	// URL is the page path segment in src/app/<url>; empty defaults to the
 	// module identifier (manifest `uri` is /<url>).
 	URL string
-	// Type is the distribution type (INTERNAL or EXTERNAL); empty defaults to
-	// EXTERNAL (a third-party module distributed independently).
+	// Type is the distribution type (canonical `ModuleType` enum); empty
+	// defaults to WEB_APP_LOCAL (a code-scaffolded module is served locally
+	// by the organization core — spec ADR-001). `CONFIGURATION` (no code,
+	// `entry: index.json`) is recommended for data-only modules (ADR-011)
+	// and can be requested explicitly.
 	Type string
 	// Category is the store category (one of the ModuleCategory values); empty
 	// defaults to SYSTEM.
@@ -48,12 +51,12 @@ func (s ModuleSpec) EffectiveVersion() string {
 	return "0.0.0"
 }
 
-// EffectiveType returns the distribution type, defaulting to EXTERNAL.
+// EffectiveType returns the distribution type, defaulting to WEB_APP_LOCAL.
 func (s ModuleSpec) EffectiveType() string {
 	if t := strings.ToUpper(strings.TrimSpace(s.Type)); t != "" {
 		return t
 	}
-	return "EXTERNAL"
+	return "WEB_APP_LOCAL"
 }
 
 // EffectiveCategory returns the store category, defaulting to SYSTEM.

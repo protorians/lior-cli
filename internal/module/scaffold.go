@@ -14,7 +14,7 @@ import (
 	"github.com/protorians/lior-cli/internal/pkg"
 )
 
-// Embedded reference mockups shipped inside the CLI so `liorian create
+// Embedded reference mockups shipped inside the CLI so `liora create
 // module` works on any machine with no external checkout.
 //
 //go:embed mockups
@@ -36,7 +36,7 @@ const (
 	// when the module declaration declares a `uri`/`url`.
 	EnvPageMockup = "LIORIAN_PAGE_MOCKUP"
 	// EnvViewMockup points to a custom `<name>.view.tsx` template used by
-	// `liorian create view`.
+	// `liora create view`.
 	EnvViewMockup = "LIORIAN_VIEW_MOCKUP"
 )
 
@@ -434,7 +434,7 @@ func mockupReadmeTemplate(spec ModuleSpec) string {
 	if desc := spec.Description; desc != "" {
 		b.WriteString(desc + "\n\n")
 	}
-	b.WriteString(fmt.Sprintf("Liorian module `%s` (`%s`).\n\n", spec.Domain, spec.ID))
+	b.WriteString(fmt.Sprintf("Liora module `%s` (`%s`).\n\n", spec.Domain, spec.ID))
 	b.WriteString("## Structure\n\n")
 	b.WriteString("- `manifest.json` — module metadata\n")
 	b.WriteString("- `index.tsx` — module declaration (identifier, widgets, service, routines, uri)\n")

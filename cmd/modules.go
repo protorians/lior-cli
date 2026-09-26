@@ -12,7 +12,7 @@ import (
 	"github.com/protorians/lior-cli/internal/tui"
 )
 
-// requireProjectRoot locates the current Liorian project root or returns a
+// requireProjectRoot locates the current Liora project root or returns a
 // dedicated error (exit code 3 per spec).
 func requireProjectRoot() (string, error) {
 	cwd, err := os.Getwd()
@@ -72,10 +72,11 @@ func listModules(root string) ([]string, error) {
 }
 
 // resolveModule returns the module name to operate on: the positional arg if
-// provided, otherwise a single-module selection or an interactive menu.
+// provided (path decorations like `./` or `library/modules/` are stripped),
+// otherwise a single-module selection or an interactive menu.
 func resolveModule(root string, args []string) (string, error) {
 	if len(args) > 0 {
-		name := args[0]
+		name := normalizeModuleArg(args[0])
 		if !pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, name)) {
 			return "", pkg.NewErrorWithFix(
 				i18n.T("cat.module"),

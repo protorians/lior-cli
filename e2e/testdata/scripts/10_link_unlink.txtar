@@ -10,7 +10,7 @@ exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-ma
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
 exec $LIORIAN --no-color connect
-exec $LIORIAN --no-color publish com.example.blog-manager
+exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
 stdout '✓ Published successfully'
 
 # TC-013 — link (remote token read from the manifest, synced by publish).

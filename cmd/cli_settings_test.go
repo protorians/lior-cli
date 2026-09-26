@@ -183,7 +183,7 @@ func TestExecuteHonorsPersistedNoColor(t *testing.T) {
 	defer lipgloss.SetColorProfile(before)
 
 	origArgs := os.Args
-	os.Args = []string{"liorian"}
+	os.Args = []string{"liora"}
 	defer func() { os.Args = origArgs }()
 
 	Execute("dev", "none", "none", "unknown", nil)
@@ -212,7 +212,7 @@ func TestExecuteColorFlagOverridesPersistedNoColor(t *testing.T) {
 	defer lipgloss.SetColorProfile(before)
 
 	origArgs := os.Args
-	os.Args = []string{"liorian", "--color"}
+	os.Args = []string{"liora", "--color"}
 	defer func() {
 		os.Args = origArgs
 		resetRootFlags()
@@ -238,7 +238,7 @@ func TestExecutePersistsFlags(t *testing.T) {
 	defer lipgloss.SetColorProfile(before)
 
 	origArgs := os.Args
-	os.Args = []string{"liorian", "--lang", "fr-FR", "--no-color", "--verbose"}
+	os.Args = []string{"liora", "--lang", "fr-FR", "--no-color", "--verbose"}
 	defer func() {
 		os.Args = origArgs
 		flagLang, flagNoColor, flagVerbose = "", false, false

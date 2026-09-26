@@ -3,10 +3,12 @@ package store
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/protorians/lior-cli/internal/auth"
@@ -56,6 +58,54 @@ func itoa(i int) string {
 
 func testClient(serverURL string) *Client {
 	return &Client{Connector: &auth.Connector{Client: pkg.NewClient(serverURL)}}
+}
+
+func TestGetMyAccount(t *testing.T) {
+	var gotPath, gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotAuth = r.URL.Path, r.Header.Get("Authorization")
+		raiton(w, http.StatusOK, `{"id":"acc-42","slug":"protorians","name":"Protorians"}`)
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	client.SetToken("test-token")
+
+	account, err := client.GetMyAccount(t.Context())
+	if err != nil {
+		t.Fatalf("GetMyAccount: %v", err)
+	}
+	if account.ID != "acc-42" || account.Slug != "protorians" || account.Name != "Protorians" {
+		t.Errorf("compte incorrect: %+v", account)
+	}
+	if gotPath != "/api/developer-store/accounts/me" {
+		t.Errorf("chemin = %q, want /api/developer-store/accounts/me", gotPath)
+	}
+	if gotAuth != "Bearer test-token" {
+		t.Errorf("Authorization = %q, want Bearer test-token", gotAuth)
+	}
+}
+
+func TestGetMyAccountWithoutID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raiton(w, http.StatusOK, `{"slug":"protorians","name":"Protorians"}`)
+	}))
+	defer server.Close()
+
+	if _, err := testClient(server.URL).GetMyAccount(t.Context()); err == nil {
+		t.Error("GetMyAccount doit échouer quand la réponse ne porte aucun id")
+	}
+}
+
+func TestGetMyAccountAuthError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raitonError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentification requise")
+	}))
+	defer server.Close()
+
+	if _, err := testClient(server.URL).GetMyAccount(t.Context()); err == nil {
+		t.Error("GetMyAccount doit échouer sans token valide")
+	}
 }
 
 func TestListModulesBareArray(t *testing.T) {
@@ -152,7 +202,7 @@ func TestGetModuleNotFound(t *testing.T) {
 }
 
 func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "test-module-0.1.0.SenMod")
+	archivePath := filepath.Join(t.TempDir(), "test-module-0.1.0.liozip")
 	if err := os.WriteFile(archivePath, []byte("fake-zip-content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -175,11 +225,11 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 				http.Error(w, "bad body", http.StatusBadRequest)
 				return
 			}
-			if body["slug"] != "test-module" || body["type"] != "WEB_APP_REMOTE" {
+			if body["slug"] != "test-module" || body["type"] != "WEB_APP_LOCAL" {
 				http.Error(w, "create body mismatch: "+body["type"]+"/"+body["slug"], http.StatusBadRequest)
 				return
 			}
-			raiton(w, http.StatusCreated, `{"id":"prod-new","accountId":"dev1","name":"Test Module","slug":"test-module","type":"WEB_APP_REMOTE","primaryCategory":"SYSTEM"}`)
+			raiton(w, http.StatusCreated, `{"id":"prod-new","accountId":"dev1","name":"Test Module","slug":"test-module","type":"WEB_APP_LOCAL","primaryCategory":"SYSTEM"}`)
 		case "/api/developer-store/modules/prod-new/versions":
 			calls = append(calls, "version")
 			var body createVersionRequest
@@ -192,19 +242,29 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 				return
 			}
 			raiton(w, http.StatusCreated, `{"id":"version-1","moduleProductId":"prod-new","versionString":"0.1.0","buildNumber":1,"status":"DRAFT"}`)
-		case "/api/developer-store/modules/prod-new/versions/version-1/artifact":
+		case "/api/developer-store/modules/prod-new/versions/version-1/artifact/upload":
 			calls = append(calls, "artifact")
-			var body declareArtifactRequest
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				http.Error(w, "bad body", http.StatusBadRequest)
+			if err := r.ParseMultipartForm(1024 * 1024); err != nil {
+				http.Error(w, "invalid multipart request", http.StatusBadRequest)
 				return
 			}
-			if body.Checksum == "" || body.Signature != "" || body.SizeBytes != int64(len("fake-zip-content")) {
+			if r.FormValue("checksum") == "" || r.FormValue("signature") != "" {
 				http.Error(w, "artifact body mismatch", http.StatusBadRequest)
 				return
 			}
+			file, _, err := r.FormFile("file")
+			if err != nil {
+				http.Error(w, "archive missing", http.StatusBadRequest)
+				return
+			}
+			defer file.Close()
+			contents, _ := io.ReadAll(file)
+			if string(contents) != "fake-zip-content" {
+				http.Error(w, "archive content mismatch", http.StatusBadRequest)
+				return
+			}
 			var m module.Manifest
-			if err := json.Unmarshal(body.Manifest, &m); err != nil {
+			if err := json.Unmarshal([]byte(r.FormValue("manifest")), &m); err != nil {
 				http.Error(w, "manifest JSON invalid", http.StatusBadRequest)
 				return
 			}
@@ -212,7 +272,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 				http.Error(w, "manifest id = "+m.ID, http.StatusBadRequest)
 				return
 			}
-			raiton(w, http.StatusCreated, `{"url":"https://cdn.liorian.dev/artifacts/prod-new/version-1.SenMod","key":"prod-new/version-1","checksum":"`+body.Checksum+`","sizeBytes":17}`)
+			raiton(w, http.StatusCreated, `{"url":"https://cdn.liorian.dev/artifacts/prod-new/version-1.liozip","key":"prod-new/version-1","checksum":"`+r.FormValue("checksum")+`","sizeBytes":17}`)
 		default:
 			http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
 		}
@@ -234,7 +294,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 	if resp.Version != "0.1.0" {
 		t.Errorf("Version = %q, want 0.1.0", resp.Version)
 	}
-	if resp.URL != "https://cdn.liorian.dev/artifacts/prod-new/version-1.SenMod" {
+	if resp.URL != "https://cdn.liorian.dev/artifacts/prod-new/version-1.liozip" {
 		t.Errorf("URL = %q, want CDN URL", resp.URL)
 	}
 	if len(calls) != 3 {
@@ -255,7 +315,7 @@ func TestPublishReusesLinkedProduct(t *testing.T) {
 			raiton(w, http.StatusOK, `{"id":"linked-id","accountId":"dev1","name":"Linked","slug":"m","type":"WEB_APP_REMOTE","primaryCategory":"SYSTEM"}`)
 		case r.Method == http.MethodPost && r.URL.Path == "/api/developer-store/modules/linked-id/versions":
 			raiton(w, http.StatusOK, `{"id":"v1","moduleProductId":"linked-id","versionString":"0.1.0","buildNumber":1,"status":"DRAFT"}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/api/developer-store/modules/linked-id/versions/v1/artifact":
+		case r.Method == http.MethodPost && r.URL.Path == "/api/developer-store/modules/linked-id/versions/v1/artifact/upload":
 			raiton(w, http.StatusOK, `{"url":"https://cdn.dev/linked-id/v1","sizeBytes":1}`)
 			publishedOn = true
 		default:
@@ -326,6 +386,30 @@ func TestPublishServerError(t *testing.T) {
 	}
 }
 
+// Une 404 sur la route de collection signifie que l'URL de base résolue
+// n'expose pas le developer store : l'erreur doit le signaler (et citer l'URL)
+// plutôt que d'afficher un « Not Found » trompeur.
+func TestPublishMissingStoreRoute(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raiton(w, http.StatusNotFound, `null`)
+	}))
+	defer server.Close()
+
+	client := testClient(server.URL)
+	manifest := module.NewManifest("mod", "")
+	manifest.Token = ""
+	_, err := client.Publish(t.Context(), filepath.Join(t.TempDir(), "mod.SenMod"), &manifest)
+	if err == nil {
+		t.Fatal("Publish doit échouer quand le developer store est absent")
+	}
+	if !errors.Is(err, ErrNoStoreRoute) {
+		t.Fatalf("erreur = %v, want ErrNoStoreRoute", err)
+	}
+	if !strings.Contains(err.Error(), server.URL) {
+		t.Errorf("l'erreur doit citer l'URL de base utilisée, got %q", err.Error())
+	}
+}
+
 func TestCreateProductRequestCarriesMetadata(t *testing.T) {
 	m := module.NewManifest("blog", "Gestion de blog")
 	m.Category = "FINANCE"
@@ -337,7 +421,7 @@ func TestCreateProductRequestCarriesMetadata(t *testing.T) {
 	want := map[string]string{
 		"name":              "Blog",
 		"slug":              "blog",
-		"type":              ModuleTypeWebAppRemote,
+		"type":              ModuleTypeWebAppLocal,
 		"primaryCategory":   "FINANCE",
 		"secondaryCategory": "DATA",
 		"description":       "Gestion de blog",

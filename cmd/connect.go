@@ -16,7 +16,7 @@ import (
 
 var connectCmd = &cobra.Command{
 	Use:   "connect",
-	Short: "Connect to Liorian Connect",
+	Short: "Connect to Liora Connect",
 	Long: `Authenticates the developer with their liorian-connect account
 (email + password, MFA supported) and stores the credentials securely
 (system keychain).`,

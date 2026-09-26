@@ -10,7 +10,8 @@ const https = require("https");
 const http = require("http");
 
 const REPO = "protorians/lior-cli";
-const BINARY_NAME = "liorian";
+const BINARY_NAME = "liora";
+const LEGACY_BINARY_NAME = "liorian";
 const ARCHIVE_PREFIX = "lior-cli";
 
 function getOsToken() {
@@ -112,7 +113,7 @@ async function main() {
   const version = getVersion();
   const platform = getPlatform();
   const binDir = path.join(__dirname, "..", "bin");
-  const tmpDir = path.join(os.tmpdir(), `lorian-install-${Date.now()}`);
+  const tmpDir = path.join(os.tmpdir(), `liora-install-${Date.now()}`);
 
   console.log(`Installing @liorian/cli ${version} for ${platform.triple}...`);
 
@@ -151,6 +152,13 @@ async function main() {
 
     if (platform.platform !== "win32") {
       fs.chmodSync(targetBinary, 0o755);
+    }
+
+    // Legacy alias: keep `liorian` working for existing scripts/CI.
+    const legacyBinary = path.join(binDir, `${LEGACY_BINARY_NAME}${binaryExt}`);
+    fs.copyFileSync(targetBinary, legacyBinary);
+    if (platform.platform !== "win32") {
+      fs.chmodSync(legacyBinary, 0o755);
     }
 
     console.log(`@liorian/cli ${version} installed successfully.`);

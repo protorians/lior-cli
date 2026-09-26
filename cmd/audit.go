@@ -42,7 +42,7 @@ var auditCmd = &cobra.Command{
 	Use:   "audit [module]",
 	Short: "Audit a module's conformance",
 	Long: `Audits the conformance of one (or all) module(s) against the
-Liorian rules: Clean Architecture, manifest.json and index.tsx.
+Liora rules: Clean Architecture, manifest.json and index.tsx.
 
 Without an argument, all modules in library/modules/ are audited.`,
 	Args: cobra.MaximumNArgs(1),
