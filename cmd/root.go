@@ -116,6 +116,7 @@ func init() {
 		packCmd,
 		signCmd,
 		publishCmd,
+		localInstallCmd,
 		linkCmd,
 		unlinkCmd,
 		debugCmd,

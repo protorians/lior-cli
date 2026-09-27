@@ -58,9 +58,22 @@ func runToolchainGate(root string, cfg config.Config, name string) error {
 	return nil
 }
 
-// hasModules reports whether the project has at least one module to check.
+// hasModules reports whether the project has at least one module to check,
+// in the workspace source tree (modules/, D5) or in the legacy installation
+// tree (library/modules/).
 func hasModules(root string) bool {
-	dir := filepath.Join(root, config.ExternalModulesDir)
+	for _, dir := range []string{
+		config.WorkspaceModulesDirPath(root),
+		filepath.Join(root, config.ExternalModulesDir),
+	} {
+		if hasModulesIn(dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasModulesIn(dir string) bool {
 	if !pkg.DirExists(dir) {
 		return false
 	}

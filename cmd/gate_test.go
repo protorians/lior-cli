@@ -65,7 +65,7 @@ func writeGateModule(t *testing.T, root, name, manifest string) {
 	if err := os.WriteFile(filepath.Join(dir, config.ManifestFileName), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, config.ModuleEntryFileName), []byte(gateIndex), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, config.LegacyDeclarationFileName), []byte(gateIndex), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

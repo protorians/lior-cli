@@ -1120,9 +1120,10 @@ func sha256HexBytes(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// buildModuleArchive packs a conformant module (canonical manifest at the
-// root + module tree + page + assets) into a `.liozip` ZIP, mirroring
-// `internal/module/packer.go` (spec TECH-002).
+// buildModuleArchive packs a conformant isolated-runtime module (§4.4:
+// manifest at the root, sources under src/, built payload under artifact/)
+// into a `.liozip` ZIP, mirroring `internal/module/packer.go` (spec
+// TECH-002).
 func buildModuleArchive(name, page, version string) []byte {
 	manifest := map[string]any{
 		"schemaVersion": 1,
@@ -1135,10 +1136,13 @@ func buildModuleArchive(name, page, version string) []byte {
 		"icon":          "PuzzleIcon",
 		"type":          "WEB_APP_LOCAL",
 		"external":      true,
-		"entry":         "index.tsx",
+		"entry":         "entry.tsx",
 		"uri":           "/" + page,
 		"category":      "SYSTEM",
 		"token":         uuid.NewString(),
+		"userScope":     []string{},
+		"backends":      []string{},
+		"artifact":      map[string]any{"dir": "artifact", "bundle": "module.js", "document": "index.html"},
 		"platforms": map[string]any{
 			"web": map[string]any{"supported": true, "modes": []string{"web"}},
 		},
@@ -1157,19 +1161,19 @@ func buildModuleArchive(name, page, version string) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	entries := map[string]string{
-		"manifest.json": string(raw) + "\n",
-		"library/modules/" + name + "/manifest.json": string(raw) + "\n",
-		"library/modules/" + name + "/index.tsx":     "export default function Demo() {\n  return <div>Demo</div>;\n}\n",
-		"src/app/" + page + "/page.tsx":              "export default function Page() { return <div>Page</div>; }\n",
-		"public/assets/" + name + "/README.txt":      "hello from the catalog\n",
+		"manifest.json":       string(raw) + "\n",
+		"src/tsconfig.json":   "{}\n",
+		"src/entry.tsx":       "export function mount(el: HTMLElement): void {}\n\nexport function unmount(): void {}\n",
+		"artifact/module.js":  "console.log(\"marketplace demo\");\n",
+		"artifact/index.html": "<!doctype html><html><body></body></html>\n",
 	}
 	// deterministic order keeps archives stable across runs
 	for _, rel := range []string{
 		"manifest.json",
-		"library/modules/" + name + "/manifest.json",
-		"library/modules/" + name + "/index.tsx",
-		"src/app/" + page + "/page.tsx",
-		"public/assets/" + name + "/README.txt",
+		"src/tsconfig.json",
+		"src/entry.tsx",
+		"artifact/module.js",
+		"artifact/index.html",
 	} {
 		fw, err := zw.Create(rel)
 		if err != nil {

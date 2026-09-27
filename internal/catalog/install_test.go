@@ -36,10 +36,11 @@ func signArchive(data []byte) (sigB64, pubB64 string, err error) {
 		base64.StdEncoding.EncodeToString(pub), nil
 }
 
-// baseEntries returns a conformant module file set: manifest, entry page and
-// assets. badManifest points the entry to a missing file so validation fails.
-// The manifest follows the canonical contract (compatibility, oauth,
-// capabilities, Role:Verbe permissions).
+// baseEntries returns a conformant isolated-runtime module file set (§4.4):
+// the manifest at the archive root, the sources under src/ and the built
+// payload under artifact/. badManifest points the entry to a missing file so
+// validation fails. The manifest follows the canonical contract
+// (compatibility, oauth, capabilities, Role:Verbe permissions, D15 userScope).
 func baseEntries(name, page string, badManifest bool) map[string]string {
 	manifest := map[string]any{
 		"schemaVersion": 1,
@@ -52,10 +53,13 @@ func baseEntries(name, page string, badManifest bool) map[string]string {
 		"icon":          "PuzzleIcon",
 		"type":          "WEB_APP_LOCAL",
 		"external":      true,
-		"entry":         config.ModuleEntryFileName,
+		"entry":         "entry.tsx",
 		"uri":           "/" + page,
 		"category":      "SYSTEM",
 		"token":         pkg.NewUUID(),
+		"userScope":     []string{},
+		"backends":      []string{},
+		"artifact":      map[string]any{"dir": "artifact", "bundle": "module.js", "document": "index.html"},
 		"platforms": map[string]any{
 			"web": map[string]any{"supported": true, "modes": []string{"web"}},
 		},
@@ -77,10 +81,24 @@ func baseEntries(name, page string, badManifest bool) map[string]string {
 		panic(err)
 	}
 	return map[string]string{
-		filepath.Join(config.ExternalModulesDir, name, config.ManifestFileName):    string(raw) + "\n",
-		filepath.Join(config.ExternalModulesDir, name, config.ModuleEntryFileName): "export default function Demo() {\n  return <div>Demo</div>;\n}\n",
-		filepath.Join(config.AppSrcDir, page, "page.tsx"):                          "export default function Page() { return <div>Page</div>; }\n",
-		filepath.Join(config.PublicAssetsDir, name, "asset.txt"):                   "hello",
+		config.ManifestFileName:          string(raw) + "\n",
+		"src/tsconfig.json":              "{}\n",
+		"src/entry.tsx":                  "export function mount(el: HTMLElement): void {}\n\nexport function unmount(): void {}\n",
+		"src/presentation/demo.view.tsx": "export function DemoView() {\n  return <div>Demo</div>;\n}\n",
+		"artifact/module.js":             "console.log(\"demo\");\n",
+		"artifact/index.html":            "<!doctype html><html><body></body></html>\n",
+	}
+}
+
+// modernArchiveOrder lists the archive entries in a deterministic order.
+func modernArchiveOrder(page string) []string {
+	return []string{
+		config.ManifestFileName,
+		"src/tsconfig.json",
+		"src/entry.tsx",
+		"src/presentation/demo.view.tsx",
+		"artifact/module.js",
+		"artifact/index.html",
 	}
 }
 
@@ -99,24 +117,13 @@ func buildArchive(t *testing.T, name, page string, opts archiveOpts) []byte {
 		entries[opts.traverse] = "evil"
 	}
 	if opts.noManifest {
-		for k := range entries {
-			if strings.HasPrefix(k, config.ExternalModulesDir) {
-				delete(entries, k)
-			}
-		}
+		delete(entries, config.ManifestFileName)
 	}
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 	// deterministic order keeps test archives reproducible
-	ordered := []string{
-		filepath.Join(config.ExternalModulesDir, name, config.ManifestFileName),
-		filepath.Join(config.ExternalModulesDir, name, config.ModuleEntryFileName),
-		filepath.Join(config.AppSrcDir, page, "page.tsx"),
-		filepath.Join(config.PublicAssetsDir, name, "asset.txt"),
-		opts.traverse,
-	}
-	for _, rel := range ordered {
+	for _, rel := range modernArchiveOrder(page) {
 		content, ok := entries[rel]
 		if !ok {
 			continue
@@ -127,6 +134,17 @@ func buildArchive(t *testing.T, name, page string, opts archiveOpts) []byte {
 		}
 		if _, err := fw.Write([]byte(content)); err != nil {
 			t.Fatal(err)
+		}
+	}
+	if opts.traverse != "" {
+		if content, ok := entries[opts.traverse]; ok {
+			fw, err := zw.Create(opts.traverse)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fw.Write([]byte(content)); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	if err := zw.Close(); err != nil {
@@ -242,19 +260,26 @@ func TestInstallHappyPath(t *testing.T) {
 	if res.SignatureStatus != SignatureVerified {
 		t.Errorf("SignatureStatus = %q, want verified", res.SignatureStatus)
 	}
-	if res.Files != 4 {
-		t.Errorf("Files = %d, want 4", res.Files)
+	if res.Files != 6 {
+		t.Errorf("Files = %d, want 6", res.Files)
 	}
 
+	// D11: the archive lands multi-version under library/modules/<id>/<version>/
+	// and the current pointer moves to the installed version.
+	versionDir := config.InstalledModuleVersionDir(root, testName, "1.2.3")
 	for _, rel := range []string{
-		filepath.Join(config.ExternalModulesDir, testName, config.ManifestFileName),
-		filepath.Join(config.ExternalModulesDir, testName, config.ModuleEntryFileName),
-		filepath.Join(config.AppSrcDir, testPage, "page.tsx"),
-		filepath.Join(config.PublicAssetsDir, testName, "asset.txt"),
+		config.ManifestFileName,
+		"src/entry.tsx",
+		"src/presentation/demo.view.tsx",
+		"artifact/module.js",
+		"artifact/index.html",
 	} {
-		if !pkg.FileExists(filepath.Join(root, rel)) {
-			t.Errorf("expected %s to be installed", rel)
+		if !pkg.FileExists(filepath.Join(versionDir, rel)) {
+			t.Errorf("expected %s to be installed", filepath.Join(config.ExternalModulesDir, testName, "1.2.3", rel))
 		}
+	}
+	if got := config.ReadCurrentPointer(root, testName); got != "1.2.3" {
+		t.Errorf("current pointer = %q, want 1.2.3", got)
 	}
 }
 
@@ -301,12 +326,17 @@ func TestInstallAlreadyInstalled(t *testing.T) {
 	srv := newInstallServer(t, []catalogModuleFile{{name: testName, data: data, checksum: sha256Hex(data)}})
 	root := t.TempDir()
 
+	// A flat legacy installation (manifest.json directly in
+	// library/modules/<name>) is only replaced on demand.
 	moduleDir := config.ModuleDir(root, testName)
 	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	marker := filepath.Join(moduleDir, "marker.txt")
 	if err := os.WriteFile(marker, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, config.ManifestFileName), []byte("{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -325,6 +355,37 @@ func TestInstallAlreadyInstalled(t *testing.T) {
 	}
 }
 
+// A multi-version installation root (one directory per version + current
+// pointer) never blocks a new install: the version lands alongside.
+func TestInstallMultiVersionCoexists(t *testing.T) {
+	data := buildArchive(t, testName, testPage, archiveOpts{})
+	sig, pub, err := signArchive(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := newInstallServer(t, []catalogModuleFile{{
+		name: testName, data: data, checksum: sha256Hex(data), signature: sig, publicKey: pub,
+	}})
+	root := t.TempDir()
+
+	if err := os.MkdirAll(config.InstalledModuleVersionDir(root, testName, "1.0.0"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.WriteCurrentPointer(root, testName, "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := srv.install(root, testName, false); err != nil {
+		t.Fatalf("Install() error = %v", err)
+	}
+	if got := config.ReadCurrentPointer(root, testName); got != "1.2.3" {
+		t.Errorf("current pointer = %q, want 1.2.3", got)
+	}
+	if !pkg.DirExists(config.InstalledModuleVersionDir(root, testName, "1.0.0")) {
+		t.Error("the previous version directory must survive the new install")
+	}
+}
+
 func TestInstallForceReplaces(t *testing.T) {
 	data := buildArchive(t, testName, testPage, archiveOpts{})
 	sig, pub, err := signArchive(data)
@@ -336,11 +397,12 @@ func TestInstallForceReplaces(t *testing.T) {
 	}})
 	root := t.TempDir()
 
-	moduleDir := config.ModuleDir(root, testName)
-	if err := os.MkdirAll(moduleDir, 0o755); err != nil {
-		t.Fatal(err)
+	if _, err := srv.install(root, testName, false); err != nil {
+		t.Fatalf("Install() error = %v", err)
 	}
-	marker := filepath.Join(moduleDir, "marker.txt")
+	// A stale file inside the version directory must be wiped by --force.
+	versionDir := config.InstalledModuleVersionDir(root, testName, "1.2.3")
+	marker := filepath.Join(versionDir, "marker.txt")
 	if err := os.WriteFile(marker, []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +413,7 @@ func TestInstallForceReplaces(t *testing.T) {
 	if pkg.FileExists(marker) {
 		t.Error("marker should have been replaced by the force install")
 	}
-	if !pkg.FileExists(filepath.Join(moduleDir, config.ManifestFileName)) {
+	if !pkg.FileExists(filepath.Join(versionDir, config.ManifestFileName)) {
 		t.Error("manifest should be installed after a force install")
 	}
 }
@@ -606,10 +668,17 @@ func TestEntryAudit(t *testing.T) {
 			t.Errorf("auditEntry(%q) = nil, want an error (executable)", raw)
 		}
 	}
+	for _, raw := range []string{"src/app/blog/page.tsx", "public/assets/x/a.txt"} {
+		f := &zip.File{FileHeader: zip.FileHeader{Name: raw}}
+		if _, err := auditEntry(f); err == nil {
+			t.Errorf("auditEntry(%q) = nil, want an error (legacy layout refused)", raw)
+		}
+	}
 	for raw, want := range map[string]string{
 		config.ExternalModulesDir + "/com.example.x/manifest.json": config.ExternalModulesDir + "/com.example.x/manifest.json",
-		"src/app/blog/page.tsx": "src/app/blog/page.tsx",
-		"manifest.json":         "manifest.json",
+		"artifact/module.js": "artifact/module.js",
+		"src/entry.tsx":      "src/entry.tsx",
+		"manifest.json":      "manifest.json",
 	} {
 		f := &zip.File{FileHeader: zip.FileHeader{Name: raw}}
 		got, err := auditEntry(f)
@@ -640,7 +709,8 @@ func TestEntrySanitization(t *testing.T) {
 		allowed bool
 	}{
 		{config.ExternalModulesDir + "/com.example.x/manifest.json", config.ExternalModulesDir + "/com.example.x/manifest.json", true},
-		{"src/app/blog/page.tsx", "src/app/blog/page.tsx", true},
+		{"artifact/module.js", "artifact/module.js", true},
+		{"src/entry.tsx", "src/entry.tsx", true},
 		{"../evil.txt", "evil.txt", false},
 		{"../../etc/passwd", "etc/passwd", false},
 		{"/etc/passwd", "etc/passwd", false},

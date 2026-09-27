@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/protorians/lior-cli/internal/auth"
@@ -126,7 +127,13 @@ func runPack(cmd *cobra.Command, args []string) error {
 // returns the signer fingerprint, an empty string when no signing key exists
 // (informational skip, not an error), and an error on real failures.
 func signPackedArchive(root, name string, result *module.PackResult) (string, error) {
-	manifest, err := module.LoadManifest(config.ManifestPath(root, name))
+	// The module may live in the workspace source tree (modules/<id>, D5) or
+	// in the legacy installation tree: resolve the manifest accordingly.
+	manifestPath := config.ManifestPath(root, name)
+	if workspace := filepath.Join(config.WorkspaceModuleDir(root, name), config.ManifestFileName); pkg.FileExists(workspace) {
+		manifestPath = workspace
+	}
+	manifest, err := module.LoadManifest(manifestPath)
 	if err != nil {
 		return "", err
 	}

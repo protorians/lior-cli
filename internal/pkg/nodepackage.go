@@ -15,6 +15,14 @@ import (
 type NodePackage struct {
 	Dependencies    map[string]string `json:"dependencies"`
 	DevDependencies map[string]string `json:"devDependencies"`
+	// Scripts holds the npm scripts of the package ("build", "typecheck", …).
+	Scripts map[string]string `json:"scripts"`
+}
+
+// HasScript reports whether the package declares the given npm script.
+func (p *NodePackage) HasScript(name string) bool {
+	_, ok := p.Scripts[name]
+	return ok
 }
 
 // LoadNodePackage reads and decodes a `package.json` file. A missing or

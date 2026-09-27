@@ -51,8 +51,9 @@ func (ar *AuditResult) TotalWarnings() int {
 	return n
 }
 
-// AuditModules audits one or all modules. When name is empty, all modules
-// in library/modules/ are audited.
+// AuditModules audits one or all modules. When name is empty, all modules in
+// the workspace source tree (modules/, D5) and in library/modules/ are
+// audited.
 func (a *Auditor) AuditModules(name string) (*AuditResult, error) {
 	if name != "" {
 		return a.auditSingle(name)
@@ -61,9 +62,10 @@ func (a *Auditor) AuditModules(name string) (*AuditResult, error) {
 }
 
 func (a *Auditor) auditSingle(name string) (*AuditResult, error) {
-	moduleDir := filepath.Join(a.Root, config.ExternalModulesDir, name)
-	if !pkg.DirExists(moduleDir) {
-		return nil, errors.New(i18n.Tf("val.module_not_found", name, config.ExternalModulesDir))
+	if !pkg.DirExists(config.WorkspaceModuleDir(a.Root, name)) &&
+		!pkg.DirExists(config.ModuleDir(a.Root, name)) {
+		return nil, errors.New(i18n.Tf("val.module_not_found", name,
+			config.WorkspaceModulesDir+"|"+config.ExternalModulesDir))
 	}
 	res, err := a.auditModule(name)
 	if err != nil {
@@ -73,20 +75,45 @@ func (a *Auditor) auditSingle(name string) (*AuditResult, error) {
 }
 
 func (a *Auditor) auditAll() (*AuditResult, error) {
+	result := &AuditResult{}
+	// Workspace source tree (D5): the first-party modules live in
+	// modules/<id>/ at the project root.
+	if wsDir := config.WorkspaceModulesDirPath(a.Root); pkg.DirExists(wsDir) {
+		entries, err := os.ReadDir(wsDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read %s: %w", config.WorkspaceModulesDir, err)
+		}
+		for _, e := range entries {
+			if !e.IsDir() || !pkg.FileExists(filepath.Join(wsDir, e.Name(), config.ManifestFileName)) {
+				continue
+			}
+			res, err := a.auditModule(e.Name())
+			if err != nil {
+				return nil, err
+			}
+			result.Modules = append(result.Modules, *res)
+		}
+	}
+
+	// Legacy installation tree: modules installed flat in
+	// library/modules/<name>/ (until the phase-8 migration).
 	dir := filepath.Join(a.Root, config.ExternalModulesDir)
 	if !pkg.DirExists(dir) {
+		if len(result.Modules) > 0 {
+			return result, nil
+		}
 		return nil, errors.New(i18n.Tf("modules.error.dir", config.ExternalModulesDir))
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %s: %w", config.ExternalModulesDir, err)
 	}
-
-	result := &AuditResult{}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
+		// multi-version installation roots hold one directory per version
+		// plus the `current` pointer — no manifest.json directly inside.
 		if !pkg.FileExists(filepath.Join(dir, e.Name(), config.ManifestFileName)) {
 			continue
 		}
@@ -99,7 +126,9 @@ func (a *Auditor) auditAll() (*AuditResult, error) {
 	return result, nil
 }
 
-// auditModule runs the full audit pipeline on a single module.
+// auditModule runs the full audit pipeline on a single module. The module is
+// resolved from the workspace source tree first, then from the legacy
+// installation tree.
 func (a *Auditor) auditModule(name string) (*module.Result, error) {
 	v := &module.Validator{Root: a.Root}
 	res, err := v.ValidateModule(name)
@@ -107,12 +136,15 @@ func (a *Auditor) auditModule(name string) (*module.Result, error) {
 		return nil, err
 	}
 
-	moduleDir := filepath.Join(a.Root, config.ExternalModulesDir, name)
-	indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
+	moduleDir := config.WorkspaceModuleDir(a.Root, name)
+	if !pkg.DirExists(moduleDir) {
+		moduleDir = config.ModuleDir(a.Root, name)
+	}
+	indexPath := filepath.Join(moduleDir, config.LegacyDeclarationFileName)
 
 	a.auditArchitecture(moduleDir, indexPath, res)
-	a.auditDependencies(name, res)
-	a.auditAssets(name, res)
+	a.auditDependencies(name, moduleDir, res)
+	a.auditAssets(moduleDir, res)
 
 	return res, nil
 }
@@ -204,8 +236,9 @@ func (a *Auditor) auditServicesHaveNoJSX(moduleDir, dir string, res *module.Resu
 }
 
 // auditDependencies checks that listed requirements and npm deps exist.
-func (a *Auditor) auditDependencies(name string, res *module.Result) {
-	manifest, err := module.LoadManifest(config.ManifestPath(a.Root, name))
+func (a *Auditor) auditDependencies(name, moduleDir string, res *module.Result) {
+	manifestPath := filepath.Join(moduleDir, config.ManifestFileName)
+	manifest, err := module.LoadManifest(manifestPath)
 	if err != nil {
 		return
 	}
@@ -221,20 +254,26 @@ func (a *Auditor) auditDependencies(name string, res *module.Result) {
 	// are installed (spec rule « Toutes les dépendances npm sont installées »).
 	// The manifest no longer carries `dependencies`/`devDependencies`: the
 	// module's `package.json` is the single source of truth.
-	moduleDir := filepath.Join(a.Root, config.ExternalModulesDir, name)
 	nodePkg := pkg.LoadNodePackage(filepath.Join(moduleDir, "package.json"))
 	for _, dep := range nodePkg.RuntimeDependencyNames() {
-		depDir := filepath.Join(a.Root, "node_modules", filepath.FromSlash(dep))
-		addLevel(res, "dependencies", dep, pkg.DirExists(depDir),
+		installed := pkg.DirExists(filepath.Join(a.Root, "node_modules", filepath.FromSlash(dep))) ||
+			pkg.DirExists(filepath.Join(moduleDir, "node_modules", filepath.FromSlash(dep)))
+		addLevel(res, "dependencies", dep, installed,
 			fmt.Sprintf("dependency %q installed", dep), module.LevelError)
 	}
 }
 
-// auditAssets checks that assets referenced by the module exist.
-func (a *Auditor) auditAssets(name string, res *module.Result) {
-	assetsDir := config.ModuleAssetsDir(a.Root, name)
-	if pkg.DirExists(assetsDir) {
-		// Assets directory exists — check for files
+// auditAssets checks that assets referenced by the module exist. Workspace
+// modules carry their assets inside the module directory (assets/ →
+// artifact/assets/ at build time, §8.1).
+func (a *Auditor) auditAssets(moduleDir string, res *module.Result) {
+	for _, assetsDir := range []string{
+		filepath.Join(moduleDir, "assets"),
+		config.ModuleAssetsDir(a.Root, filepath.Base(moduleDir)),
+	} {
+		if !pkg.DirExists(assetsDir) {
+			continue
+		}
 		hasContent := false
 		_ = filepath.Walk(assetsDir, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() {

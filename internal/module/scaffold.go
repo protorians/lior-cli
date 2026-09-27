@@ -68,7 +68,7 @@ func (c *Creator) pageMockupSource() string {
 func IsModuleMockup(dir string) bool {
 	return pkg.DirExists(dir) &&
 		pkg.FileExists(filepath.Join(dir, config.ManifestFileName)) &&
-		pkg.FileExists(filepath.Join(dir, config.ModuleEntryFileName))
+		pkg.FileExists(filepath.Join(dir, config.LegacyDeclarationFileName))
 }
 
 // scaffoldFromMockup copies a reference module directory into `moduleDir` and
@@ -263,7 +263,7 @@ func patchManifestIdentity(moduleDir string, spec ModuleSpec) error {
 // patchDeclarationIdentity rewrites the module declaration (index.tsx) identity
 // and menu fields of the scaffolded module.
 func patchDeclarationIdentity(moduleDir string, spec ModuleSpec) error {
-	indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
+	indexPath := filepath.Join(moduleDir, config.LegacyDeclarationFileName)
 	data, err := os.ReadFile(indexPath)
 	if err != nil {
 		return fmt.Errorf("failed to read scaffolded declaration: %w", err)
@@ -369,7 +369,7 @@ func patchJSFieldExisting(text, field, value string) string {
 // scaffoldPage generates `src/app/<url>/page.tsx` from a page mockup file.
 // It returns the created page path ("" when the mockup is unavailable).
 func scaffoldPage(root, moduleDir string, spec ModuleSpec, pageMockup string) string {
-	uri := declaredURI(filepath.Join(moduleDir, config.ModuleEntryFileName))
+	uri := declaredURI(filepath.Join(moduleDir, config.LegacyDeclarationFileName))
 	if uri == "" {
 		return ""
 	}
@@ -384,7 +384,7 @@ func scaffoldPage(root, moduleDir string, spec ModuleSpec, pageMockup string) st
 // scaffoldEmbeddedPage generates `src/app/<url>/page.tsx` from the embedded
 // page mockup.
 func scaffoldEmbeddedPage(root, moduleDir string, spec ModuleSpec) string {
-	uri := declaredURI(filepath.Join(moduleDir, config.ModuleEntryFileName))
+	uri := declaredURI(filepath.Join(moduleDir, config.LegacyDeclarationFileName))
 	if uri == "" {
 		return ""
 	}

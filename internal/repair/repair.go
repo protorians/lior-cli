@@ -486,12 +486,18 @@ func (r *Repairer) applyFinding(m *module.Manifest, moduleDir, name string, f mo
 			if isConfiguration(m) {
 				return r.applyConfigurationEntry(m, moduleDir, name, act, f)
 			}
-			if pkg.FileExists(filepath.Join(moduleDir, config.ModuleEntryFileName)) {
+			// The runtime entry (entry.tsx, D6) wins; the legacy declaration
+			// (index.tsx) is the fallback for pre-isolated-runtime modules.
+			switch {
+			case pkg.FileExists(filepath.Join(moduleDir, config.ModuleEntryFileName)):
 				m.Entry = config.ModuleEntryFileName
-				act.Detail = fmt.Sprintf("set entry to %q", m.Entry)
-				return act, nil, true
+			case pkg.FileExists(filepath.Join(moduleDir, config.LegacyDeclarationFileName)):
+				m.Entry = config.LegacyDeclarationFileName
+			default:
+				return act, instructionForFinding(f, name), false
 			}
-			return act, instructionForFinding(f, name), false
+			act.Detail = fmt.Sprintf("set entry to %q", m.Entry)
+			return act, nil, true
 		case "permissions":
 			return r.applyPermissions(m, name, act, f, mf)
 		case "optionalRequirements":

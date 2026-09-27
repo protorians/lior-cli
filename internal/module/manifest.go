@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/pkg"
 )
@@ -27,32 +28,47 @@ import (
 // `apiScopes`, boolean-object `capabilities`, `INTERNAL` / `EXTERNAL` types)
 // are accepted on read and normalized; Marshal emits the canonical form.
 type Manifest struct {
-	Schema               string               `json:"$schema,omitempty"`
-	SchemaVersion        int                  `json:"schemaVersion"`
-	ID                   string               `json:"id"`
-	Domain               string               `json:"domain"`
-	Key                  string               `json:"key"`
-	Name                 string               `json:"name"`
-	Description          string               `json:"description"`
-	Version              string               `json:"version"`
-	Icon                 string               `json:"icon"`
-	Logo                 *string              `json:"logo,omitempty"`
-	Banner               *string              `json:"banner,omitempty"`
-	Type                 string               `json:"type"`
-	External             bool                 `json:"external,omitempty"`
-	Entry                string               `json:"entry"`
-	URI                  string               `json:"uri"`
-	Category             string               `json:"category,omitempty"`
-	Token                string               `json:"token"`
-	Publisher            Publisher            `json:"publisher"`
-	Platforms            Platforms            `json:"platforms"`
-	Compatibility        *ModuleCompatibility `json:"compatibility,omitempty"`
-	ManagerCompat        Compatibility        `json:"managerCompatibility,omitempty"`
-	APICompat            Compatibility        `json:"apiCompatibility,omitempty"`
-	Permissions          []string             `json:"permissions"`
-	OAuth                *ModuleOAuth         `json:"oauth,omitempty"`
-	APIScopes            []string             `json:"apiScopes,omitempty"`
-	Capabilities         Capabilities         `json:"capabilities"`
+	Schema        string               `json:"$schema,omitempty"`
+	SchemaVersion int                  `json:"schemaVersion"`
+	ID            string               `json:"id"`
+	Domain        string               `json:"domain"`
+	Key           string               `json:"key"`
+	Name          string               `json:"name"`
+	Description   string               `json:"description"`
+	Version       string               `json:"version"`
+	Icon          string               `json:"icon"`
+	Logo          *string              `json:"logo,omitempty"`
+	Banner        *string              `json:"banner,omitempty"`
+	Type          string               `json:"type"`
+	External      bool                 `json:"external,omitempty"`
+	Entry         string               `json:"entry"`
+	URI           string               `json:"uri"`
+	Category      string               `json:"category,omitempty"`
+	Token         string               `json:"token"`
+	Publisher     Publisher            `json:"publisher"`
+	Platforms     Platforms            `json:"platforms"`
+	Compatibility *ModuleCompatibility `json:"compatibility,omitempty"`
+	ManagerCompat Compatibility        `json:"managerCompatibility,omitempty"`
+	APICompat     Compatibility        `json:"apiCompatibility,omitempty"`
+	Permissions   []string             `json:"permissions"`
+	// UserScope declares the user-data permissions a module needs (D15,
+	// spec module-isolated-runtime.md §6.10): the consent an end user must
+	// grant before the module mounts. Mandatory — `[]` (no user data) is
+	// the explicit way to declare a module that reads nothing. Same grammar
+	// as `permissions` (`Role:Verbe`), validated at pack time.
+	UserScope []string `json:"userScope,omitempty"`
+	// Backends is the tier-1 egress declaration (D9, §6.2): the third-party
+	// backends a module may reach through the api-core gateway. The
+	// operator's master list (tier 2) decides separately; the two must
+	// match for an egress call to pass.
+	Backends     []BackendDeclaration `json:"backends,omitempty"`
+	OAuth        *ModuleOAuth         `json:"oauth,omitempty"`
+	APIScopes    []string             `json:"apiScopes,omitempty"`
+	Capabilities Capabilities         `json:"capabilities"`
+	// Artifact declares the executable payload of the module (§4.4): the
+	// build output directory and the bundle/document file names relative to
+	// the module directory. Mandatory for isolated-runtime modules.
+	Artifact             *ArtifactDeclaration `json:"artifact,omitempty"`
 	IsEnabled            bool                 `json:"isEnabled"`
 	IsDefault            bool                 `json:"isDefault"`
 	Requirements         map[string]any       `json:"requirements"`
@@ -130,6 +146,64 @@ type ModuleCompatibility struct {
 // `profile`, `email`, `organizations`, `roles`, `permissions`).
 type ModuleOAuth struct {
 	Scopes []string `json:"scopes"`
+}
+
+// BackendDeclaration is one entry of the tier-1 egress declaration
+// (`manifest.backends[]`, spec module-isolated-runtime.md §6.2). The `key`
+// must match an entry of the operator master list (tier 2, `ModuleEgressBackend`)
+// for a call to pass — a module never auto-authorizes a backend.
+type BackendDeclaration struct {
+	// Key is the stable kebab-case identifier of the backend ("erp-prod").
+	Key string `json:"key"`
+	// URL is the origin + base path of the backend; https is mandatory
+	// (loopback http accepted for development only).
+	URL string `json:"url"`
+	// Scopes lists declarative permissions (`Role:Verbe`, same grammar as
+	// `permissions`).
+	Scopes []string `json:"scopes,omitempty"`
+	// Description is the human-readable purpose shown on the consent screen
+	// (§6.10.5: the approval box lists the declared backends).
+	Description string `json:"description,omitempty"`
+}
+
+// ArtifactDeclaration is the `artifact` section of the manifest (§4.4): where
+// the build writes the executable iframe payload.
+type ArtifactDeclaration struct {
+	// Dir is the build output directory, relative to the module directory
+	// (canonical: `artifact`).
+	Dir string `json:"dir,omitempty"`
+	// Bundle is the self-contained JS bundle file name (canonical:
+	// `module.js`).
+	Bundle string `json:"bundle,omitempty"`
+	// Document is the iframe host document (canonical: `index.html`).
+	Document string `json:"document,omitempty"`
+}
+
+// EffectiveArtifactDir returns the artifact directory of a manifest,
+// defaulting to the canonical `artifact`.
+func (m *Manifest) EffectiveArtifactDir() string {
+	if m.Artifact != nil && strings.TrimSpace(m.Artifact.Dir) != "" {
+		return m.Artifact.Dir
+	}
+	return config.ModuleArtifactDir
+}
+
+// EffectiveArtifactBundle returns the bundle file name of a manifest,
+// defaulting to the canonical `module.js`.
+func (m *Manifest) EffectiveArtifactBundle() string {
+	if m.Artifact != nil && strings.TrimSpace(m.Artifact.Bundle) != "" {
+		return m.Artifact.Bundle
+	}
+	return "module.js"
+}
+
+// EffectiveArtifactDocument returns the host document file name of a
+// manifest, defaulting to the canonical `index.html`.
+func (m *Manifest) EffectiveArtifactDocument() string {
+	if m.Artifact != nil && strings.TrimSpace(m.Artifact.Document) != "" {
+		return m.Artifact.Document
+	}
+	return "index.html"
 }
 
 // Capabilities declares the module capabilities as a list of Tauri permission
@@ -365,7 +439,7 @@ func NewManifest(name, description string) Manifest {
 		Icon:          "PuzzleIcon",
 		Type:          "WEB_APP_LOCAL",
 		External:      true,
-		Entry:         "index.tsx",
+		Entry:         config.ModuleEntryFileName,
 		URI:           "/" + name,
 		Category:      "SYSTEM",
 		Token:         pkg.NewUUID(),
@@ -380,7 +454,15 @@ func NewManifest(name, description string) Manifest {
 			API:   CompatibilityRange{Min: "0.27.0", Max: "0.27.x"},
 		},
 		Permissions: []string{"User:Get", "Editor:Post", "Editor:Put", "Admin:Delete"},
-		OAuth:       &ModuleOAuth{Scopes: []string{"openid", "profile", "email", "organizations"}},
+		// D15: userScope is mandatory — the scaffold starts with an empty
+		// (but declared) scope, so the consent screen has something to show
+		// and the pack validation passes.
+		UserScope: []string{},
+		// D9: no third-party backend by default — a first-party module only
+		// reaches api-core through ctx.api.
+		Backends: []BackendDeclaration{},
+		OAuth:    &ModuleOAuth{Scopes: []string{"openid", "profile", "email", "organizations"}},
+		Artifact: &ArtifactDeclaration{Dir: config.ModuleArtifactDir, Bundle: "module.js", Document: "index.html"},
 		Capabilities: Capabilities{
 			"core:default",
 		},
@@ -551,6 +633,72 @@ func ValidatePermissionCode(code string) error {
 		return nil
 	}
 	return errors.New(i18n.Tf("module.error.permission", code))
+}
+
+// backendKeyRE matches a backend key: kebab-case (spec §6.2).
+var backendKeyRE = kebabNameRE
+
+// backendURLRE captures the pieces of a backend URL that carry SSRF risk:
+// userinfo before the host, and dot segments in the path.
+var (
+	userinfoRE = regexp.MustCompile(`^[a-z][a-z0-9+.-]*://[^/@]+@`)
+	dotSegRE   = regexp.MustCompile(`(?i)(^|/)\.\.(/|$)|%2e%2e`)
+)
+
+// ValidateBackendDeclaration checks one tier-1 egress declaration (§6.2):
+// kebab-case key, https URL (loopback http accepted for development), no
+// userinfo, no dot-segment traversal.
+func ValidateBackendDeclaration(b BackendDeclaration) error {
+	key := strings.TrimSpace(b.Key)
+	if !backendKeyRE.MatchString(key) {
+		return errors.New(i18n.Tf("module.error.backend_key", key))
+	}
+	url := strings.TrimSpace(b.URL)
+	if url == "" {
+		return errors.New(i18n.Tf("module.error.backend_url", key, "empty"))
+	}
+	if !strings.HasPrefix(url, "https://") && !isLoopbackURL(url) {
+		return errors.New(i18n.Tf("module.error.backend_url", key, url))
+	}
+	if userinfoRE.MatchString(url) {
+		return errors.New(i18n.Tf("module.error.backend_userinfo", key))
+	}
+	if dotSegRE.MatchString(url) {
+		return errors.New(i18n.Tf("module.error.backend_traversal", key))
+	}
+	for _, scope := range b.Scopes {
+		if !IsPermissionCode(scope) {
+			return errors.New(i18n.Tf("module.error.backend_scope", key, scope))
+		}
+	}
+	return nil
+}
+
+// isLoopbackURL reports whether u is an http:// URL aimed at the loopback
+// interface — the only http exception, accepted for development backends
+// (§6.7: loopback must still be aligned explicitly in the tier-2 master list).
+func isLoopbackURL(u string) bool {
+	prefixes := []string{
+		"http://127.0.0.1", "http://localhost",
+		"http://[::1]", "http://[::ffff:127.0.0.1]",
+	}
+	for _, p := range prefixes {
+		if strings.HasPrefix(u, p+"/") || strings.HasPrefix(u, p+":") || u == p {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateUserScopeEntry checks one `userScope` entry: the same `Role:Verbe`
+// grammar as `permissions` (D15, §6.10.1). The pack validator rejects an
+// out-of-grammar scope — it is the only place where a module can declare
+// invalid qualifiers without the user seeing them.
+func ValidateUserScopeEntry(scope string) error {
+	if IsPermissionCode(scope) {
+		return nil
+	}
+	return errors.New(i18n.Tf("module.error.user_scope", scope))
 }
 
 // canonicalDomainRE matches the canonical module domain

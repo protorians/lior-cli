@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.25.0] - 2026-09-27
+
+### Added
+- **Runtime isolé des modules — artefacts exécutables et installation locale (phase 2, spec
+  `module-isolated-runtime.md`)** — `liora pack` d'un module workspace (`modules/<id>/`, D5) émet
+  l'archive au contrat artefact : `manifest.json` à la racine, `src/**` (source TS, D4) et
+  `artifact/**` (payload exécutable de l'iframe). Validation bloquante au pack : entrée
+  TypeScript obligatoire (D6), `tsc --noEmit` vert (via le script `typecheck` du module ou
+  `tsc`/`bun`), `artifact/module.js` + `artifact/index.html` présents et non vides, plafonds de
+  taille, aucun import `next/*` (D1) ni alias `@/` (§7.7), aucun `fetch`/`XMLHttpRequest`/
+  `WebSocket` dans le bundle (D16), `userScope` obligatoire et conforme à la grammaire
+  `Role:Verbe` (D15), déclarations `backends` conformes au schéma (D9 : clé kebab-case, URL
+  https sauf loopback, ni userinfo ni traversée). Le manifeste porte désormais les sections
+  typées `userScope`, `backends` et `artifact` (fin du passage silencieux par `Extra`).
+  `allowedEntry` accepte `src/**` et `artifact/**` et **refuse** le layout historique
+  `src/app/**` / `public/assets/**` à l'installation. Les archives s'installent **multi-version**
+  dans `library/modules/<id>/<version>/` avec un pointeur de version active `current` (D11) —
+  prérequis du rollback local. Nouvelle commande **`liora install <archive.liozip>`**
+  (`internal/localinstall`) : installation d'un fichier local sans marketplace ni api-core, même
+  moteur fail-closed, sidecar `.sig` vérifié contre le trousseau quand il existe. La résolution
+  de modules (`liora pack`, audit, gate, sélecteur) reconnaît l'arbre workspace `modules/*` et
+  les installations multi-version ; `modules/hello-world` sert de template de référence.
+## [v0.24.0] - 2026-09-26
+
 ### Added
 - **Chaîne de signature alignée sur le serveur** — `internal/pkg.CanonicalJSON` sérialise la charge
   signée en JSON canonique (clés triées récursivement, sans échappement HTML), contrepartie Go

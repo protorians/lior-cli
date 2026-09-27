@@ -44,31 +44,71 @@ func relToRoot(root, path string) string {
 	return path
 }
 
-// listModules returns the module names present in `library/modules/`.
+// listModules returns the module names present in the workspace source tree
+// (modules/, D5) and in `library/modules/`, deduplicated and sorted.
 func listModules(root string) ([]string, error) {
-	dir := filepath.Join(root, config.ExternalModulesDir)
-	if !pkg.DirExists(dir) {
-		return nil, pkg.NewError(
-			i18n.T("cat.project"),
-			i18n.Tf("modules.error.dir", config.ExternalModulesDir),
-			pkg.ExitModuleNotFound,
-		)
+	seen := map[string]bool{}
+	var names []string
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
 	}
-	entries, err := os.ReadDir(dir)
+
+	ws, err := config.ListWorkspaceModules(root)
 	if err != nil {
 		return nil, pkg.NewError(i18n.T("cat.project"), i18n.T("modules.error.read"), pkg.ExitError)
 	}
-	var names []string
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+	for _, name := range ws {
+		add(name)
+	}
+
+	dir := filepath.Join(root, config.ExternalModulesDir)
+	if pkg.DirExists(dir) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return nil, pkg.NewError(i18n.T("cat.project"), i18n.T("modules.error.read"), pkg.ExitError)
 		}
-		if pkg.FileExists(filepath.Join(dir, e.Name(), config.ManifestFileName)) {
-			names = append(names, e.Name())
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			if pkg.FileExists(filepath.Join(dir, e.Name(), config.ManifestFileName)) {
+				add(e.Name())
+				continue
+			}
+			// A multi-version installation root: one directory per version
+			// plus the current pointer (D11) — count it as one module.
+			if hasVersionSubdir(filepath.Join(dir, e.Name())) {
+				add(e.Name())
+			}
 		}
+	}
+	if len(names) == 0 {
+		return nil, pkg.NewError(
+			i18n.T("cat.project"),
+			i18n.Tf("modules.error.dir", config.WorkspaceModulesDir+"|"+config.ExternalModulesDir),
+			pkg.ExitModuleNotFound,
+		)
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// hasVersionSubdir reports whether dir holds at least one version directory
+// (a child directory with a manifest.json inside).
+func hasVersionSubdir(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if e.IsDir() && pkg.FileExists(filepath.Join(dir, e.Name(), config.ManifestFileName)) {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveModule returns the module name to operate on: the positional arg if
@@ -77,7 +117,7 @@ func listModules(root string) ([]string, error) {
 func resolveModule(root string, args []string) (string, error) {
 	if len(args) > 0 {
 		name := normalizeModuleArg(args[0])
-		if !pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, name)) {
+		if !moduleAvailable(root, name) {
 			return "", pkg.NewErrorWithFix(
 				i18n.T("cat.module"),
 				i18n.Tf("modules.error.module_absent", name, config.ExternalModulesDir),
@@ -112,6 +152,21 @@ func resolveModule(root string, args []string) (string, error) {
 	}
 
 	return selectModule(modules)
+}
+
+// moduleAvailable reports whether a module can be operated on: workspace
+// source tree (modules/<id>), flat legacy install
+// (library/modules/<id>/manifest.json) or multi-version install
+// (library/modules/<id>/<version>/manifest.json).
+func moduleAvailable(root, name string) bool {
+	if pkg.DirExists(config.WorkspaceModuleDir(root, name)) {
+		return true
+	}
+	dir := filepath.Join(root, config.ExternalModulesDir, name)
+	if pkg.FileExists(filepath.Join(dir, config.ManifestFileName)) {
+		return true
+	}
+	return hasVersionSubdir(dir)
 }
 
 func selectModule(modules []string) (string, error) {

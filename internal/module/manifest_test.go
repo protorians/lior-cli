@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/pkg"
 )
 
@@ -112,8 +113,8 @@ func TestNewManifest(t *testing.T) {
 	if !pkg.IsUUID(m.Token) {
 		t.Errorf("Token %q n'est pas un UUID valide", m.Token)
 	}
-	if m.Entry != "index.tsx" {
-		t.Errorf("Entry = %q, want index.tsx", m.Entry)
+	if m.Entry != config.ModuleEntryFileName {
+		t.Errorf("Entry = %q, want %s", m.Entry, config.ModuleEntryFileName)
 	}
 	if m.SchemaVersion != 1 {
 		t.Errorf("SchemaVersion = %d, want 1", m.SchemaVersion)

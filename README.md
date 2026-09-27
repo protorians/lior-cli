@@ -48,13 +48,14 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 | `liora connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `liora auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |
 | `liora disconnect` | Invalider le token côté serveur et supprimer les credentials |
-| `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.liozip` dans `.lorian/build/` (manifeste canonique à la racine, quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées) |
+| `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.liozip` dans `.lorian/build/` — layout runtime isolé : manifeste canonique à la racine + `src/**` (source TS, D4) + `artifact/**` (payload exécutable, §4.4), typecheck bloquant (D6), `userScope` obligatoire (D15), ni `next/*` (D1) ni `fetch`/`WebSocket` (D16) dans le bundle ; quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées |
 | `liora sign keygen` | Générer une paire de clés Ed25519 pour la signature |
 | `liora sign [module\|archive.liozip] [--key F]` | Signer la charge utile canonique de publication (Ed25519, obligatoire pour publier — ADR-010) |
 | `liora sign verify [module\|archive.liozip]` | Vérifier la signature d'un module (repli legacy accepté, signalé) |
 | `liora publish [module] [--version V] [--file F] [--allow-unsigned]` | Auditer, packer, signer (obligatoire) et publier un module sur le store (`manifestChecksum` + `signatureKeyId` déclarés) |
 | `liora link` / `unlink` | Associer un module local à un module distant du store (token) |
 | `liora marketplace search\|install` | Rechercher (`search [query]`) et installer (`install <module>`) des modules depuis le catalogue public (`LIORIAN_STORE_API`) |
+| `liora install <archive.liozip> [--force]` | Installer une archive locale sans le marketplace ni api-core : audit fail-closed, installation multi-version dans `library/modules/<id>/<version>/` + pointeur `current` (D11) ; le sidecar `.sig` est vérifié contre le trousseau quand il existe |
 | `liora audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
 | `liora repair [module] [--dry-run] [--warnings] [--no-install] [--no-interaction] [--output table\|json]` | Réparer automatiquement les anomalies bloquantes d'un (ou tous les) module(s) : champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé ; les points non réparables deviennent des instructions pas à pas |
 | `liora debug [module]` | Valider le module et lancer un build de diagnostic |

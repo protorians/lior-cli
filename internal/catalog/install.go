@@ -61,6 +61,14 @@ func (i *Installer) client() *Client {
 	return NewClient()
 }
 
+// InstallArchive installs the bytes of a `.liozip` archive into a workspace —
+// audited, validated and fail-closed. It is the shared engine of
+// `marketplace install` (download from the catalog) and `liora install`
+// (local file install, spec module-isolated-runtime.md §8.4).
+func InstallArchive(data []byte, root string, force bool, res *InstallResult) error {
+	return unpack(data, root, force, res)
+}
+
 // Install resolves a module in the catalog, downloads its `.liozip` archive,
 // verifies the SHA-256 checksum and the Ed25519 publisher signature
 // (fail-closed), then extracts the module in place.
@@ -88,14 +96,18 @@ func (i *Installer) Install(ctx context.Context, ref string) (*InstallResult, er
 			"module has no domain or slug", pkg.ExitError)
 	}
 
+	// A flat legacy installation (manifest.json directly in
+	// library/modules/<name>) is replaced only on demand. A multi-version
+	// installation (one directory per version + `current` pointer) is never
+	// a blocker: a new version installs alongside the others (D11, §4.4).
 	moduleDir := config.ModuleDir(i.Root, name)
-	if pkg.DirExists(moduleDir) && !i.Force {
+	if isFlatLegacyModuleDir(moduleDir) && !i.Force {
 		return nil, pkg.NewErrorWithFix(i18n.T("cat.marketplace"),
 			i18n.Tf("marketplace.install.already", name, moduleDir),
 			i18n.Tf("marketplace.install.already.fix", name),
 			pkg.ExitModuleNotFound)
 	}
-	if pkg.DirExists(moduleDir) && i.Force && tui.IsInteractive() {
+	if isFlatLegacyModuleDir(moduleDir) && i.Force && tui.IsInteractive() {
 		proceed, cerr := tui.Confirm(i18n.Tf("marketplace.install.confirm", name), false)
 		if cerr != nil {
 			return nil, cerr
@@ -127,6 +139,10 @@ func (i *Installer) Install(ctx context.Context, ref string) (*InstallResult, er
 	}
 
 	if err := unpack(archive, i.Root, i.Force, res); err != nil {
+		// A categorized error (already installed, …) keeps its exit code.
+		if perr, ok := err.(*pkg.Error); ok {
+			return nil, perr
+		}
 		return nil, pkg.NewError(i18n.T("cat.marketplace"), err.Error(), pkg.ExitError)
 	}
 	return res, nil
@@ -202,10 +218,17 @@ func checksumHex(data []byte) string {
 // unpack extracts a `.liozip` (ZIP) archive into a temporary directory,
 // audits every entry fail-closed (traversal, absolute paths, symlinks,
 // executables, entry count and decompression ratio — spec §7.2), validates
-// the extracted module and copies only this module's directories into the
-// workspace: `library/modules/<name>/`, `public/assets/<name>/` and
-// `src/app/<uri-or-id>/`. Nothing touches the workspace when the archive is
-// invalid or fails validation, so a bad install never leaves partial files.
+// the extracted module and copies it into the workspace.
+//
+// Two layouts are supported:
+//   - isolated-runtime (§4.4): `manifest.json` + `src/**` + `artifact/**` at
+//     the archive root — installed multi-version into
+//     `library/modules/<id>/<version>/` with the `current` pointer (D11);
+//   - legacy: `library/modules/<name>/` + `src/app/<uri>/` +
+//     `public/assets/<name>/` — installed flat, until the phase-8 migration.
+//
+// Nothing touches the workspace when the archive is invalid or fails
+// validation, so a bad install never leaves partial files.
 func unpack(data []byte, root string, force bool, res *InstallResult) error {
 	tmp, err := os.MkdirTemp("", "lorian-marketplace-*")
 	if err != nil {
@@ -250,6 +273,92 @@ func unpack(data []byte, root string, force bool, res *InstallResult) error {
 		return errors.New(i18n.T("marketplace.error.manifest"))
 	}
 
+	if pkg.FileExists(filepath.Join(tmp, config.ManifestFileName)) {
+		return unpackModern(tmp, root, force, res)
+	}
+	return unpackLegacy(tmp, files, root, force, res)
+}
+
+// unpackModern installs an isolated-runtime archive (§4.4): the extracted
+// `manifest.json` + `src/**` + `artifact/**` tree is validated, then copied
+// into `library/modules/<id>/<version>/`, and the `current` pointer is moved
+// to the freshly installed version.
+func unpackModern(tmp, root string, force bool, res *InstallResult) error {
+	manifest, err := module.LoadManifest(filepath.Join(tmp, config.ManifestFileName))
+	if err != nil {
+		return fmt.Errorf("failed to read the module manifest: %w", err)
+	}
+	name := strings.TrimSpace(manifest.ID)
+	if name == "" {
+		return errors.New(i18n.T("marketplace.error.manifest"))
+	}
+	version := strings.TrimSpace(manifest.Version)
+
+	vr := &module.Validator{}
+	valRes, err := vr.ValidateModuleDir(tmp)
+	if err != nil {
+		return err
+	}
+	if valRes.HasErrors() {
+		return errors.New(i18n.Tf("marketplace.error.invalid", name, valRes.ErrorCount()))
+	}
+
+	res.Files = countExtractedFiles(tmp)
+	if res.Module == "" {
+		res.Module = name
+	}
+	if version != "" {
+		res.Version = version
+	}
+
+	dst := config.InstalledModuleVersionDir(root, name, version)
+	if pkg.DirExists(dst) && !force {
+		return pkg.NewErrorWithFix(i18n.T("cat.marketplace"),
+			i18n.Tf("marketplace.install.already", name, dst),
+			i18n.Tf("marketplace.install.already.fix", name),
+			pkg.ExitModuleNotFound)
+	}
+	if pkg.DirExists(dst) {
+		if err := os.RemoveAll(dst); err != nil {
+			return fmt.Errorf("failed to replace %s: %w", dst, err)
+		}
+	}
+	for _, rel := range []string{
+		config.ManifestFileName,
+		"src",
+		config.ModuleArtifactDir,
+	} {
+		src := filepath.Join(tmp, filepath.FromSlash(rel))
+		if !pkg.PathExists(src) {
+			continue
+		}
+		if err := pkg.CopyDir(src, filepath.Join(dst, filepath.FromSlash(rel))); err != nil {
+			return fmt.Errorf("failed to copy %s: %w", rel, err)
+		}
+	}
+	if version != "" {
+		if err := config.WriteCurrentPointer(root, name, version); err != nil {
+			return fmt.Errorf("failed to write the version pointer: %w", err)
+		}
+	}
+	return nil
+}
+
+// countExtractedFiles counts the regular files extracted in tmp.
+func countExtractedFiles(tmp string) int {
+	n := 0
+	_ = filepath.Walk(tmp, func(path string, info os.FileInfo, err error) error {
+		if err == nil && info != nil && !info.IsDir() {
+			n++
+		}
+		return nil
+	})
+	return n
+}
+
+// unpackLegacy installs a pre-isolated-runtime archive: the module tree, its
+// page and its assets land flat in the workspace.
+func unpackLegacy(tmp string, files []string, root string, force bool, res *InstallResult) error {
 	name, err := moduleNameFromFiles(files)
 	if err != nil {
 		return err
@@ -304,6 +413,14 @@ func unpack(data []byte, root string, force bool, res *InstallResult) error {
 	return nil
 }
 
+// isFlatLegacyModuleDir reports whether dir holds a pre-isolated-runtime
+// module: a manifest.json directly inside, next to the module tree (as
+// opposed to a multi-version root holding one directory per version plus the
+// `current` pointer).
+func isFlatLegacyModuleDir(dir string) bool {
+	return pkg.FileExists(filepath.Join(dir, config.ManifestFileName))
+}
+
 // auditEntry validates one archive entry fail-closed (spec §7.2,
 // ModuleArchiveSafetyPolicy): traversal, absolute paths, symlinks and
 // executables are refused with an error. Entries outside the module layout
@@ -328,6 +445,12 @@ func auditEntry(f *zip.File) (string, error) {
 	}
 	if isBlockedExt(clean) {
 		return "", fmt.Errorf("executable refused in archive: %s", f.Name)
+	}
+	// The legacy page/assets layout is dead (spec §9.1): an archive that
+	// still carries it is refused — the socle no longer consumes
+	// src/app/** pages nor public/assets/** of installed modules.
+	if strings.HasPrefix(clean, config.AppSrcDir+"/") || strings.HasPrefix(clean, config.PublicAssetsDir+"/") {
+		return "", errors.New(i18n.T("install.error.legacy_layout"))
 	}
 	if !allowedEntry(clean) {
 		return "", nil
@@ -355,15 +478,18 @@ func sanitizeEntry(name string) string {
 	return clean
 }
 
-// allowedEntry reports whether an archive entry belongs to the module layout:
-// the module tree, its page, its assets, or the canonical root manifest.
+// allowedEntry reports whether an archive entry belongs to a module layout.
+// Isolated-runtime (§4.4): the root `manifest.json`, the sources under
+// `src/` and the built payload under `artifact/`. Legacy (still readable
+// for archives published before the artefact contract): the flat module
+// tree `library/modules/<name>/`.
 func allowedEntry(rel string) bool {
 	if rel == "manifest.json" {
 		return true
 	}
-	return strings.HasPrefix(rel, config.ExternalModulesDir+"/") ||
-		strings.HasPrefix(rel, "src/") ||
-		strings.HasPrefix(rel, "public/")
+	return strings.HasPrefix(rel, "src/") ||
+		strings.HasPrefix(rel, config.ModuleArtifactDir+"/") ||
+		strings.HasPrefix(rel, config.ExternalModulesDir+"/")
 }
 
 // withinDir reports whether file is inside dir (defense in depth against

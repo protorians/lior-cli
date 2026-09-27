@@ -1,0 +1,52 @@
+# TC-030 — `liora pack` of a workspace module (modules/<id>, D5) produces the
+# isolated-runtime archive: manifest.json at the root, src/** (D4) and
+# artifact/** (§4.4).
+mkdir project
+cd project
+exec sh -c 'printf "app = \"demo\"\n" > lorian.config.toml'
+mkdir -p modules/blog-manager/artifact
+exec sh -c 'printf "{\n  \"schemaVersion\": 1,\n  \"id\": \"blog-manager\",\n  \"domain\": \"com.example.blog-manager\",\n  \"key\": \"BLOG_MANAGER\",\n  \"name\": \"Blog Manager\",\n  \"description\": \"A module used by the install e2e\",\n  \"version\": \"1.0.0\",\n  \"icon\": \"PuzzleIcon\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"external\": true,\n  \"entry\": \"entry.tsx\",\n  \"uri\": \"/blog-manager\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"userScope\": [],\n  \"backends\": [],\n  \"artifact\": {\n    \"dir\": \"artifact\",\n    \"bundle\": \"module.js\",\n    \"document\": \"index.html\"\n  },\n  \"platforms\": {\n    \"web\": {\n      \"supported\": true,\n      \"modes\": [\n        \"web\"\n      ]\n    }\n  },\n  \"permissions\": [],\n  \"requirements\": {},\n  \"optionalRequirements\": {},\n  \"capabilities\": [\n    \"core:default\"\n  ]\n}" > modules/blog-manager/manifest.json'
+
+exec sh -c 'printf "{}\n" > modules/blog-manager/tsconfig.json'
+exec sh -c 'printf "{\"name\":\"@liorian/module-blog-manager\",\"scripts\":{\"typecheck\":\"true\"}}\n" > modules/blog-manager/package.json'
+exec sh -c 'printf "export function mount(el) {}\nexport function unmount() {}\n" > modules/blog-manager/entry.tsx'
+exec sh -c 'printf "console.log(\"bundle\");\n" > modules/blog-manager/artifact/module.js'
+exec sh -c 'printf "<!doctype html><html><body></body></html>\n" > modules/blog-manager/artifact/index.html'
+
+exec $LIORIAN --no-color pack blog-manager
+stdout '✓ Archive created successfully'
+stdout 'Module : blog-manager v1.0.0'
+exists .lorian/build/blog-manager-1.0.0.liozip
+
+# The archive follows the artefact contract (§4.4).
+exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.liozip | grep -q "^.* manifest.json$"'
+exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.liozip | grep -q "src/entry.tsx"'
+exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.liozip | grep -q "artifact/module.js"'
+
+# TC-031 — `liora install <archive>` installs the archive locally, without
+# api-core: multi-version into library/modules/<id>/<version>/ (D11) with the
+# current pointer.
+exec $LIORIAN --no-color install .lorian/build/blog-manager-1.0.0.liozip
+stdout '✓ Module installed successfully'
+exists library/modules/blog-manager/1.0.0/manifest.json
+exists library/modules/blog-manager/1.0.0/src/entry.tsx
+exists library/modules/blog-manager/1.0.0/artifact/module.js
+exec sh -c 'test "$(cat library/modules/blog-manager/current)" = "1.0.0"'
+
+# TC-032 — a second version installs alongside and moves the pointer.
+exec sh -c 'sed "s/1.0.0/1.1.0/" modules/blog-manager/manifest.json > modules/blog-manager/manifest.json.new && mv modules/blog-manager/manifest.json.new modules/blog-manager/manifest.json'
+exec $LIORIAN --no-color pack blog-manager
+exec $LIORIAN --no-color install .lorian/build/blog-manager-1.1.0.liozip
+stdout '✓ Module installed successfully'
+exists library/modules/blog-manager/1.0.0/manifest.json
+exists library/modules/blog-manager/1.1.0/manifest.json
+exec sh -c 'test "$(cat library/modules/blog-manager/current)" = "1.1.0"'
+
+# TC-033 — a legacy-layout archive (src/app, public/assets) is refused.
+exec sh -c 'mkdir -p legacy/src/app/blog legacy/public/assets/blog'
+exec sh -c 'echo "page" > legacy/src/app/blog/page.tsx'
+exec sh -c 'echo "asset" > legacy/public/assets/blog/logo.txt'
+exec sh -c 'cd legacy && zip -q -r ../legacy.liozip src public'
+! exec $LIORIAN --no-color install legacy.liozip
+stderr 'legacy archive layout refused'
+exec sh -c 'test ! -e library/modules/blog-legacy'

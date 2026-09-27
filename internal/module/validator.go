@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -76,13 +77,45 @@ func count(findings []Finding, level string) int {
 }
 
 // ValidateModule checks the core requirements of a single module.
-// Used by `pack` and shared by the audit pipeline.
+// Used by `pack` and shared by the audit pipeline. The module is resolved
+// from the workspace source tree first (`modules/<name>`, D5), then from the
+// legacy installation tree (`library/modules/<name>`).
 func (v *Validator) ValidateModule(name string) (*Result, error) {
-	moduleDir := filepath.Join(v.Root, config.ExternalModulesDir, name)
-	if !pkg.DirExists(moduleDir) {
-		return nil, errors.New(i18n.Tf("val.module_not_found", name, moduleDir))
+	for _, dir := range []string{
+		config.WorkspaceModuleDir(v.Root, name),
+		config.ModuleDir(v.Root, name),
+	} {
+		if pkg.DirExists(dir) {
+			return v.validateModuleAt(dir, name)
+		}
 	}
+	return nil, errors.New(i18n.Tf("val.module_not_found", name,
+		config.WorkspaceModulesDir+"|"+config.ExternalModulesDir))
+}
 
+// ValidateModuleDir validates the module rooted at moduleDir, whatever the
+// layout (workspace source, installed multi-version tree, extracted archive
+// in a temporary directory). The module identifier is read from the
+// manifest.
+func (v *Validator) ValidateModuleDir(moduleDir string) (*Result, error) {
+	if !pkg.DirExists(moduleDir) {
+		return nil, errors.New(i18n.Tf("val.module_not_found", filepath.Base(moduleDir), moduleDir))
+	}
+	manifest, err := LoadManifest(filepath.Join(moduleDir, config.ManifestFileName))
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(manifest.ID)
+	if name == "" {
+		name = filepath.Base(moduleDir)
+	}
+	return v.validateModuleAt(moduleDir, name)
+}
+
+// validateModuleAt runs the manifest and layout checks on one module
+// directory. name may be empty (ValidateModuleDir) — the directory-name
+// conformance warning is then skipped.
+func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	res := &Result{Module: name}
 
 	manifestPath := filepath.Join(moduleDir, config.ManifestFileName)
@@ -103,8 +136,14 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	add(res, "manifest.json", "version", isSemver(manifest.Version), "valid SemVer version")
 	// token (UUID)
 	add(res, "manifest.json", "token", pkg.IsUUID(manifest.Token), "valid UUID token")
-	// entry exists
+	// entry exists — at the module root for a workspace/legacy module, under
+	// `src/` for an installed multi-version tree (§4.4).
 	entryPath := filepath.Join(moduleDir, manifest.Entry)
+	if !pkg.FileExists(entryPath) {
+		if candidate := filepath.Join(moduleDir, "src", manifest.Entry); pkg.FileExists(candidate) {
+			entryPath = candidate
+		}
+	}
 	add(res, "manifest.json", "entry", pkg.FileExists(entryPath), "entry file present")
 	// domain format warning (spec §5.10): any reverse-DNS dotted domain is
 	// accepted, e.g. com.organization.domain (the former mod.liorian.<name>
@@ -112,8 +151,10 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	addLevel(res, "manifest.json", "domain", isDomainName(manifest.Domain),
 		"domain in reverse-DNS format", LevelWarning)
 	// the module directory must be named after its domain
-	addLevel(res, "manifest.json", "domain directory", manifest.Domain == name,
-		"manifest domain matches the module directory (library/modules/<domain>)", LevelWarning)
+	if name != "" {
+		addLevel(res, "manifest.json", "domain directory", manifest.Domain == name,
+			"manifest domain matches the module directory (library/modules/<domain>)", LevelWarning)
+	}
 	// permissions must be an array (spec rule, WARNING severity)
 	addLevel(res, "manifest.json", "permissions", rawPermissionsIsArray(manifestPath),
 		"permissions is an array", LevelWarning)
@@ -178,6 +219,27 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 	// module-installation §4.3); any reverse-DNS form stays accepted.
 	addLevel(res, "manifest.json", "canonical domain", IsCanonicalDomain(manifest.Domain),
 		"domain in canonical mod.<éditeur>.<module> form", LevelWarning)
+	// backends (tier 1, D9): every declared backend must be schema-compliant
+	// (§6.2). Applied to both layouts — a declaration is a declaration.
+	for _, b := range manifest.Backends {
+		add(res, "manifest.json", "backends", ValidateBackendDeclaration(b) == nil,
+			"backend declaration compliant (key, https url, scopes)")
+	}
+	// userScope (D15): same grammar as `permissions`. Mandatory for
+	// isolated-runtime modules (`[]` is the explicit "no user data"); a
+	// legacy module without one is left alone — its migration happens in
+	// the phase-8 move to modules/*.
+	for _, s := range manifest.UserScope {
+		add(res, "manifest.json", "userScope", ValidateUserScopeEntry(s) == nil,
+			"userScope entry uses the Role:Verbe grammar")
+	}
+	if !rawHasKey(manifestPath, "userScope") && isModernModuleDir(moduleDir, manifest) {
+		// D15: a module without userScope is refused at pack — `[]` is the
+		// only way to declare "no user data".
+		addLevel(res, "manifest.json", "userScope", false,
+			"userScope present (mandatory for isolated-runtime modules)", LevelError)
+	}
+
 	// CONFIGURATION modules carry their UI in the manifest itself
 	// (`entry: index.json` + `dataModel`/`declarative`): no React entry needed.
 	if strings.EqualFold(strings.TrimSpace(manifest.Type), "CONFIGURATION") {
@@ -186,14 +248,224 @@ func (v *Validator) ValidateModule(name string) (*Result, error) {
 		addLevel(res, "manifest.json", "dataModel",
 			manifest.DataModel != nil,
 			"CONFIGURATION dataModel present", LevelWarning)
-	} else {
-		// entry default export present in index.tsx
-		indexPath := filepath.Join(moduleDir, config.ModuleEntryFileName)
-		addLevel(res, "index.tsx", "export", pkg.FileExists(indexPath) && containsDefaultExport(indexPath),
-			"index.tsx file with default export", LevelError)
+		return res, nil
 	}
 
+	if isModernModuleDir(moduleDir, manifest) {
+		v.validateModernModule(moduleDir, entryPath, manifest, res)
+		return res, nil
+	}
+
+	// legacy declaration file (`index.tsx`, ModuleDeclarationInterface)
+	indexPath := filepath.Join(moduleDir, config.LegacyDeclarationFileName)
+	addLevel(res, config.LegacyDeclarationFileName, "export",
+		pkg.FileExists(indexPath) && containsDefaultExport(indexPath),
+		"index.tsx file with default export", LevelError)
+
 	return res, nil
+}
+
+// MaxArtifactBundleBytes is the size ceiling of a module bundle
+// (`artifact/module.js`, rule 6 of §4.4). Aligned with the template build
+// script (`build.ts`): 5 MB minified.
+const MaxArtifactBundleBytes = 5 * 1024 * 1024
+
+// MaxArtifactBytes is the size ceiling of the whole `artifact/` directory
+// (rule 6 of §4.4).
+const MaxArtifactBytes = 25 * 1024 * 1024
+
+// isModernModuleDir reports whether a module directory follows the
+// isolated-runtime layout: it declares an `artifact` section or already
+// carries the built payload. Legacy flat modules (library/modules/<name>
+// with an index.tsx declaration) fall back to the legacy checks.
+func isModernModuleDir(moduleDir string, m *Manifest) bool {
+	if m.Artifact != nil {
+		return true
+	}
+	return pkg.DirExists(filepath.Join(moduleDir, config.ModuleArtifactDir))
+}
+
+// validateModernModule applies the pack rules of §4.4 to an
+// isolated-runtime module. Every rule is blocking (LevelError) — the pack
+// refuses an archive that fails any of them (D6, D15, D16).
+func (v *Validator) validateModernModule(moduleDir, entryPath string, m *Manifest, res *Result) {
+	// Rule 1: the entry is TypeScript — a .js/.mjs entry is refused (D6).
+	entry := strings.TrimSpace(m.Entry)
+	add(res, "manifest.json", "entry.ts", entry != "" &&
+		(strings.HasSuffix(entry, ".ts") || strings.HasSuffix(entry, ".tsx")),
+		"entry is a .ts/.tsx file")
+
+	// Rule 2: a tsconfig.json is required (the `tsc --noEmit` pass itself is
+	// enforced by the packer, which owns the toolchain). At the module root
+	// for a workspace source tree, under src/ in an installed tree (the pack
+	// stores the sources there).
+	hasTsConfig := pkg.FileExists(filepath.Join(moduleDir, "tsconfig.json")) ||
+		pkg.FileExists(filepath.Join(moduleDir, "src", "tsconfig.json"))
+	add(res, "tsconfig.json", "present", hasTsConfig, "tsconfig.json present")
+
+	// Rule 3: the artifact bundle and host document exist and are non-empty.
+	artifactDir := filepath.Join(moduleDir, m.EffectiveArtifactDir())
+	bundlePath := filepath.Join(artifactDir, m.EffectiveArtifactBundle())
+	docPath := filepath.Join(artifactDir, m.EffectiveArtifactDocument())
+	add(res, "artifact", "bundle", nonEmptyFile(bundlePath), "artifact bundle present and non-empty")
+	add(res, "artifact", "document", nonEmptyFile(docPath), "artifact host document present and non-empty")
+
+	// Rule 6: size ceilings on the artifact payload.
+	if info, err := os.Stat(bundlePath); err == nil && info.Size() > MaxArtifactBundleBytes {
+		add(res, "artifact", "bundle size", false,
+			fmt.Sprintf("bundle exceeds %d MB (%d bytes)", MaxArtifactBundleBytes/(1024*1024), info.Size()))
+	}
+	if total := dirSize(artifactDir); total > MaxArtifactBytes {
+		add(res, "artifact", "total size", false,
+			fmt.Sprintf("artifact exceeds %d MB (%d bytes)", MaxArtifactBytes/(1024*1024), total))
+	}
+
+	// Rule 5 + §7.7: no `next/*` (execution constraint of D1) and no `@/`
+	// (socle alias) in the module source graph.
+	badNext, badAt := scanSourceImports(moduleDir)
+	add(res, "isolation", "next/*", len(badNext) == 0,
+		"no next/* import in the module source (D1)")
+	for _, rel := range badNext {
+		res.Findings = append(res.Findings, Finding{
+			Category: "isolation", Rule: "next/*", Severity: LevelError,
+			Message: fmt.Sprintf("%s imports next/* — use @liorian/sdk primitives and ctx.bridge instead", rel),
+		})
+	}
+	add(res, "isolation", "@/ alias", len(badAt) == 0,
+		"no @/ alias import in the module source (§7.7)")
+	for _, rel := range badAt {
+		res.Findings = append(res.Findings, Finding{
+			Category: "isolation", Rule: "@/ alias", Severity: LevelError,
+			Message: fmt.Sprintf("%s imports @/… — a module imports @liorian/sdk and its declared dependencies only", rel),
+		})
+	}
+
+	// Rule 9 (D16): no fetch / XMLHttpRequest / WebSocket in the bundle —
+	// ApiService is the only network surface of a module (§4.5).
+	hits := scanBundleNetworkCalls(bundlePath)
+	add(res, "artifact", "network calls", len(hits) == 0,
+		"no fetch/XHR/WebSocket in the bundle (D16)")
+	for _, hit := range hits {
+		res.Findings = append(res.Findings, Finding{
+			Category: "artifact", Rule: "network calls", Severity: LevelError,
+			Message: fmt.Sprintf("%s uses %s — the bundle must go through ApiService (D16)", m.EffectiveArtifactBundle(), hit),
+		})
+	}
+
+	// Runtime contract: the entry exposes mount/unmount (§4.2).
+	content, err := os.ReadFile(entryPath)
+	mountOK := err == nil && mountExportRE.Match(content)
+	unmountOK := err == nil && unmountExportRE.Match(content)
+	add(res, "entry", "mount export", mountOK, "entry exports mount()")
+	add(res, "entry", "unmount export", unmountOK, "entry exports unmount()")
+}
+
+// mountExportRE matches the `mount` export of the runtime contract (§4.2).
+var mountExportRE = regexp.MustCompile(`export\s+(?:async\s+)?function\s+mount\b|export\s+(?:const|let|var)\s+mount\b`)
+
+// unmountExportRE matches the `unmount` export of the runtime contract (§4.2).
+var unmountExportRE = regexp.MustCompile(`export\s+(?:async\s+)?function\s+unmount\b|export\s+(?:const|let|var)\s+unmount\b`)
+
+// importSpecifierRE matches static and dynamic import specifiers, plus
+// require() calls, of a TS/TSX source file.
+var importSpecifierRE = regexp.MustCompile(`(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*)['"]([^'"]+)['"]`)
+
+// nextImportRE matches a `next/*` specifier (D1: forbidden in module bundles).
+var nextImportRE = regexp.MustCompile(`^next/`)
+
+// atImportRE matches a socle alias specifier (§7.7: forbidden in modules).
+var atImportRE = regexp.MustCompile(`^@/`)
+
+// excludedSourceDirs are never scanned for imports: build output, dependency
+// trees and tooling state are not module source.
+var excludedSourceDirs = map[string]bool{
+	config.ModuleArtifactDir: true,
+	"node_modules":           true,
+	"dist":                   true,
+	".lorian":                true,
+	".git":                   true,
+}
+
+// scanSourceImports walks the TypeScript source of a module and returns the
+// relative paths of files importing `next/*` (first return value) and `@/…`
+// (second return value).
+func scanSourceImports(moduleDir string) (nextHits, atHits []string) {
+	_ = filepath.Walk(moduleDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if excludedSourceDirs[info.Name()] || (info.Name() != filepath.Base(moduleDir) && strings.HasPrefix(info.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".tsx") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(moduleDir, path)
+		if err != nil {
+			return nil
+		}
+		for _, m := range importSpecifierRE.FindAllSubmatch(data, -1) {
+			specifier := string(m[1])
+			if nextImportRE.MatchString(specifier) {
+				nextHits = append(nextHits, filepath.ToSlash(rel))
+				return nil
+			}
+			if atImportRE.MatchString(specifier) {
+				atHits = append(atHits, filepath.ToSlash(rel))
+				return nil
+			}
+		}
+		return nil
+	})
+	return nextHits, atHits
+}
+
+// bundleNetworkCallRE matches the direct network primitives a bundle must
+// never use (D16): fetch(), XMLHttpRequest and WebSocket construction.
+var bundleNetworkCallRE = regexp.MustCompile(`\bfetch\s*\(|\bXMLHttpRequest\b|\bnew\s+WebSocket\b`)
+
+// scanBundleNetworkCalls returns the distinct D16 violations found in a
+// bundle file.
+func scanBundleNetworkCalls(bundlePath string) []string {
+	data, err := os.ReadFile(bundlePath)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var hits []string
+	for _, m := range bundleNetworkCallRE.FindAllString(string(data), -1) {
+		if !seen[m] {
+			seen[m] = true
+			hits = append(hits, strings.TrimSpace(m))
+		}
+	}
+	return hits
+}
+
+// nonEmptyFile reports whether path exists and carries at least one byte.
+func nonEmptyFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+// dirSize returns the total byte size of the regular files under dir (0 when
+// absent).
+func dirSize(dir string) int64 {
+	var total int64
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err == nil && info != nil && !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total
 }
 
 func add(res *Result, category, rule string, ok bool, okMsg string) {

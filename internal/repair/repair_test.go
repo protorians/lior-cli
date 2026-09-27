@@ -356,7 +356,7 @@ func TestRepairReportsEachInstructionOnce(t *testing.T) {
 
 	// Break the entry so the audit raises index.tsx findings the repair has to
 	// turn into instructions.
-	entry := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.dedup", config.ModuleEntryFileName)
+	entry := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.dedup", config.LegacyDeclarationFileName)
 	if err := os.WriteFile(entry, []byte("export const x = 1;\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -394,7 +394,7 @@ func TestRepairMigratesPermissionsWithoutLosingCodes(t *testing.T) {
   "permissions": ["user.read", "admin.delete", "editor.write"],
   "capabilities": ["core:default"]
 }`)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -447,7 +447,7 @@ func TestRepairPlatformsPreservesSupportedFlags(t *testing.T) {
     "mobile": {"supported": false}
   }
 }`)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -488,7 +488,7 @@ func TestRepairMigratesLegacyModuleType(t *testing.T) {
   "permissions": [],
   "capabilities": ["core:default"]
 }`)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -524,7 +524,7 @@ func TestRepairReportsTypeOutsideEnum(t *testing.T) {
   "permissions": [],
   "capabilities": ["core:default"]
 }`)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -612,7 +612,7 @@ func TestRepairFillsBothCompatibilityWindows(t *testing.T) {
   "managerCompatibility": {"max": "0.17.x"},
   "apiCompatibility": {"min": ""}
 }`)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -663,7 +663,7 @@ func TestRepairDoesNotInjectAbsentFields(t *testing.T) {
   "type": "WEB_APP_LOCAL",
   "capabilities": ["core:default"]
 }`)
-	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.ModuleEntryFileName),
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName),
 		[]byte("export default { identifier: 'mod.liorian.sparse', widgets: {} };\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -725,7 +725,7 @@ func TestRepairMigratesCanonicalDomainAndRenames(t *testing.T) {
 }`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -779,7 +779,7 @@ func TestRepairDryRunProposesDomainMigration(t *testing.T) {
 }`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, config.ModuleEntryFileName), []byte("export default {};\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

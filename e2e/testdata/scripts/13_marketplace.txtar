@@ -38,28 +38,30 @@ stderr 'archive not signed'
 stdout '✓ Module installed'
 stdout 'Module : com.analytics.visitors v0.4.1'
 stdout 'Signature : not signed'
-grep '"id": "com.analytics.visitors"' library/modules/com.analytics.visitors/manifest.json
-exec test -f library/modules/com.analytics.visitors/index.tsx
-exec test -f src/app/visitors/page.tsx
-exec test -f public/assets/com.analytics.visitors/README.txt
+# D11: the module lands multi-version with the current pointer.
+grep '"id": "com.analytics.visitors"' library/modules/com.analytics.visitors/0.4.1/manifest.json
+exec test -f library/modules/com.analytics.visitors/0.4.1/src/entry.tsx
+exec test -f library/modules/com.analytics.visitors/0.4.1/artifact/module.js
+exec sh -c 'test "$(cat library/modules/com.analytics.visitors/current)" = "0.4.1"'
 
-# An already-installed module is refused (exit 3) with a fix hint.
-exec sh -c '$LIORIAN --no-color marketplace install com.analytics.visitors; echo "exit=$?"'
+# Re-installing the same version is refused (exit 3) with a fix hint.
+exec sh -c '$LIORIAN --no-color marketplace install com.analytics.visitors --allow-unsigned; echo "exit=$?"'
 stderr 'already installed'
 stdout 'exit=3'
 
-# --force replaces the module.
-exec sh -c 'printf "stale" > library/modules/com.analytics.visitors/marker.txt'
+# --force replaces the version directory.
+exec sh -c 'printf "stale" > library/modules/com.analytics.visitors/0.4.1/marker.txt'
 exec $LIORIAN --no-color marketplace install com.analytics.visitors --force --allow-unsigned
 stdout '✓ Module installed'
-! exec test -f library/modules/com.analytics.visitors/marker.txt
+! exec test -f library/modules/com.analytics.visitors/0.4.1/marker.txt
 
 # TC-032 — a signed module verifies its Ed25519 signature during install.
 exec $LIORIAN --no-color marketplace install com.example.blog-manager
 stdout '✓ Module installed'
 stdout 'Module : com.example.blog-manager v1.2.0'
 stdout 'Signature : ✓ Signature verified'
-grep '"version": "1.2.0"' library/modules/com.example.blog-manager/manifest.json
+grep '"version": "1.2.0"' library/modules/com.example.blog-manager/1.2.0/manifest.json
+exec sh -c 'test "$(cat library/modules/com.example.blog-manager/current)" = "1.2.0"' 
 
 # A module whose catalog checksum does not match its artifact is refused.
 ! exec $LIORIAN --no-color marketplace install com.example.corrupted
