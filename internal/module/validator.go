@@ -218,7 +218,7 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	// domain: canonical `mod.<éditeur>.<module>` preferred (spec
 	// module-installation §4.3); any reverse-DNS form stays accepted.
 	addLevel(res, "manifest.json", "canonical domain", IsCanonicalDomain(manifest.Domain),
-		"domain in canonical mod.<éditeur>.<module> form", LevelWarning)
+		"domain in canonical mod.<organization-slug>.<module-identifier> form", LevelWarning)
 	// backends (tier 1, D9): every declared backend must be schema-compliant
 	// (§6.2). Applied to both layouts — a declaration is a declaration.
 	for _, b := range manifest.Backends {
@@ -265,24 +265,18 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	return res, nil
 }
 
-// MaxArtifactBundleBytes is the size ceiling of a module bundle
-// (`artifact/module.js`, rule 6 of §4.4). Aligned with the template build
-// script (`build.ts`): 5 MB minified.
-const MaxArtifactBundleBytes = 5 * 1024 * 1024
-
-// MaxArtifactBytes is the size ceiling of the whole `artifact/` directory
-// (rule 6 of §4.4).
-const MaxArtifactBytes = 25 * 1024 * 1024
-
 // isModernModuleDir reports whether a module directory follows the
 // isolated-runtime layout: it declares an `artifact` section or already
-// carries the built payload. Legacy flat modules (library/modules/<name>
-// with an index.tsx declaration) fall back to the legacy checks.
+// carries the built payload (development layout `.liorian/artifact/`, D7, or
+// distribution layout `artifact/`). Legacy flat modules
+// (library/modules/<name> with an index.tsx declaration) fall back to the
+// legacy checks.
 func isModernModuleDir(moduleDir string, m *Manifest) bool {
 	if m.Artifact != nil {
 		return true
 	}
-	return pkg.DirExists(filepath.Join(moduleDir, config.ModuleArtifactDir))
+	return pkg.DirExists(filepath.Join(moduleDir, config.ModuleArtifactSourceDir)) ||
+		pkg.DirExists(filepath.Join(moduleDir, config.ModuleArtifactDir))
 }
 
 // validateModernModule applies the pack rules of §4.4 to an
@@ -304,21 +298,13 @@ func (v *Validator) validateModernModule(moduleDir, entryPath string, m *Manifes
 	add(res, "tsconfig.json", "present", hasTsConfig, "tsconfig.json present")
 
 	// Rule 3: the artifact bundle and host document exist and are non-empty.
-	artifactDir := filepath.Join(moduleDir, m.EffectiveArtifactDir())
+	// No size ceiling: only the zero-byte case is refused (the D7 rule 6
+	// plafond was removed — artifact size is the developer's responsibility).
+	artifactDir := filepath.Join(moduleDir, m.SourceArtifactDir(moduleDir))
 	bundlePath := filepath.Join(artifactDir, m.EffectiveArtifactBundle())
 	docPath := filepath.Join(artifactDir, m.EffectiveArtifactDocument())
 	add(res, "artifact", "bundle", nonEmptyFile(bundlePath), "artifact bundle present and non-empty")
 	add(res, "artifact", "document", nonEmptyFile(docPath), "artifact host document present and non-empty")
-
-	// Rule 6: size ceilings on the artifact payload.
-	if info, err := os.Stat(bundlePath); err == nil && info.Size() > MaxArtifactBundleBytes {
-		add(res, "artifact", "bundle size", false,
-			fmt.Sprintf("bundle exceeds %d MB (%d bytes)", MaxArtifactBundleBytes/(1024*1024), info.Size()))
-	}
-	if total := dirSize(artifactDir); total > MaxArtifactBytes {
-		add(res, "artifact", "total size", false,
-			fmt.Sprintf("artifact exceeds %d MB (%d bytes)", MaxArtifactBytes/(1024*1024), total))
-	}
 
 	// Rule 5 + §7.7: no `next/*` (execution constraint of D1) and no `@/`
 	// (socle alias) in the module source graph.
@@ -379,11 +365,13 @@ var atImportRE = regexp.MustCompile(`^@/`)
 // excludedSourceDirs are never scanned for imports: build output, dependency
 // trees and tooling state are not module source.
 var excludedSourceDirs = map[string]bool{
-	config.ModuleArtifactDir: true,
-	"node_modules":           true,
-	"dist":                   true,
-	".lorian":                true,
-	".git":                   true,
+	config.ModuleArtifactDir:       true,
+	config.ModuleArtifactSourceDir: true,
+	".liorian":                     true,
+	"node_modules":                 true,
+	"dist":                         true,
+	".lorian":                      true,
+	".git":                         true,
 }
 
 // scanSourceImports walks the TypeScript source of a module and returns the
@@ -453,19 +441,6 @@ func scanBundleNetworkCalls(bundlePath string) []string {
 func nonEmptyFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir() && info.Size() > 0
-}
-
-// dirSize returns the total byte size of the regular files under dir (0 when
-// absent).
-func dirSize(dir string) int64 {
-	var total int64
-	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err == nil && info != nil && !info.IsDir() {
-			total += info.Size()
-		}
-		return nil
-	})
-	return total
 }
 
 func add(res *Result, category, rule string, ok bool, okMsg string) {

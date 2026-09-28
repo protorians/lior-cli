@@ -443,10 +443,12 @@ func TestCanonicalDomain(t *testing.T) {
 	for _, ok := range []string{"mod.acme.crm", "mod.liorian.helloworld", "mod.a-b.c_d"} {
 		_ = ok
 	}
-	if !IsCanonicalDomain("mod.acme.crm") || !IsCanonicalDomain("mod.liorian.helloworld") {
-		t.Error("canonical mod.* domains must be accepted")
+	if !IsCanonicalDomain("mod.acme.crm") || !IsCanonicalDomain("mod.liorian.hello-world") ||
+		!IsCanonicalDomain("mod.my-org.team-manager") {
+		t.Error("canonical mod.<organization-slug>.<module-identifier> domains must be accepted")
 	}
-	for _, bad := range []string{"com.example.app", "blog-manager", "mod.", "MOD.acme.x"} {
+	for _, bad := range []string{"com.example.app", "blog-manager", "mod.", "MOD.acme.x",
+		"mod.acme.crm.extra", "mod.acme", "mod.acme._bad", "mod.-acme.crm"} {
 		if IsCanonicalDomain(bad) {
 			t.Errorf("IsCanonicalDomain(%q) = true, want false", bad)
 		}

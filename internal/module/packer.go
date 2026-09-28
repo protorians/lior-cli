@@ -103,7 +103,7 @@ func (p *Packer) packModern(name, moduleSrc string) (*PackResult, error) {
 		return nil, errors.New(i18n.Tf("pack.error.version", version))
 	}
 
-	if err := runTypecheck(moduleSrc); err != nil {
+	if err := RunTypecheck(moduleSrc); err != nil {
 		return nil, err
 	}
 
@@ -211,11 +211,12 @@ func (p *Packer) finalizeArchive(archivePath, name, version, manifestChecksum st
 	}, nil
 }
 
-// runTypecheck enforces rule 2 of §4.4: `tsc --noEmit` passes before an
+// RunTypecheck enforces rule 2 of §4.4: `tsc --noEmit` passes before an
 // archive is produced (D6: blocking typecheck). The module `typecheck` npm
 // script is preferred; bare `tsc` is the fallback. Fail-closed: an
-// unavailable toolchain is an error, never a silent pass.
-func runTypecheck(moduleDir string) error {
+// unavailable toolchain is an error, never a silent pass. Shared with the
+// top-level `liora typecheck` command.
+func RunTypecheck(moduleDir string) error {
 	np := pkg.LoadNodePackage(filepath.Join(moduleDir, "package.json"))
 
 	bun, _ := exec.LookPath("bun")
@@ -311,7 +312,9 @@ func (p *Packer) createModernArchive(dest, moduleSrc string, m *Manifest) error 
 	}); err != nil {
 		return err
 	}
-	artifactDir := filepath.Join(moduleSrc, m.EffectiveArtifactDir())
+	// Development layout (`.liorian/artifact/`, D7) resolved on disk; the
+	// distribution prefix stays `artifact/`.
+	artifactDir := filepath.Join(moduleSrc, m.SourceArtifactDir(moduleSrc))
 	return counter.addTree(artifactDir, config.ModuleArtifactDir, nil)
 }
 

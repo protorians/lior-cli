@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.26.0] - 2026-09-28
+
+### Added
+- **Commande `liora typecheck`** — pas de porte utilisateur pour la règle 2 du pack
+  (spec `module-isolated-runtime.md` §4.4) : `liora typecheck [module]` exécute le contrôle
+  TypeScript `tsc --noEmit` sans produire d'archive, en réutilisant le moteur fail-closed de
+  `liora pack` (`module.RunTypecheck`, désormais exporté) : script `typecheck` du module en
+  priorité, `tsc`/`bun` en repli, et un toolchain indisponible reste une erreur — jamais un succès
+  silencieux. Le module est résolu depuis l'arbre workspace (`modules/<id>`) puis depuis l'arbre
+  d'installation (`library/modules/<id>`), avec sélecteur interactif en l'absence d'argument.
+- **Entrée canonique `main.tsx` et payload de développement sous `.liorian/artifact/` (D7)** —
+  `manifest.entry` prend `main.tsx` comme nom canonique (`config.ModuleEntryFileName`) et le build
+  écrit son payload exécutable dans `modules/<id>/.liorian/artifact/`
+  (`config.ModuleArtifactSourceDir`), séparant l'arbre de développement de la distribution :
+  l'archive `.liozip` conserve le préfixe `artifact/**` et l'installation le dépose dans
+  `library/modules/<id>/<version>/artifact/**`. `Manifest.SourceArtifactDir` résout le répertoire
+  sur le disque (`.liorian/artifact` → déclaration du manifeste → `artifact`) et
+  `isModernModuleDir` reconnaît les deux layouts.
+
+### Changed
+- **Domaine canonique `mod.<organization-slug>.<module-identifier>`** — la forme canonique exigée
+  par la spec `module-installation.md` §4.3 est contrainte à exactement trois labels kebab-case :
+  `mod.acme.crm.extra`, `mod.acme` et `mod.acme._bad` ne sont plus reconnus comme canoniques et
+  remontent en avertissement de validation au lieu d'être acceptés en silence. Le mockup de
+  référence `hello-world` est réaligné sur `mod.liorian.hello-world`.
+- **Suppression des plafonds de taille de l'artefact (règle 6 de §4.4)** — la validation ne refuse
+  plus que le payload vide (`artifact/module.js`, `artifact/index.html`) : les seuils de 5 Mo
+  (bundle) et 25 Mo (arbre complet), ainsi que le parcours de directory associé, ont disparu, la
+  taille de l'artefact relevant de la responsabilité du développeur.
+
+### Fixed
+- **`liora repair` préserve le point d'entrée runtime des modules isolés** — la normalisation de
+  `manifest.entry` reconnaît `entry.tsx` (première révision du runtime isolé) via la nouvelle
+  constante `config.LegacyEntryFileName` au lieu de retomber sur la déclaration `index.tsx` : un
+  module isolé existant n'est plus requalifié en module legacy par la commande de réparation.
+
 ## [v0.25.0] - 2026-09-27
 
 ### Added

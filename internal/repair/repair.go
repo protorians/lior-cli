@@ -486,11 +486,14 @@ func (r *Repairer) applyFinding(m *module.Manifest, moduleDir, name string, f mo
 			if isConfiguration(m) {
 				return r.applyConfigurationEntry(m, moduleDir, name, act, f)
 			}
-			// The runtime entry (entry.tsx, D6) wins; the legacy declaration
-			// (index.tsx) is the fallback for pre-isolated-runtime modules.
+			// The runtime entry (main.tsx, D6) wins; the first isolated-runtime
+			// revision (`entry.tsx`) and the legacy declaration (index.tsx)
+			// are the fallbacks for older modules.
 			switch {
 			case pkg.FileExists(filepath.Join(moduleDir, config.ModuleEntryFileName)):
 				m.Entry = config.ModuleEntryFileName
+			case pkg.FileExists(filepath.Join(moduleDir, config.LegacyEntryFileName)):
+				m.Entry = config.LegacyEntryFileName
 			case pkg.FileExists(filepath.Join(moduleDir, config.LegacyDeclarationFileName)):
 				m.Entry = config.LegacyDeclarationFileName
 			default:

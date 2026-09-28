@@ -5,7 +5,7 @@ import {HelloWorldHeaderProvider} from "./presentation/providers/hello-world-hea
 import {helloWorldAnalyticsRoutine} from "./infrastructure/routines/hello-world-analytics.routine";
 
 const helloWorldModule: ModuleDeclarationInterface = {
-    identifier: 'mod.liorian.helloworld',
+    identifier: 'mod.liorian.hello-world',
     key: 'HELLO_WORLD',
     version: '1.0.0',
     name: 'Hello World',

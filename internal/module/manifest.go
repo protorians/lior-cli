@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -186,6 +187,20 @@ func (m *Manifest) EffectiveArtifactDir() string {
 		return m.Artifact.Dir
 	}
 	return config.ModuleArtifactDir
+}
+
+// SourceArtifactDir resolves the artifact directory of a module inside its
+// development tree: the `.liorian/artifact` layout (D7) when present on disk,
+// the manifest declaration when it exists, the distribution layout otherwise
+// (legacy `<module>/artifact/`).
+func (m *Manifest) SourceArtifactDir(moduleDir string) string {
+	if pkg.DirExists(filepath.Join(moduleDir, config.ModuleArtifactSourceDir)) {
+		return config.ModuleArtifactSourceDir
+	}
+	if dir := m.EffectiveArtifactDir(); pkg.DirExists(filepath.Join(moduleDir, dir)) {
+		return dir
+	}
+	return m.EffectiveArtifactDir()
 }
 
 // EffectiveArtifactBundle returns the bundle file name of a manifest,
@@ -702,11 +717,14 @@ func ValidateUserScopeEntry(scope string) error {
 }
 
 // canonicalDomainRE matches the canonical module domain
-// (`mod.<éditeur>.<module>`, spec `module-installation.md` §4.3).
-var canonicalDomainRE = regexp.MustCompile(`^mod\.[a-z0-9]+(\.[a-z0-9-]+)*$`)
+// (`mod.<organization-slug>.<module-identifier>`, spec `module-installation.md` §4.3).
+// Exactly three labels: the organization slug (mandatory — every organization
+// configures it before gaining access to the socle, Connect and the CLI) and
+// the module identifier, both kebab-case.
+var canonicalDomainRE = regexp.MustCompile(`^mod\.[a-z0-9]+(-[a-z0-9]+)*\.[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // IsCanonicalDomain reports whether domain follows the canonical
-// `mod.<éditeur>.<module>` form.
+// `mod.<organization-slug>.<module-identifier>` form.
 func IsCanonicalDomain(domain string) bool {
 	return canonicalDomainRE.MatchString(strings.TrimSpace(domain))
 }

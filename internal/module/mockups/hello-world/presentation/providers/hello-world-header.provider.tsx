@@ -18,7 +18,7 @@ import {helloWorldAnalyticsRoutine} from "../../infrastructure/routines/hello-wo
  */
 export function HelloWorldHeaderProvider() {
     const helloWorldEnabled = useModuleStore(
-        (state) => state.modules.find((module) => module.identifier === "mod.liorian.helloworld")?.isEnabled ?? false,
+        (state) => state.modules.find((module) => module.identifier === "mod.liorian.hello-world")?.isEnabled ?? false,
     );
 
     React.useEffect(() => {

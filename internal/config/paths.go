@@ -25,16 +25,27 @@ const (
 	ManifestFileName   = "manifest.json"
 	// ModuleEntryFileName is the canonical TypeScript entry of a module
 	// (spec docs/specs/applications/module-isolated-runtime.md, D6). The
-	// legacy declaration file `index.tsx` (LegacyDeclarationFileName) is
-	// still read for modules predating the isolated runtime.
-	ModuleEntryFileName = "entry.tsx"
+	// legacy names are still read: `entry.tsx` (first isolated-runtime
+	// revision) and `index.tsx` (LegacyDeclarationFileName, pre-runtime
+	// declaration file).
+	ModuleEntryFileName = "main.tsx"
+	// LegacyEntryFileName is the entry name of modules predating the
+	// `main.tsx` canonical name (first isolated-runtime revision).
+	LegacyEntryFileName = "entry.tsx"
 	// LegacyDeclarationFileName is the legacy module declaration file
 	// (`index.tsx`, ModuleDeclarationInterface) of modules predating the
 	// isolated runtime (§8.1: it disappears in the canonical layout).
 	LegacyDeclarationFileName = "index.tsx"
-	// ModuleArtifactDir is the build output directory of a module (D7):
-	// `artifact/` holds the executable iframe payload (`index.html`,
-	// `module.js`, `assets/**`).
+	// ModuleArtifactSourceDir is the build output directory of a module in
+	// its development tree (D7): `<module>/.liorian/artifact/` holds the
+	// executable iframe payload (`index.html`, `module.js`, `assets/**`).
+	// It is the layout of the module source only — the distribution keeps
+	// ModuleArtifactDir.
+	ModuleArtifactSourceDir = ".liorian/artifact"
+	// ModuleArtifactDir is the artifact directory of the distribution
+	// layout (D7): the `.liozip` archive stores the built payload under
+	// `artifact/**` and an installed module lands as
+	// `library/modules/<id>/<version>/artifact/**`.
 	ModuleArtifactDir = "artifact"
 	// CurrentPointerName is the version pointer file written at
 	// `library/modules/<id>/current`: it holds the active version, enabling
@@ -201,10 +212,10 @@ func ModuleAppSrcDir(root, module string) string {
 	return filepath.Join(root, AppSrcDir, module)
 }
 
-// ModuleArtifactDirPath returns the artifact directory of a module (source
-// side, e.g. `modules/<id>/artifact/`).
+// ModuleArtifactDirPath returns the artifact directory of a module in its
+// development tree (`modules/<id>/.liorian/artifact/`, D7).
 func ModuleArtifactDirPath(root, module string) string {
-	return filepath.Join(WorkspaceModuleDir(root, module), ModuleArtifactDir)
+	return filepath.Join(WorkspaceModuleDir(root, module), ModuleArtifactSourceDir)
 }
 
 // InstalledModuleVersionsRoot returns the multi-version root of an installed

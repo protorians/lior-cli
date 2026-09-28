@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
   "schemaVersion": 1,
   "id": "hello-world",
-  "domain": "mod.liorian.helloworld",
+  "domain": "mod.liorian.hello-world",
   "key": "HELLO_WORLD",
   "name": "Hello World",
   "description": "Module d'exemple pour l'onboarding des développeurs",

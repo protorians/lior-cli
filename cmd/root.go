@@ -122,6 +122,7 @@ func init() {
 		debugCmd,
 		auditCmd,
 		repairCmd,
+		typecheckCmd,
 		testCmd,
 		marketplaceCmd,
 		moduleCmd,

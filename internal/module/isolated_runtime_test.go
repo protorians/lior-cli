@@ -11,8 +11,9 @@ import (
 )
 
 // writeModernModule scaffolds a conformant isolated-runtime module under
-// <root>/modules/<id>/ (D5): manifest (entry.tsx, userScope, artifact),
-// tsconfig, mount/unmount entry and a built payload.
+// <root>/modules/<id>/ (D5): manifest (main.tsx, userScope, artifact),
+// tsconfig, mount/unmount entry and a built payload under the development
+// layout `.liorian/artifact/` (D7).
 func writeModernModule(t *testing.T, root, id string) string {
 	t.Helper()
 	dir := config.WorkspaceModuleDir(root, id)
@@ -28,7 +29,7 @@ func writeModernModule(t *testing.T, root, id string) string {
   "icon": "PuzzleIcon",
   "type": "WEB_APP_LOCAL",
   "external": true,
-  "entry": "entry.tsx",
+  "entry": "main.tsx",
   "uri": "/` + id + `",
   "token": "3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
   "userScope": [],
@@ -40,11 +41,11 @@ func writeModernModule(t *testing.T, root, id string) string {
   "optionalRequirements": {},
   "capabilities": ["core:default"]
 }`,
-		"tsconfig.json":       "{}\n",
-		"package.json":        "{\"name\":\"@liorian/module-" + id + "\",\"scripts\":{\"typecheck\":\"true\"}}\n",
-		"entry.tsx":           "export function mount(el: HTMLElement): void {}\n\nexport function unmount(): void {}\n",
-		"artifact/module.js":  "console.log(\"bundle\");\n",
-		"artifact/index.html": "<!doctype html><html><body></body></html>\n",
+		"tsconfig.json":                "{}\n",
+		"package.json":                 "{\"name\":\"@liorian/module-" + id + "\",\"scripts\":{\"typecheck\":\"true\"}}\n",
+		"main.tsx":                     "export function mount(el: HTMLElement): void {}\n\nexport function unmount(): void {}\n",
+		".liorian/artifact/module.js":  "console.log(\"bundle\");\n",
+		".liorian/artifact/index.html": "<!doctype html><html><body></body></html>\n",
 	}
 	for rel, content := range files {
 		path := filepath.Join(dir, filepath.FromSlash(rel))
@@ -92,10 +93,11 @@ func TestPackModernArchiveLayout(t *testing.T) {
 	joined := strings.Join(names, "\n")
 
 	// D4/§4.4: manifest at the archive root, sources under src/, the built
-	// payload under artifact/.
+	// payload under artifact/ (development layout .liorian/artifact →
+	// distribution prefix artifact/).
 	for _, want := range []string{
 		"manifest.json",
-		"src/entry.tsx",
+		"src/main.tsx",
 		"src/tsconfig.json",
 		"artifact/module.js",
 		"artifact/index.html",
@@ -130,7 +132,7 @@ func TestPackModernRefusesNextImport(t *testing.T) {
 func TestPackModernRefusesFetchInBundle(t *testing.T) {
 	root := t.TempDir()
 	dir := writeModernModule(t, root, "crm")
-	patchModernModule(t, dir, "artifact/module.js",
+	patchModernModule(t, dir, ".liorian/artifact/module.js",
 		"const r = await fetch(\"https://evil.example\");\n")
 
 	packer := &Packer{Root: root}
@@ -146,7 +148,7 @@ func TestPackModernRefusesFetchInBundle(t *testing.T) {
 func TestPackModernRefusesAtAliasImport(t *testing.T) {
 	root := t.TempDir()
 	dir := writeModernModule(t, root, "crm")
-	patchModernModule(t, dir, "entry.tsx",
+	patchModernModule(t, dir, "main.tsx",
 		"import { thing } from \"@/core/thing\";\n\nexport function mount(): void {}\nexport function unmount(): void {}\n")
 
 	packer := &Packer{Root: root}
@@ -181,7 +183,7 @@ func TestValidateModernRequiresUserScope(t *testing.T) {
 func TestValidateModernRequiresArtifact(t *testing.T) {
 	root := t.TempDir()
 	dir := writeModernModule(t, root, "crm")
-	if err := os.Remove(filepath.Join(dir, "artifact", "module.js")); err != nil {
+	if err := os.Remove(filepath.Join(dir, ".liorian", "artifact", "module.js")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +199,7 @@ func TestValidateModernRequiresArtifact(t *testing.T) {
 func TestValidateModernRequiresMountUnmount(t *testing.T) {
 	root := t.TempDir()
 	dir := writeModernModule(t, root, "crm")
-	patchModernModule(t, dir, "entry.tsx", "export default {}\n")
+	patchModernModule(t, dir, "main.tsx", "export default {}\n")
 
 	res, err := (&Validator{}).ValidateModuleDir(dir)
 	if err != nil {
