@@ -61,7 +61,7 @@ func (i *Installer) client() *Client {
 	return NewClient()
 }
 
-// InstallArchive installs the bytes of a `.liozip` archive into a workspace —
+// InstallArchive installs the bytes of a `.LiorArtifactPackage` archive into a workspace —
 // audited, validated and fail-closed. It is the shared engine of
 // `marketplace install` (download from the catalog) and `liora install`
 // (local file install, spec module-isolated-runtime.md §8.4).
@@ -69,7 +69,7 @@ func InstallArchive(data []byte, root string, force bool, res *InstallResult) er
 	return unpack(data, root, force, res)
 }
 
-// Install resolves a module in the catalog, downloads its `.liozip` archive,
+// Install resolves a module in the catalog, downloads its `.LiorArtifactPackage` archive,
 // verifies the SHA-256 checksum and the Ed25519 publisher signature
 // (fail-closed), then extracts the module in place.
 func (i *Installer) Install(ctx context.Context, ref string) (*InstallResult, error) {
@@ -215,7 +215,7 @@ func checksumHex(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// unpack extracts a `.liozip` (ZIP) archive into a temporary directory,
+// unpack extracts a `.LiorArtifactPackage` (ZIP) archive into a temporary directory,
 // audits every entry fail-closed (traversal, absolute paths, symlinks,
 // executables, entry count and decompression ratio — spec §7.2), validates
 // the extracted module and copies it into the workspace.
@@ -238,7 +238,7 @@ func unpack(data []byte, root string, force bool, res *InstallResult) error {
 
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return fmt.Errorf("not a valid .liozip archive: %w", err)
+		return fmt.Errorf("not a valid %s archive: %w", config.ArchiveFormatLabel, err)
 	}
 	if len(zr.File) > module.MaxArchiveFiles {
 		return fmt.Errorf("archive holds too many entries (max %d)", module.MaxArchiveFiles)

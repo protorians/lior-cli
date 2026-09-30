@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/module"
 	"github.com/protorians/lior-cli/internal/pkg"
 )
@@ -158,11 +159,11 @@ func TestGetModuleNotFound(t *testing.T) {
 }
 
 func TestDownloadArtifact(t *testing.T) {
-	blob := []byte("SenMod-bytes")
+	blob := []byte("artifact-package-bytes")
 	mod := sampleModules()[0]
 	f := newFakeServer(t, []CatalogModule{mod}, blob)
 
-	got, err := f.client().DownloadArtifact(context.Background(), f.srv.URL+"/artifacts/"+mod.Slug+".SenMod")
+	got, err := f.client().DownloadArtifact(context.Background(), f.srv.URL+"/artifacts/"+mod.Slug+config.ArchiveExt)
 	if err != nil {
 		t.Fatalf("DownloadArtifact() error = %v", err)
 	}
@@ -176,7 +177,7 @@ func TestDownloadArtifactTooLarge(t *testing.T) {
 	mod := sampleModules()[0]
 	f := newFakeServer(t, []CatalogModule{mod}, blob)
 
-	_, err := f.client().DownloadArtifact(context.Background(), f.srv.URL+"/artifacts/"+mod.Slug+".SenMod")
+	_, err := f.client().DownloadArtifact(context.Background(), f.srv.URL+"/artifacts/"+mod.Slug+config.ArchiveExt)
 	if err == nil || !strings.Contains(err.Error(), "maximum size") {
 		t.Fatalf("expected a size error, got %v", err)
 	}
@@ -185,7 +186,7 @@ func TestDownloadArtifactTooLarge(t *testing.T) {
 func TestDownloadArtifactHTTPError(t *testing.T) {
 	f := newFakeServer(t, sampleModules(), nil)
 
-	_, err := f.client().DownloadArtifact(context.Background(), f.srv.URL+"/missing/file.SenMod")
+	_, err := f.client().DownloadArtifact(context.Background(), f.srv.URL+"/missing/file.LiorArtifactPackage")
 	if err == nil || !strings.Contains(err.Error(), "HTTP 404") {
 		t.Fatalf("expected an HTTP 404 error, got %v", err)
 	}

@@ -455,7 +455,7 @@ func artifactSignatureKeyID() string {
 	return signing.Fingerprint(pub)
 }
 
-// artifactSignature base64-encodes the `.liozip.sig` signature file when
+// artifactSignature base64-encodes the `.LiorArtifactPackage.sig` signature file when
 // present (produced by `liora sign`). The signature stays empty when absent
 // (unsigned publish — refused by the server per ADR-010 unless explicitly
 // allowed with `--allow-unsigned`).

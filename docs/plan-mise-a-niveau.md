@@ -24,7 +24,7 @@ Légende : ✅ fait · 🟡 partiel · ⬜ non fait · ➖ sans objet.
 | D | Audit/Validator étendu (E-11) | ✅ fait |
 | E | OAuth refresh + chemin `$schema` (E-13) | ✅ fait (OAuth) · ✅ schéma ; catalogue ➖ |
 | F | Docs, i18n, release | ✅ fait |
-| G | Chaîne d'installation `module-installation` (specs 0.49.0–0.50.0 `EXÉCUTÉ`) : manifeste canonique, `.liozip`, signature obligatoire, fail-closed | ✅ fait (voir §10) |
+| G | Chaîne d'installation `module-installation` (specs 0.49.0–0.50.0 `EXÉCUTÉ`) : manifeste canonique, `.LiorArtifactPackage`, signature obligatoire, fail-closed | ✅ fait (voir §10) |
 
 **Vérifications** : `gofmt -l .` propre · `go vet ./...` propre · `go test ./...` vert ·
 `go test ./e2e/ -run TestScripts -count=1` vert · audit sans WARNING sur un module créé neuf.
@@ -262,11 +262,11 @@ Lot A (manifeste)  ──▶ Lot B (create)  ──▶ Lot C (publish) ──▶
 
 > **Statut lot G : ✅ Fait.** La CLI est le premier maillon côté éditeur de la chaîne
 > [`module-installation.md`](../../../lior-workspace/docs/specs/applications/module-installation.md)
-> (artefact `.liozip`, signature obligatoire, manifeste canonique, fail-closed).
+> (artefact `.LiorArtifactPackage`, signature obligatoire, manifeste canonique, fail-closed).
 
 | # | Écart | Traitement |
 |---|-------|------------|
-| G-01 | Extension `.SenMod` vs `.liozip` canonique (ADR-003, D6) | `config.ArchiveExt = ".liozip"` ; `.SenMod`/`.smp` lus en legacy (signature, install), jamais produits ; mock E2E + scripts alignés |
+| G-01 | Extension `.SenMod` vs `.LiorArtifactPackage` canonique (ADR-003, D6) | `config.ArchiveExt = ".LiorArtifactPackage"` (casse exacte) ; **rupture sèche** — `config.LegacyArchiveExts` (`.SenMod`, `.smp`) supprimé, plus aucun repli en lecture (signature, install) ; mock E2E + scripts alignés |
 | G-02 | Manifeste legacy (`managerCompatibility`, `apiScopes`, `capabilities` objet, `INTERNAL`/`EXTERNAL`, permissions `<id>.action`) | Champs canoniques ajoutés (`compatibility.{socle,api}`, `oauth.scopes`, `capabilities: []`, `external`, `dataModel`, `declarative`) ; lecture legacy normalisée (round-trip préservé) ; mockup = miroir 1:1 du socle (`WEB_APP_LOCAL`, permissions `Role:Verbe`) ; `create` défaut `WEB_APP_LOCAL` |
 | G-03 | Signature optionnelle (warning) vs obligatoire (ADR-010, SEC-001) | Charge utile canonique `{moduleIdentifier, version, checksum, manifestChecksum, entry, type}` (§7.1) signée par `liora sign` (module ou fichier `--key`) ; `publish` refuse sans clé sauf `--allow-unsigned` ; artefact déclaré avec `manifestChecksum` + `signatureKeyId` (fingerprint) |
 | G-04 | `publish` sans `--file`/`--version` (session §16) | Flags `--file`, `--version`, `--allow-unsigned` ; `pack --out/--version` ; normalisation des args (`./x`, `library/modules/x`) |

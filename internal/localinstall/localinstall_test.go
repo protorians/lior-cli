@@ -71,7 +71,7 @@ func buildModernArchive(t *testing.T) []byte {
 
 func TestLocalInstallHappyPath(t *testing.T) {
 	root := t.TempDir()
-	archive := filepath.Join(root, ".lorian", "build", "blog-manager-1.2.0.liozip")
+	archive := filepath.Join(root, ".lorian", "build", "blog-manager-1.2.0.LiorArtifactPackage")
 	data := buildModernArchive(t)
 	if err := pkg.CreateDir(filepath.Dir(archive)); err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestLocalInstallHappyPath(t *testing.T) {
 
 func TestLocalInstallMissingArchive(t *testing.T) {
 	root := t.TempDir()
-	_, err := (&Installer{Root: root}).Install(filepath.Join(root, "absent.liozip"))
+	_, err := (&Installer{Root: root}).Install(filepath.Join(root, "absent.LiorArtifactPackage"))
 	if err == nil {
 		t.Fatal("expected an error for a missing archive")
 	}
@@ -120,7 +120,7 @@ func TestLocalInstallMissingArchive(t *testing.T) {
 
 func TestLocalInstallRefusesLegacyLayout(t *testing.T) {
 	root := t.TempDir()
-	archive := filepath.Join(root, "legacy.liozip")
+	archive := filepath.Join(root, "legacy.LiorArtifactPackage")
 
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)

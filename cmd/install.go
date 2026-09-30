@@ -17,9 +17,9 @@ import (
 var localInstallForce bool
 
 var localInstallCmd = &cobra.Command{
-	Use:   "install <archive.liozip>",
-	Short: "Install a local module archive (.liozip)",
-	Long: `Installs a local .liozip archive into the workspace — without the
+	Use:   "install <archive.LiorArtifactPackage>",
+	Short: "Install a local module archive (.LiorArtifactPackage)",
+	Long: `Installs a local .LiorArtifactPackage archive into the workspace — without the
 marketplace and without api-core.
 
 The archive is audited and validated by the same fail-closed engine as
@@ -32,8 +32,8 @@ keychain when present; a missing or unverifiable signature is a warning —
 the marketplace/api-core chain remains the trust authority.
 
 Use --force to replace an already-installed version.`,
-	Example: `  liora install .lorian/build/blog-manager-1.2.0.liozip
-  liora install ./dist/blog-manager-1.2.0.liozip --force`,
+	Example: `  liora install .lorian/build/blog-manager-1.2.0.LiorArtifactPackage
+  liora install ./dist/blog-manager-1.2.0.LiorArtifactPackage --force`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runLocalInstall(args[0])

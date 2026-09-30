@@ -202,7 +202,7 @@ func TestGetModuleNotFound(t *testing.T) {
 }
 
 func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "test-module-0.1.0.liozip")
+	archivePath := filepath.Join(t.TempDir(), "test-module-0.1.0.LiorArtifactPackage")
 	if err := os.WriteFile(archivePath, []byte("fake-zip-content"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 				http.Error(w, "manifest id = "+m.ID, http.StatusBadRequest)
 				return
 			}
-			raiton(w, http.StatusCreated, `{"url":"https://cdn.liorian.dev/artifacts/prod-new/version-1.liozip","key":"prod-new/version-1","checksum":"`+r.FormValue("checksum")+`","sizeBytes":17}`)
+			raiton(w, http.StatusCreated, `{"url":"https://cdn.liorian.dev/artifacts/prod-new/version-1.LiorArtifactPackage","key":"prod-new/version-1","checksum":"`+r.FormValue("checksum")+`","sizeBytes":17}`)
 		default:
 			http.Error(w, "not found: "+r.URL.Path, http.StatusNotFound)
 		}
@@ -294,7 +294,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 	if resp.Version != "0.1.0" {
 		t.Errorf("Version = %q, want 0.1.0", resp.Version)
 	}
-	if resp.URL != "https://cdn.liorian.dev/artifacts/prod-new/version-1.liozip" {
+	if resp.URL != "https://cdn.liorian.dev/artifacts/prod-new/version-1.LiorArtifactPackage" {
 		t.Errorf("URL = %q, want CDN URL", resp.URL)
 	}
 	if len(calls) != 3 {
@@ -303,7 +303,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 }
 
 func TestPublishReusesLinkedProduct(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "m-0.1.0.SenMod")
+	archivePath := filepath.Join(t.TempDir(), "m-0.1.0.LiorArtifactPackage")
 	if err := os.WriteFile(archivePath, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -348,14 +348,14 @@ func TestPublishMissingArchive(t *testing.T) {
 	client := testClient(server.URL)
 	manifest := module.NewManifest("mod", "")
 	manifest.Token = ""
-	_, err := client.Publish(t.Context(), "/nonexistent/archive.SenMod", &manifest)
+	_, err := client.Publish(t.Context(), "/nonexistent/archive.LiorArtifactPackage", &manifest)
 	if err == nil {
 		t.Error("Publish doit échouer avec un fichier inexistant")
 	}
 }
 
 func TestPublishServerError(t *testing.T) {
-	archivePath := filepath.Join(t.TempDir(), "mod.SenMod")
+	archivePath := filepath.Join(t.TempDir(), "mod.LiorArtifactPackage")
 	if err := os.WriteFile(archivePath, []byte("data"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestPublishMissingStoreRoute(t *testing.T) {
 	client := testClient(server.URL)
 	manifest := module.NewManifest("mod", "")
 	manifest.Token = ""
-	_, err := client.Publish(t.Context(), filepath.Join(t.TempDir(), "mod.SenMod"), &manifest)
+	_, err := client.Publish(t.Context(), filepath.Join(t.TempDir(), "mod.LiorArtifactPackage"), &manifest)
 	if err == nil {
 		t.Fatal("Publish doit échouer quand le developer store est absent")
 	}

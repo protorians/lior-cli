@@ -21,6 +21,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/protorians/lior-cli/internal/config"
 )
 
 // Product mirrors the StoreModuleProduct entity.
@@ -1020,7 +1021,7 @@ func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request, productI
 	s.mu.Unlock()
 	writeData(w, http.StatusCreated, map[string]any{
 		"url":       "https://store.liorian.dev/modules/" + slug,
-		"key":       "artifacts/" + productID + "/" + versionID + ".liozip",
+		"key":       "artifacts/" + productID + "/" + versionID + ".LiorArtifactPackage",
 		"checksum":  checksum,
 		"signature": r.FormValue("signature"),
 		"sizeBytes": len(archive),
@@ -1122,7 +1123,7 @@ func sha256HexBytes(data []byte) string {
 
 // buildModuleArchive packs a conformant isolated-runtime module (§4.4:
 // manifest at the root, sources under src/, built payload under artifact/)
-// into a `.liozip` ZIP, mirroring `internal/module/packer.go` (spec
+// into a `.LiorArtifactPackage` ZIP, mirroring `internal/module/packer.go` (spec
 // TECH-002).
 func buildModuleArchive(name, page, version string) []byte {
 	manifest := map[string]any{
@@ -1191,7 +1192,7 @@ func buildModuleArchive(name, page, version string) []byte {
 
 // withArtifactURL fills the absolute storefront artifact URL for a request.
 func (m CatalogModule) withArtifactURL(r *http.Request) CatalogModule {
-	m.ArtifactURL = "http://" + r.Host + "/catalog/artifacts/" + m.Slug + ".liozip"
+	m.ArtifactURL = "http://" + r.Host + "/catalog/artifacts/" + m.Slug + ".LiorArtifactPackage"
 	return m
 }
 
@@ -1241,8 +1242,7 @@ func (s *Server) catalogGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) catalogArtifact(w http.ResponseWriter, r *http.Request) {
 	slug := strings.TrimPrefix(r.URL.Path, "/catalog/artifacts/")
-	slug = strings.TrimSuffix(slug, ".liozip")
-	slug = strings.TrimSuffix(slug, ".SenMod")
+	slug = strings.TrimSuffix(slug, config.ArchiveExt)
 	s.mu.Lock()
 	data, ok := s.catalogArtifacts[slug]
 	s.mu.Unlock()

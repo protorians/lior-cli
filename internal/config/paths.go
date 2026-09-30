@@ -44,8 +44,8 @@ const (
 	// ModuleArtifactDir.
 	ModuleArtifactSourceDir = ".liorian/artifact"
 	// ModuleArtifactDir is the artifact directory of the distribution
-	// layout (D7): the `.liozip` archive stores the built payload under
-	// `artifact/**` and an installed module lands as
+	// layout (D7): the `.LiorArtifactPackage` archive stores the built payload
+	// under `artifact/**` and an installed module lands as
 	// `library/modules/<id>/<version>/artifact/**`.
 	ModuleArtifactDir = "artifact"
 	// CurrentPointerName is the version pointer file written at
@@ -60,16 +60,16 @@ const (
 	// is where an installed module lands.
 	WorkspaceModulesDir = "modules"
 	// ArchiveExt is the canonical extension of built module archives
-	// (`<name>-<version>.liozip`, a renamed ZIP — ADR-003 of the
-	// module-installation spec). `.SenMod`/`.smp` archives are still read as
-	// deprecated legacy inputs, never produced.
-	ArchiveExt = ".liozip"
+	// (`<name>-<version>.LiorArtifactPackage`, a renamed ZIP — ADR-003 of the
+	// module-installation spec). It supersedes `.liozip`, which superseded the
+	// historical `.SenMod`/`.smp` names: none of them are read anymore, the
+	// rename is a clean break.
+	ArchiveExt = ".LiorArtifactPackage"
+	// ArchiveFormatLabel is the human-readable name of the archive format
+	// (a ZIP container behind a dedicated extension), used in help screens and
+	// error messages.
+	ArchiveFormatLabel = "Lior Artifact Package"
 )
-
-// LegacyArchiveExts lists the deprecated archive extensions accepted on read
-// (signature lookup, marketplace install). They are never produced anymore
-// (ADR-003: `.liozip` is the canonical extension).
-var LegacyArchiveExts = []string{".SenMod", ".smp"}
 
 // IsWorkspaceRoot reports whether dir is the root of a Liorian workspace, i.e.
 // it holds a `modules/` directory with at least one module in it.

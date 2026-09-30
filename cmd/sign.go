@@ -25,10 +25,10 @@ import (
 var signKeyFile string
 
 var signCmd = &cobra.Command{
-	Use:   "sign [module|archive.liozip]",
-	Short: "Sign .liozip archives (Ed25519)",
+	Use:   "sign [module|archive.LiorArtifactPackage]",
+	Short: "Sign .LiorArtifactPackage archives (Ed25519)",
 	Long: `Manages Ed25519 digital signatures for modules: generates keys,
-binds them to modules, signs the .liozip archives and verifies signatures.
+binds them to modules, signs the .LiorArtifactPackage archives and verifies signatures.
 
 The signature covers the canonical publication payload (module identifier,
 version, archive checksum, manifest checksum, entry, type — spec
@@ -49,7 +49,7 @@ Key lifecycle:
 
 Subcommands:
    sign keygen                  Generate an Ed25519 key pair
-   sign <module|archive>        Sign a module's .liozip archive
+   sign <module|archive>        Sign a module's .LiorArtifactPackage archive
    sign verify <module|archive> Verify a module's signature
    sign trust                   Export the public key to pin in the socle
 
@@ -87,10 +87,10 @@ If keys already exist, asks for confirmation before overwriting them
 }
 
 var signVerifyCmd = &cobra.Command{
-	Use:   "verify [module|archive.liozip]",
+	Use:   "verify [module|archive.LiorArtifactPackage]",
 	Short: "Verify a module's signature",
 	Long: `Verifies the validity of a module's .sig file against its
-.liozip archive, using the public key stored in the keychain.`,
+.LiorArtifactPackage archive, using the public key stored in the keychain.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return verifySignature(args)
@@ -214,7 +214,7 @@ func syncSigningKeyToServer(pub ed25519.PublicKey) (keyID string, synced bool, e
 }
 
 // signTarget describes what to sign: a project module or a standalone archive
-// file (e.g. `liora sign acme-crm.liozip --key ~/.acme/ed25519`).
+// file (e.g. `liora sign acme-crm.LiorArtifactPackage --key ~/.acme/ed25519`).
 type signTarget struct {
 	label        string // display name (module domain or archive base)
 	archivePath  string
@@ -289,11 +289,8 @@ func resolveSignTarget(root, arg string) (*signTarget, error) {
 // isArchivePath reports whether arg designates an archive file (by extension
 // or by existing file).
 func isArchivePath(arg string) bool {
-	lower := strings.ToLower(strings.TrimSpace(arg))
-	for _, ext := range append([]string{".liozip"}, config.LegacyArchiveExts...) {
-		if strings.HasSuffix(lower, strings.ToLower(ext)) {
-			return true
-		}
+	if strings.HasSuffix(strings.TrimSpace(arg), config.ArchiveExt) {
+		return true
 	}
 	return pkg.FileExists(arg)
 }

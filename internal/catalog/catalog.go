@@ -164,7 +164,7 @@ func (c *Client) GetModule(ctx context.Context, ref string) (*CatalogModule, err
 	return &out, nil
 }
 
-// DownloadArtifact fetches the raw `.liozip` archive bytes of a catalog
+// DownloadArtifact fetches the raw `.LiorArtifactPackage` archive bytes of a catalog
 // module. It enforces the store archive limit (module.MaxArchiveSize).
 func (c *Client) DownloadArtifact(ctx context.Context, artifactURL string) ([]byte, error) {
 	artifactURL = strings.TrimSpace(artifactURL)

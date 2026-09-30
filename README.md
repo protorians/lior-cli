@@ -48,14 +48,16 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 | `liora connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
 | `liora auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |
 | `liora disconnect` | Invalider le token côté serveur et supprimer les credentials |
-| `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.liozip` dans `.lorian/build/` — layout runtime isolé : manifeste canonique à la racine + `src/**` (source TS, D4) + `artifact/**` (payload exécutable, §4.4), typecheck bloquant (D6), `userScope` obligatoire (D15), ni `next/*` (D1) ni `fetch`/`WebSocket` (D16) dans le bundle ; quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées |
+| `liora artifact <action> [args…]` | Passthrough transparent vers la CLI `artifact` de `@liorian/artifact-kit` : l'action et ses options (`--port`, `--out`, `--host`, …) sont transmises **verbatim**, sans réécriture, au binaire `node_modules/.bin/artifact` du module qui porte le répertoire courant (installé au préalable comme dépendance du module s'il est absent) ; le code de sortie de la CLI est celui de la commande |
+| `liora artifact bind:socle <socle> [module]` / `unbind:socle` | Lier un module en développement à un socle hors de son dossier : `library/modules/<id>/` est écrit en **liens symboliques** vers le module (repli copie) et le HMR est câblé dans le `.env.local` non versionné du socle. Le chemin du socle (absolu ou relatif au répertoire d'appel) est résolu avant le passthrough ; `unbind:socle` retire la liaison sans toucher une installation réelle |
+| `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.LiorArtifactPackage` dans `.lorian/build/` — layout runtime isolé : manifeste canonique à la racine + `src/**` (source TS, D4) + `artifact/**` (payload exécutable, §4.4), typecheck bloquant (D6), `userScope` obligatoire (D15), ni `next/*` (D1) ni `fetch`/`WebSocket` (D16) dans le bundle ; quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées |
 | `liora sign keygen` | Générer une paire de clés Ed25519 pour la signature |
-| `liora sign [module\|archive.liozip] [--key F]` | Signer la charge utile canonique de publication (Ed25519, obligatoire pour publier — ADR-010) |
-| `liora sign verify [module\|archive.liozip]` | Vérifier la signature d'un module (repli legacy accepté, signalé) |
+| `liora sign [module\|archive.LiorArtifactPackage] [--key F]` | Signer la charge utile canonique de publication (Ed25519, obligatoire pour publier — ADR-010) |
+| `liora sign verify [module\|archive.LiorArtifactPackage]` | Vérifier la signature d'un module (une seule extension admise : `.LiorArtifactPackage`) |
 | `liora publish [module] [--version V] [--file F] [--allow-unsigned]` | Auditer, packer, signer (obligatoire) et publier un module sur le store (`manifestChecksum` + `signatureKeyId` déclarés) |
 | `liora link` / `unlink` | Associer un module local à un module distant du store (token) |
 | `liora marketplace search\|install` | Rechercher (`search [query]`) et installer (`install <module>`) des modules depuis le catalogue public (`LIORIAN_STORE_API`) |
-| `liora install <archive.liozip> [--force]` | Installer une archive locale sans le marketplace ni api-core : audit fail-closed, installation multi-version dans `library/modules/<id>/<version>/` + pointeur `current` (D11) ; le sidecar `.sig` est vérifié contre le trousseau quand il existe |
+| `liora install <archive.LiorArtifactPackage> [--force]` | Installer une archive locale sans le marketplace ni api-core : audit fail-closed, installation multi-version dans `library/modules/<id>/<version>/` + pointeur `current` (D11) ; le sidecar `.sig` est vérifié contre le trousseau quand il existe |
 | `liora audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
 | `liora repair [module] [--dry-run] [--warnings] [--no-install] [--no-interaction] [--output table\|json]` | Réparer automatiquement les anomalies bloquantes d'un (ou tous les) module(s) : champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé ; les points non réparables deviennent des instructions pas à pas |
 | `liora debug [module]` | Valider le module et lancer un build de diagnostic |
@@ -121,6 +123,23 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 > conformité des modules : un module en erreur annule la commande (warnings non bloquants,
 > sans module le contrôle est ignoré). Les contrôles `debug`/`test` restent des commandes
 > dédiées (`liora debug`, `liora test`) et ne sont plus lancés par la porte.
+>
+> **`artifact` est un passthrough, pas une commande à option** — `liora artifact <action>` ne
+> réimplémente rien : il localise le module qui porte le répertoire courant, s'assure que
+> `@liorian/artifact-kit` y est déclaré (installation automatique sinon, avec le gestionnaire de
+> paquets du projet) puis exécute `node_modules/.bin/artifact` en lui transmettant l'action et ses
+> arguments tels quels, avec les flux du processus liés au terminal (Ctrl+C, couleurs, `stdin`
+> interactif) et le code de sortie propagé. Un répertoire passé en argument (ou le module
+> sélectionné depuis la racine du projet) est ajouté en dernier argument ; l'utilisateur peut donc
+> écrire `liora artifact build modules/blog-manager` comme `cd modules/blog-manager && liora artifact
+> build`. L'extension `.LiorArtifactPackage` (ZIP renommé) est produite par `artifact pack` — et par
+> `liora pack` pour la chaîne de publication (signature, store).
+>
+> **`bind:socle` / `unbind:socle` font exception au passthrough** — leur premier argument est le
+> dossier du socle, pas un module : `liora` l'absolutise contre le répertoire d'appel, résout le
+> module en cours (répertoire courant, argument ou sélection), puis transmet l'action au binaire
+> `artifact`, exécuté dans le module. Le module apparaît alors dans le registre du socle et son
+> artefact est celui du dev-server — sans copier son code dans le dépôt du socle.
 
 ## Variables d'environnement
 
@@ -145,7 +164,7 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 - Repli : fichier chiffré AES-256-GCM (`~/.lorian-cli/credentials.enc`)
 - Clés de signature Ed25519 dans le keychain (service `lorian-cli-signing`),
   avec fichier chiffré en repli (`~/.lorian-cli/signing.enc`)
-- Archives `.liozip` : ZIP contenant `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module>/` + `manifest.json` canonique à la racine — aucun token ni credential ; signature Ed25519 obligatoire, vérification fail-closed
+- Archives `.LiorArtifactPackage` : ZIP contenant `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module>/` + `manifest.json` canonique à la racine — aucun token ni credential ; signature Ed25519 obligatoire, vérification fail-closed
 
 ## Tests
 

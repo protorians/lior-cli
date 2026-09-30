@@ -5,7 +5,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.28.0] - 2026-09-30
+
 ### Added
+- **Commande `liora artifact <action>` — passthrough vers `@liorian/artifact-kit`** — la chaîne de build
+  d'un module (validation, bundle, doc hôte, archive) appartient à `@liorian/artifact-kit`, pas à la
+  CLI Go : `liora artifact` la **transmet** au binaire `node_modules/.bin/artifact` du module visé,
+  action et options `--port`/`--out`/`--host`… **telles quelles** (`DisableFlagParsing`, donc aucune
+  option n'est réinterprétée par Cobra et le contrat de la CLI `artifact` reste le sien). Le module
+  est celui qui porte le répertoire courant, à défaut celui nommé par les arguments, à défaut celui
+  sélectionné depuis la racine du projet — le répertoire n'est ajouté en dernier argument que s'il
+  diffère du répertoire courant, si bien que `liora artifact build` et
+  `cd modules/blog-manager && liora artifact build` visent la même cible. `stdin`/`stdout`/
+  `stderr` sont reliés au terminal et le processus enfant n'est pas isolé dans son groupe : `Ctrl+C`
+  atteint toute la hiérarchie, `artifact dev` reste interruptible. Le code de sortie de la CLI est
+  celui de `liora artifact`. Si `@liorian/artifact-kit` manque du `package.json` du module, il est
+  installé comme dépendance de runtime avec le gestionnaire du projet avant l'exécution — et la
+  commande **échoue** si le gestionnaire se déclare réussi sans que la dépendance apparaisse, plutôt
+  que de laisser croire à une CLI disponible qui ne l'est pas. ADR-003 (`docs/specs/liora.md` §5.19).
+- **Actions `liora artifact bind:socle` / `unbind:socle` — liaison d'un module à un socle hors de
+  son dossier** — `artifact` reste un passthrough, mais ces deux actions prennent le **dossier du
+  socle** en premier argument : `liora` l'absolutise contre le répertoire d'appel, résout le module
+  en cours (répertoire courant, argument, ou sélection à la racine), puis transmet l'action au
+  binaire `artifact` exécuté dans le module. Côté `@liorian/artifact-kit`, la liaison écrit
+  `<socle>/library/modules/<id>/` (pointeur `current`, `<version>/manifest.json` et
+  `<version>/artifact`) en **liens symboliques** vers le module (repli copie), et câble le HMR dans
+  le `.env.local` **non versionné** du socle (`NEXT_PUBLIC_DEV_MODULES_URL`,
+  `NEXT_PUBLIC_DEV_MODULES`) — le dépôt du socle reste intact. `unbind:socle` retire la liaison via
+  son marqueur (`.liorian-bind.json`) sans jamais supprimer une installation réelle. Le module peut
+  donc vivre dans `modules/<id>/` du workspace et se pousser sur un dépôt public.
 - **Commande `liora sign trust`** — exporter la clé publique du trousseau de signature pour l'épinglage du socle : `liora sign trust
   [--format env|json|pem|keyid] [--merge <fichier>]` écrit la clé locale au format demandé —
   `NEXT_PUBLIC_MODULE_TRUST_KEYS` prêt à coller (env), le trousseau `keyId → PEM SPKI` (json), la clé
@@ -13,6 +41,19 @@ All notable changes to this project will be documented in this file.
   l'écraser, afin de ne pas perdre les clés déjà publiées. Sans trousseau, la commande échoue avec un
   diagnostic au lieu de rendre un trousseau vide — indiscernable d'une absence de contrôle. Sortie
   déterministe, rejouable en CI.
+
+### Changed
+- **Le format d'artefact s'appelle désormais `.LiorArtifactPackage` (rupture)** — ZIP renommé,
+  casse exacte avec un `L` majuscule, aligné sur le nom de la commande `artifact` qui le produit et
+  sur `config.ArchiveFormatLabel = "Lior Artifact Package"` pour les messages. La comparaison est
+  **sensible à la casse** : l'ancien `.liozip`, comme les extensions historiques `.SenMod` et `.smp`,
+  ne sont plus reconnus nulle part. `config.LegacyArchiveExts` est supprimé et la recherche de
+  signature (`signing.FindArchive`) ne retient plus qu'un candidat. Toutes les archives déjà
+  construites doivent être régénérées (`artifact pack` ou `liora pack`) avant `sign`, `publish`,
+  `install` ou `marketplace install` : une archive à l'ancienne extension est **introuvable**, pas
+  seulement non signée. `docs/specs/liora.md` (FR-035, §5.5), `README.md` et
+  `docs/plan-mise-a-niveau.md` (G-01) sont alignés ; les scripts E2E et le mock `liorian-connect`
+  publient désormais des archives `.LiorArtifactPackage`.
 
 ### Fixed
 - **Empreinte de manifeste signée : le document, plus la structure canonique** — `pack`, `sign` et `publish` signaient `ManifestChecksum(struct)` — une reconstitution canonique de 1

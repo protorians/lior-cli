@@ -16,17 +16,17 @@ exec sh -c 'printf "<!doctype html><html><body></body></html>\n" > modules/blog-
 exec $LIORIAN --no-color pack blog-manager
 stdout '✓ Archive created successfully'
 stdout 'Module : blog-manager v1.0.0'
-exists .lorian/build/blog-manager-1.0.0.liozip
+exists .lorian/build/blog-manager-1.0.0.LiorArtifactPackage
 
 # The archive follows the artefact contract (§4.4).
-exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.liozip | grep -q "^.* manifest.json$"'
-exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.liozip | grep -q "src/entry.tsx"'
-exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.liozip | grep -q "artifact/module.js"'
+exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.LiorArtifactPackage | grep -q "^.* manifest.json$"'
+exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.LiorArtifactPackage | grep -q "src/entry.tsx"'
+exec sh -c 'unzip -l .lorian/build/blog-manager-1.0.0.LiorArtifactPackage | grep -q "artifact/module.js"'
 
 # TC-031 — `liora install <archive>` installs the archive locally, without
 # api-core: multi-version into library/modules/<id>/<version>/ (D11) with the
 # current pointer.
-exec $LIORIAN --no-color install .lorian/build/blog-manager-1.0.0.liozip
+exec $LIORIAN --no-color install .lorian/build/blog-manager-1.0.0.LiorArtifactPackage
 stdout '✓ Module installed successfully'
 exists library/modules/blog-manager/1.0.0/manifest.json
 exists library/modules/blog-manager/1.0.0/src/entry.tsx
@@ -36,7 +36,7 @@ exec sh -c 'test "$(cat library/modules/blog-manager/current)" = "1.0.0"'
 # TC-032 — a second version installs alongside and moves the pointer.
 exec sh -c 'sed "s/1.0.0/1.1.0/" modules/blog-manager/manifest.json > modules/blog-manager/manifest.json.new && mv modules/blog-manager/manifest.json.new modules/blog-manager/manifest.json'
 exec $LIORIAN --no-color pack blog-manager
-exec $LIORIAN --no-color install .lorian/build/blog-manager-1.1.0.liozip
+exec $LIORIAN --no-color install .lorian/build/blog-manager-1.1.0.LiorArtifactPackage
 stdout '✓ Module installed successfully'
 exists library/modules/blog-manager/1.0.0/manifest.json
 exists library/modules/blog-manager/1.1.0/manifest.json
@@ -46,7 +46,7 @@ exec sh -c 'test "$(cat library/modules/blog-manager/current)" = "1.1.0"'
 exec sh -c 'mkdir -p legacy/src/app/blog legacy/public/assets/blog'
 exec sh -c 'echo "page" > legacy/src/app/blog/page.tsx'
 exec sh -c 'echo "asset" > legacy/public/assets/blog/logo.txt'
-exec sh -c 'cd legacy && zip -q -r ../legacy.liozip src public'
-! exec $LIORIAN --no-color install legacy.liozip
+exec sh -c 'cd legacy && zip -q -r ../legacy.LiorArtifactPackage src public'
+! exec $LIORIAN --no-color install legacy.LiorArtifactPackage
 stderr 'legacy archive layout refused'
 exec sh -c 'test ! -e library/modules/blog-legacy'

@@ -25,8 +25,8 @@ var (
 
 var packCmd = &cobra.Command{
 	Use:   "pack [<module>[@<version>]]",
-	Short: "Build a module archive (.liozip)",
-	Long: `Builds a module and creates a compressed .liozip archive
+	Short: "Build a module archive (.LiorArtifactPackage)",
+	Long: `Builds a module and creates a compressed .LiorArtifactPackage archive
 (moved to .lorian/build/).
 
 The archive is signed automatically with the developer signing key
@@ -94,7 +94,7 @@ func runPack(cmd *cobra.Command, args []string) error {
 	}
 
 	// Sign the fresh archive with the developer signing key (spec: "liora
-	// pack <module.domain> → signe l'artefact (.liozip) du module avec la
+	// pack <module.domain> → signe l'artefact (.LiorArtifactPackage) du module avec la
 	// clé appropriée"). The signature stays optional here: `liora sign` and
 	// `liora publish` produce/verify it too.
 	if !packNoSign {
@@ -120,7 +120,7 @@ func runPack(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// signPackedArchive signs a freshly packed .liozip with the key bound to the
+// signPackedArchive signs a freshly packed .LiorArtifactPackage with the key bound to the
 // module domain (fallback: the keychain key) and verifies the result. It
 // returns the signer fingerprint, an empty string when no signing key exists
 // (informational skip, not an error), and an error on real failures.

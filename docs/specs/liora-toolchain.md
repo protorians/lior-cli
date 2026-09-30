@@ -133,8 +133,9 @@ camouflage structurel et non cosmétique.
 | `liora check` | `lint` | one-shot | Analyse statique / vérifications |
 
 > Distinction avec les commandes modules : `dev`/`build`/`start`/`check` opèrent au niveau
-> **application** (racine du projet) ; `debug` (build des modules), `pack` (archive `.SenMod`)
-> et `test` (suites des modules) restent inchangés.
+> **application** (racine du projet) ; `debug` (build des modules), `pack` (archive
+> `.LiorArtifactPackage`), `test` (suites des modules) et `artifact` (passthrough vers la CLI
+> `@liorian/artifact-kit` d'un module, spec `liora.md` §5.19) restent inchangés.
 
 ### 5.2 Résolution de la commande (ordre de priorité)
 

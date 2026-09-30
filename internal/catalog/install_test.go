@@ -109,7 +109,7 @@ type archiveOpts struct {
 	noManifest  bool   // drop the manifest (unusable archive)
 }
 
-// buildArchive zips an ordered entry map into .liozip bytes.
+// buildArchive zips an ordered entry map into .LiorArtifactPackage bytes.
 func buildArchive(t *testing.T, name, page string, opts archiveOpts) []byte {
 	t.Helper()
 	entries := baseEntries(name, page, opts.badManifest)
@@ -194,7 +194,7 @@ func newInstallServer(t *testing.T, mods []catalogModuleFile) *installServer {
 		for _, m := range mods {
 			if m.name == ref {
 				w.Header().Set("Content-Type", "application/json")
-				_, _ = w.Write(raiton(t, m.catalogEntry(s.srv.URL+"/artifacts/"+m.name+".liozip")))
+				_, _ = w.Write(raiton(t, m.catalogEntry(s.srv.URL+"/artifacts/"+m.name+".LiorArtifactPackage")))
 				return
 			}
 		}
@@ -203,8 +203,8 @@ func newInstallServer(t *testing.T, mods []catalogModuleFile) *installServer {
 	})
 	mux.HandleFunc("/artifacts/", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/artifacts/")
-		name = strings.TrimSuffix(name, ".liozip")
-		name = strings.TrimSuffix(name, ".SenMod")
+		name = strings.TrimSuffix(name, ".LiorArtifactPackage")
+		name = strings.TrimSuffix(name, config.ArchiveExt)
 		for _, m := range mods {
 			if m.name == name {
 				w.Header().Set("Content-Type", "application/octet-stream")
@@ -563,7 +563,7 @@ func TestInstallInvalidArchive(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an unpack error")
 	}
-	if !strings.Contains(err.Error(), ".liozip") {
+	if !strings.Contains(err.Error(), config.ArchiveFormatLabel) {
 		t.Errorf("error %q should mention the archive", err)
 	}
 }

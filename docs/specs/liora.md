@@ -23,7 +23,7 @@
 >
 > Chaîne d'installation des modules tiers (`docs/specs/applications/module-installation.md`,
 > `docs/specs/modules/module-installation/module.spec.md`, statut `EXÉCUTÉ` 0.49.0–0.50.0) :
-> la CLI en est le premier maillon côté éditeur — artefact `.liozip` (ADR-003), signature Ed25519
+> la CLI en est le premier maillon côté éditeur — artefact `.LiorArtifactPackage` (ADR-003), signature Ed25519
 > obligatoire de la charge utile canonique (ADR-010, §7.1), manifeste canonique (`compatibility`,
 > `oauth`, `capabilities`, permissions `Role:Verbe`), types d'exécution (`CONFIGURATION`,
 > `WEB_APP_LOCAL`, … — ADR-004/ADR-011) et vérification fail-closed (SEC-001, §7.2).
@@ -84,8 +84,9 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `liora connect` — Authentification développeur (credentials + MFA)
 - `liora auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
 - `liora disconnect` — Suppression des credentials
-- `liora pack` — Build + compression d'un module (`.liozip`)
-- `liora sign` — Signature numérique Ed25519 des archives `.liozip` (keygen / sign / verify)
+- `liora artifact <action>` — Passthrough transparent vers la CLI `artifact` de `@liorian/artifact-kit` (voir §5.19)
+- `liora pack` — Build + compression d'un module (`.LiorArtifactPackage`)
+- `liora sign` — Signature numérique Ed25519 des archives `.LiorArtifactPackage` (keygen / sign / verify)
 - `liora publish` — Publication dans le store via Liora Connect
 - `liora link` — Liaison module local ↔ module en ligne
 - `liora unlink` — Dé liaison module local ↔ module en ligne
@@ -125,7 +126,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-007 | `liora connect` supporte le MFA (TOTP, backup codes) |
 | FR-008 | `liora connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
 | FR-009 | `liora disconnect` supprime toutes les credentials stockées |
-| FR-010 | `liora pack` compresse `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.liozip` (manifeste canonique à la racine) |
+| FR-010 | `liora pack` compresse `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.LiorArtifactPackage` (manifeste canonique à la racine) |
 | FR-011 | `liora pack` déplace l'archive vers `.lorian/build/` (`--out` pour un chemin personnalisé, `--version` pour forcer la version) |
 | FR-012 | `liora publish` construit, audite puis publie via l'API developer-store (produit → version → artefact) |
 | FR-013 | `liora publish` demande les métadonnées du module si non définies |
@@ -148,6 +149,9 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-030 | `liora create view <module> [name]` génère une vue de présentation `presentation/views/<name>.view.tsx` depuis le mockup embarqué (composant, titre, description renommés) |
 | FR-031 | `liora repair [module]` répare automatiquement les anomalies bloquantes d'un audit (champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé), re-audite puis liste en instructions les points non réparables |
 | FR-032 | `liora dev`, `build`, `start` et `check` proxient les scripts `package.json` du projet et exécutent l'`audit` de conformité des modules en pre-flight (`dev`/`build`/`start`) — spécifié dans `docs/specs/liora-toolchain.md` (TFC-001 → TFC-017) |
+| FR-033 | `liora artifact <action> [args…]` transmet `<action>` et `args…` **verbatim** à la CLI `artifact` (`@liorian/artifact-kit`) du module portant le répertoire courant, sans parsing d'options ni réécriture ; la CLI est installée comme dépendance du module si absente, et son code de sortie est propagé tel quel (voir §5.19) |
+| FR-034 | `liora artifact` refuse de s'exécuter sans action ; `liora artifact --help` affiche l'aide du passthrough, `liora artifact <action> --help` est transmis à la CLI sous-jacente |
+| FR-035 | Le format d'artefact est un ZIP nommé `.LiorArtifactPackage` (casse exacte) ; aucune autre extension n'est ni produite ni lue (rupture sèche, ADR-003) |
 
 ### Exigences non-fonctionnelles
 
@@ -171,9 +175,9 @@ init → create → develop → debug → audit → pack → sign → link → p
 | SEC-004 | Chiffrement des données sensibles au repos (AES-256-GCM pour les caches) |
 | SEC-005 | Validation stricte des inputs (UUID, noms de module, URLs) |
 | SEC-006 | Mode MFA obligatoire si activé sur le compte développeur |
-| SEC-007 | Les archives `.liozip` ne contiennent jamais de credentials ou tokens |
+| SEC-007 | Les archives `.LiorArtifactPackage` ne contiennent jamais de credentials ou tokens |
 | SEC-008 | Les clés de signature Ed25519 sont stockées dans le keychain OS, jamais en clair sur disque |
-| SEC-009 | La signature numérique Ed25519 de la charge utile canonique garantit l'intégrité et l'authenticité des archives `.liozip` avant publication (obligatoire, ADR-010) |
+| SEC-009 | La signature numérique Ed25519 de la charge utile canonique garantit l'intégrité et l'authenticité des archives `.LiorArtifactPackage` avant publication (obligatoire, ADR-010) |
 
 ### Exigences techniques
 
@@ -241,10 +245,12 @@ lior-cli/
 │   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence)
 │   │   ├── mockups/               # hello-world/ + page.tsx + view.tsx (mockups embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
-│   │   ├── packer.go              # Compression .liozip (limite 50 MB, quotas, manifest racine)
+│   │   ├── packer.go              # Compression .LiorArtifactPackage (limite 50 MB, quotas, manifest racine)
 │   │   ├── linker.go              # Liaison local ↔ distant + état .lorian/links.json
 │   │   ├── validator.go           # Validation module
 │   │   └── module_test.go         # Tests unitaires
+│   ├── artifactkit/                # Passthrough `artifact` de @liorian/artifact-kit (§5.19)
+│   │   └── artifactkit.go          # Résolution du module, ensure de la dépendance, exec verbatim
 │   ├── repair/                    # Réparation automatique des anomalies d'audit (FR-031)
 │   │   └── repair.go              # Repairer (dry-run, warnings, no-install, rename)
 │   ├── toolchain/                 # Outillage dev/build/start/check (docs/specs/liora-toolchain.md)
@@ -318,7 +324,7 @@ lior-cli/
 | `net/http` | Client API (stdlib) | — |
 | `crypto/aes`, `crypto/cipher` | Chiffrement (stdlib) | — |
 | `crypto/ed25519` | Signature numérique Ed25519 (stdlib) | — |
-| `archive/zip` | Compression .liozip (stdlib) | — |
+| `archive/zip` | Compression .LiorArtifactPackage (stdlib) | — |
 
 > Le parsing TOML (`BurntSushi/toml`) a été retiré : la configuration est uniquement JSON
 > (`lorian.config.json`). `lorian.config.toml` ne sert plus que de marqueur de projet.
@@ -766,7 +772,7 @@ Supprimer toutes les credentials stockées et déconnecter le développeur.
 
 #### Purpose
 
-Construire le build d'un module et créer une archive `.liozip` compressée.
+Construire le build d'un module et créer une archive `.LiorArtifactPackage` compressée.
 
 #### Comportement
 
@@ -781,16 +787,16 @@ Construire le build d'un module et créer une archive `.liozip` compressée.
    - Source assets : `public/assets/<module>/` (si existe)
    - Destination : `.lorian/build/`
 5. **Créer l'archive ZIP** :
-   - Nom : `<module>-<version>.liozip` (le `.liozip` est un ZIP renommé, extension canonique ADR-003 ; `.SenMod`/`.smp` restent lus en legacy, jamais produits)
+   - Nom : `<module>-<version>.LiorArtifactPackage` (le `.LiorArtifactPackage` est un ZIP renommé, extension canonique ADR-003 ; rupture sèche — les extensions historiques `.SenMod`/`.smp` ne sont plus lues et doivent être régénérées par `artifact pack`/`liora pack`)
    - Contenu : dossiers `library/modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>` (si existe)
    - Préfixe dans l'archive : `library/modules/<module>/` + `public/assets/<module>/` et `src/app/<module.uri>`
 6. **Déplacer** l'archive vers `.lorian/build/`
 7. **Afficher le résumé** : taille de l'archive, emplacement
 
-#### Structure de l'archive `.liozip`
+#### Structure de l'archive `.LiorArtifactPackage`
 
 ```
-<archive>.liozip (ZIP)
+<archive>.LiorArtifactPackage (ZIP)
 ├── library/modules/<module>/
 │   ├── manifest.json
 │   ├── index.tsx
@@ -808,7 +814,7 @@ Construire le build d'un module et créer une archive `.liozip` compressée.
 
 | Flag | Description |
 |------|-------------|
-| `--out <path>` | écrire l'archive vers un chemin personnalisé (ex. `--out acme-crm.liozip`, flux release §16) |
+| `--out <path>` | écrire l'archive vers un chemin personnalisé (ex. `--out acme-crm.LiorArtifactPackage`, flux release §16) |
 | `--version <semver>` | forcer la version du build (prioritaire sur le suffixe `@<version>`) |
 
 #### Contraintes
@@ -829,7 +835,7 @@ Construire le build d'un module et créer une archive `.liozip` compressée.
 
   ✓ Archive créée avec succès
     Module : blog-manager v0.1.0
-    Fichier : .lorian/build/blog-manager-0.1.0.liozip
+    Fichier : .lorian/build/blog-manager-0.1.0.LiorArtifactPackage
     Taille : 12.4 KB
 ```
 
@@ -884,7 +890,7 @@ Construire et publier un module dans le store via l'API `liorian-connect`.
 
 | Flag | Description |
 |------|-------------|
-| `--file <archive.liozip>` | publier une archive pré-construite au lieu d'emballer (flux release §16) |
+| `--file <archive.LiorArtifactPackage>` | publier une archive pré-construite au lieu d'emballer (flux release §16) |
 | `--version <semver>` | figer la version publiée (met à jour `manifest.json`) |
 | `--allow-unsigned` | publier sans signature (dev uniquement — le store refuse les artefacts non signés, ADR-010) |
 
@@ -920,9 +926,9 @@ Construire et publier un module dans le store via l'API `liorian-connect`.
 #### Session de release (spec installation §16)
 
 ```text
-$ liora pack ./acme-crm --version 1.3.0 --out acme-crm.liozip
-$ liora sign  acme-crm.liozip --key ~/.acme/ed25519
-$ liora publish mod.acme.crm --version 1.3.0 --file acme-crm.liozip
+$ liora pack ./acme-crm --version 1.3.0 --out acme-crm.LiorArtifactPackage
+$ liora sign  acme-crm.LiorArtifactPackage --key ~/.acme/ed25519
+$ liora publish mod.acme.crm --version 1.3.0 --file acme-crm.LiorArtifactPackage
   → 201 · signatureKeyId (fingerprint) · checksum SHA-256 · manifestChecksum · état READY
   → review → APPROVED → RELEASED → distribution catalogue (outbox)
 ```
@@ -1230,6 +1236,7 @@ Usage:
   liora [command]
 
 Available Commands:
+  artifact   Passthrough to the artifact CLI (@liorian/artifact-kit)
   audit       Audit a module's conformance
   auth        Authenticate via OAuth2 (browser)
   build       Build the application for production (project `build` script)
@@ -1244,10 +1251,10 @@ Available Commands:
   init        Initialize a new Liora project
   link        Link a local module to a remote module
   marketplace Search and install modules from the public catalog
-  pack        Build a module archive (.liozip)
+  pack        Build a module archive (.LiorArtifactPackage)
   publish     Publish a module to the store
   repair      Repair a module's audit failures
-  sign        Sign .liozip archives (Ed25519)
+  sign        Sign .LiorArtifactPackage archives (Ed25519)
   start       Start the built application (project `start` script)
   test        Run the tests of a module or all modules
   unlink      Unlink a local module from liorian-connect
@@ -1267,6 +1274,7 @@ Exemples:
   liora init
   liora create module
   liora connect
+  liora artifact build
   liora pack blog-manager
   liora sign blog-manager
   liora publish blog-manager
@@ -1301,7 +1309,7 @@ liora v0.20.0 (darwin/arm64) alpha (e7cbd2f)
 
 #### Purpose
 
-Gérer les signatures numériques Ed25519 des modules : générer des clés, signer les archives `.liozip`
+Gérer les signatures numériques Ed25519 des modules : générer des clés, signer les archives `.LiorArtifactPackage`
 et vérifier les signatures. La signature garantit l'intégrité et l'authenticité des modules
 avant publication.
 
@@ -1310,7 +1318,7 @@ avant publication.
 | Sous-commande | Description |
 |---------------|-------------|
 | `liora sign keygen` | Générer une paire de clés Ed25519 et la stocker dans le keychain |
-| `liora sign <module>` | Signer l'archive `.liozip` d'un module |
+| `liora sign <module>` | Signer l'archive `.LiorArtifactPackage` d'un module |
 | `liora sign verify <module\|archive>` | Vérifier la signature d'un module |
 
 ---
@@ -1352,7 +1360,7 @@ avant publication.
 1. **Vérifier le contexte** : être à la racine d'un projet Liora
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.liozip` existe** dans `.lorian/build/` (`.SenMod`/`.smp` historiques acceptés en lecture)
+4. **Vérifier que l'archive `.LiorArtifactPackage` existe** dans `.lorian/build/` (extension unique : une archive `.SenMod`/`.smp` est introuvable, sans repli legacy)
    - Si absente → erreur avec suggestion d'exécuter `liora pack <module>`
 5. **Charger la clé privée** depuis le keychain
    - Si absente → erreur avec suggestion d'exécuter `liora sign keygen`
@@ -1364,7 +1372,7 @@ avant publication.
 
 ###### Contraintes
 
-- L'archive `.liozip` doit exister (résultat de `liora pack`)
+- L'archive `.LiorArtifactPackage` doit exister (résultat de `liora pack`)
 - La clé privée doit exister dans le keychain
 - Si un fichier `.sig` existe déjà pour cette archive → demander confirmation (écraser)
 - Le fichier `.sig` est un binaire contenant uniquement la signature Ed25519 (64 octets)
@@ -1378,8 +1386,8 @@ avant publication.
 
   ✓ Archive signée avec succès
     Module   : blog-manager v0.1.0
-    Archive  : .lorian/build/blog-manager-0.1.0.liozip
-    Signature : .lorian/build/blog-manager-0.1.0.liozip.sig
+    Archive  : .lorian/build/blog-manager-0.1.0.LiorArtifactPackage
+    Signature : .lorian/build/blog-manager-0.1.0.LiorArtifactPackage.sig
     Signataire : a1b2c3d4... (fingerprint SHA-256)
 ```
 
@@ -1392,7 +1400,7 @@ avant publication.
 1. **Vérifier le contexte** : être à la racine d'un projet Liora
 2. **Identifier le module** : argument `<module>` ou sélecteur Bubbletea
 3. **Charger le `manifest.json`** du module pour obtenir la version
-4. **Vérifier que l'archive `.liozip` et le fichier `.sig` existent**
+4. **Vérifier que l'archive `.LiorArtifactPackage` et le fichier `.sig` existent**
 5. **Charger la clé publique** depuis le keychain
    - Si absente → erreur avec suggestion d'exécuter `liora sign keygen`
 6. **Vérifier la signature** :
@@ -1401,7 +1409,7 @@ avant publication.
 
 ###### Contraintes
 
-- L'archive `.liozip` ET le fichier `.sig` doivent exister
+- L'archive `.LiorArtifactPackage` ET le fichier `.sig` doivent exister
 - La clé publique doit exister dans le keychain
 - En cas de signature invalide → afficher un message d'erreur explicite (possiblement archive corrompue ou clé incorrecte)
 
@@ -1413,7 +1421,7 @@ avant publication.
 
   ✓ Signature valide
     Module    : blog-manager v0.1.0
-    Archive   : .lorian/build/blog-manager-0.1.0.liozip
+    Archive   : .lorian/build/blog-manager-0.1.0.LiorArtifactPackage
     Signataire : a1b2c3d4...
 ```
 
@@ -1425,7 +1433,7 @@ avant publication.
 
   ✗ Signature invalide
     Module   : blog-manager v0.1.0
-    Archive  : .lorian/build/blog-manager-0.1.0.liozip
+    Archive  : .lorian/build/blog-manager-0.1.0.LiorArtifactPackage
     → L'archive a pu être modifiée ou la clé de vérification est incorrecte.
 ```
 
@@ -1709,6 +1717,85 @@ complète (correspondance commandes → scripts, résolution, passthrough d'argu
 sortie, configuration `toolchain`) est dans **`docs/specs/liora-toolchain.md`** (TFC-001 →
 TFC-017).
 
+### 5.19 `liora artifact <action> [args…]`
+
+`artifact` est le **binaire** de `@liorian/artifact-kit` (`artifact build`, `artifact dev`,
+`artifact typecheck`, `artifact pack`, …). `liora artifact` ne le réimplémente pas : c'est un
+**passthrough transparent**, la seule valeur ajoutée étant de trouver *quel* module utiliser et de
+garantir que la dépendance y est installée.
+
+#### 5.19.1 Résolution du module cible
+
+Dans cet ordre, le premier qui aboutit gagne :
+
+| Ordre | Règle | Exemple |
+|-------|-------|---------|
+| 1 | Le premier argument non-option qui désigne un répertoire contenant un `manifest.json` | `liora artifact build modules/blog-manager` |
+| 2 | Le répertoire courant est lui-même un module (`manifest.json` présent) | `cd modules/blog-manager && liora artifact build` |
+| 3 | `config.ResolveModuleDir` à la racine du projet (arbre source `modules/`, puis `library/modules/`, puis identité déclarée) | depuis la racine d'un projet à un seul module |
+
+Le répertoire du module n'est **ajouté** en dernier argument que s'il diffère du répertoire
+courant et qu'il n'a pas été nommé explicitement (règle 1) : la CLI sous-jacente, qui applique son
+propre défaut sur le répertoire courant, reçoit alors exactement la même cible qu'un `cd` manuel.
+
+#### 5.19.2 Transmission verbatim
+
+`artifactCmd` est déclaré avec `DisableFlagParsing: true` : aucun option n'est consommée par Cobra,
+`--port`, `--out`, `--host` (ou toute option de la CLI `artifact`) atteignent l'enfant telles
+quelles. `stdin`/`stdout`/`stderr` sont reliés directement au terminal et le processus enfant
+n'est **pas** mis dans son propre groupe de processus — `Ctrl+C` atteint toute la hiérarchie
+(donneur d'ordre + `artifact` + ses enfants), indispensable pour `artifact dev`.
+
+#### 5.19.3 Installation automatique
+
+Si `@liorian/artifact-kit` est absent des dépendances du `package.json` du module, il est ajouté
+comme **dépendance de runtime** avec le gestionnaire de paquets du projet (`project.packageManager`
+de `lorian.config.json`, sinon détection `bun` → `pnpm` → `yarn` → `npm`) avant l'exécution. Si le
+gestionnaire se déclare réussi sans que la dépendance apparaisse dans `package.json`, la commande
+**échoue** (fail-closed) : mieux vaut un diagnostic qu'un `artifact` silencieusement absent.
+
+#### 5.19.4 Codes de sortie
+
+| Situation | Code |
+|-----------|------|
+| Succès de la CLI `artifact` | celui de la CLI |
+| Échec de la CLI `artifact` | celui de la CLI, propagé à l'identique |
+| Action manquante, module introuvable, CLI absente, installation impossible | `1` (message i18n) |
+
+```console
+$ liora artifact dev --port 5178          # depuis la racine du projet
+$ cd modules/blog-manager && liora artifact dev --port 5178
+$ liora artifact typecheck modules/blog-manager
+$ liora artifact pack --out blog-1.0.0.LiorArtifactPackage
+```
+
+#### 5.19.5 `bind:socle` / `unbind:socle` — liaison à un socle hors de son dossier
+
+Deux actions font **exception au passthrough aveugle** : leur premier argument est le **dossier du
+socle**, pas un module, et la résolution générique le prendrait pour un module cible. `liora` les
+intercepte donc (`bind:socle`, `unbind:socle`), absolutise le chemin du socle contre le répertoire
+d'appel (un chemin relatif garde son sens), résout le module (règle 1 puis 2 puis 3 de §5.19.1,
+sans jamais interpréter le socle comme module), puis transmet l'action au binaire `artifact` exécuté
+dans le module — le module optionnel n'est pas transmis, le répertoire d'exécution étant déjà la
+cible par défaut de la CLI.
+
+```console
+$ cd modules/blog-manager && liora artifact bind:socle ../../apps/liorian-socle
+$ liora artifact bind:socle apps/liorian-socle modules/blog-manager   # depuis la racine
+$ liora artifact unbind:socle apps/liorian-socle
+```
+
+Côté `@liorian/artifact-kit`, `bind:socle` matérialise le module dans
+`<socle>/library/modules/<id>/` — pointeur `current`, `<version>/manifest.json` et
+`<version>/artifact` — par **liens symboliques** vers le module (repli **copie** quand le système
+de fichiers refuse les liens) : le module apparaît dans le registre du socle et son artefact est
+celui que `artifact dev` réécrit en continu, sans qu'aucun code du module ne soit copié dans le
+dépôt du socle. Le HMR réel est câblé dans le `.env.local` **non versionné** du socle
+(`NEXT_PUBLIC_DEV_MODULES_URL`, `NEXT_PUBLIC_DEV_MODULES`), jamais dans un fichier suivi. `unbind:socle`
+ne supprime que les versions marquées par `bind:socle` (`.liorian-bind.json`) et **restaure** le
+pointeur `current` d'origine : une installation réelle n'est jamais altérée. Le socle doit être
+redémarré après un bind pour relire son `.env.local`.
+
 ---
 
 ## 6. Modèle de données local
@@ -1794,7 +1881,7 @@ lorian-cli/
 
 lorian-cli-signing/
 ├── signing_public_key   # Clé publique Ed25519 (fingerprint du développeur)
-└── signing_private_key  # Clé privée Ed25519 (signature des archives .liozip)
+└── signing_private_key  # Clé privée Ed25519 (signature des archives .LiorArtifactPackage)
 ```
 
 ---
@@ -1820,7 +1907,7 @@ lorian-cli-signing/
 
 ### 7.2 Chiffrement des archives
 
-- Les archives `.liozip` ne contiennent **jamais** de credentials, tokens ou données sensibles
+- Les archives `.LiorArtifactPackage` ne contiennent **jamais** de credentials, tokens ou données sensibles
 - Le `manifest.json` ne contient que les métadonnées publiques du module
 - Le token UUID est un identifiant public, pas un secret
 
@@ -1961,7 +2048,7 @@ rafraîchit via `POST /api/auth/sessions/refresh`.
 | Champ | Type | Requis | Description |
 |-------|------|--------|-------------|
 | `manifest` | JSON | oui | Contenu du `manifest.json` |
-| `checksum` | string | oui | SHA-256 hex de l'archive `.liozip` (recalculé serveur) |
+| `checksum` | string | oui | SHA-256 hex de l'archive `.LiorArtifactPackage` (recalculé serveur) |
 | `signature` | string | oui | Signature Ed25519 base64 de la charge utile canonique (§7.1) |
 | `size` | number | non | Taille de l'archive en octets (défaut 0) |
 | `storageKey` | string | non | Clé de stockage blob (téléversement binaire — réservé) |
@@ -2149,6 +2236,10 @@ brew install protorians/lior-cli/liora
 | `13` | Échec de tests |
 | `130` | Opération annulée par le développeur (`Ctrl+C` / `SIGINT`, `128 + SIGINT`) |
 
+> `liora artifact` fait exception : son code de sortie est **celui de la CLI `artifact`** (ADR-003),
+> propagé à l'identique. Seul un échec de la CLI elle-même (module introuvable, dépendance non
+> installable, action absente) sort en `1`.
+
 ### 11.2 Messages d'erreur
 
 Les messages sont **localisés** (NFR-007, FR-025) : catalogues `en-US` (défaut) et `fr-FR`
@@ -2245,6 +2336,11 @@ Scénarios des scripts récents (identifiants préfixés par le numéro du scrip
 | 15/TC-038 | `liora repair` corrige automatiquement les anomalies bloquantes |
 | 15/TC-039 | `liora repair` restitue les points non réparables en instructions (exit non nul) |
 | 15/TC-040 | `liora repair --no-interaction` renomme le dossier sur le domaine du manifeste |
+| 18/TC-041 | `liora artifact build` transmet l'action verbatim depuis le répertoire du module (aucun répertoire ajouté) |
+| 18/TC-042 | Depuis la racine du projet, le module sélectionné est ajouté en dernier argument |
+| 18/TC-043 | Un répertoire nommé explicitement est transmis tel quel, jamais dupliqué |
+| 18/TC-044 | Le code de sortie de la CLI `artifact` est propagé à l'identique |
+| 18/TC-045 | Module sans CLI installée → échec explicite (fail-closed) ; `liora artifact` sans action refuse de s'exécuter |
 
 ---
 
@@ -2285,7 +2381,7 @@ Product: liora-cli v1.0.0
 │   │
 │   └── Epic E-008 : Signature numérique
 │       ├── Story S-019 : `liora sign keygen` (génération clés Ed25519)
-│       ├── Story S-020 : `liora sign <module>` (signature canonique .liozip)
+│       ├── Story S-020 : `liora sign <module>` (signature canonique .LiorArtifactPackage)
 │       └── Story S-021 : `liora sign verify <module>` (vérification signature)
 │
 └── Release 0.3.0 (Qualité)
@@ -2312,7 +2408,7 @@ Product: liora-cli v1.0.0
 | R-003 | Taille du binaire trop élevée | Faible | Faible | `ldflags -s -w`, UPX compression optionnelle |
 | R-004 | Breaking changes API `liorian-connect` | Faible | Élevé | Versioning API, détection automatique de la version |
 | R-005 | Conflits de noms de modules | Moyenne | Moyen | Validation stricte, vérification d'unicité avant création |
-| R-006 | Archive `.liozip` corrompue ou falsifiée | Faible | Élevé | Signature canonique Ed25519 (`liora sign`), vérification avant publication (obligatoire) |
+| R-006 | Archive `.LiorArtifactPackage` corrompue ou falsifiée | Faible | Élevé | Signature canonique Ed25519 (`liora sign`), vérification avant publication (obligatoire) |
 | R-007 | MFA bloquant (appareil perdu) | Faible | Élevé | Backup codes, procédure de récupération via `liorian-connect` web |
 
 ---
@@ -2363,3 +2459,36 @@ Product: liora-cli v1.0.0
 **Conséquences** :
 - Dépendance au keychain système (fallback nécessaire)
 - Sur Linux, nécessite un agent secret (gnome-keyring, KWallet)
+
+### ADR-003 : `artifact` est un passthrough, pas une commande réimplémentée
+
+**Contexte** : `@liorian/artifact-kit` expose déjà une CLI `artifact` (`build`, `dev`, `pack`,
+`typecheck`, `test`) déclarée dans les dépendances de chaque module. La CLI `liora` devait-elle la
+réimplémenter, l'encapsuler dans une TUI, ou s'y borner ?
+
+**Options considérées** :
+- **Option A** : réimplémenter les actions côté Go (validation, build, pack)
+- **Option B** : encapsuler dans une TUI Bubbletea avec ses propres options
+- **Option C** : passthrough transparent, l'outillage de build restant la propriété du package
+
+**Décision** : Option C — passthrough verbatim
+
+**Justification** :
+- une seule implémentation de la chaîne de build (TypeScript, dans le package) : pas de divergence
+  possible entre `artifact build` et `liora artifact build`
+- le contrat d'options de la CLI `artifact` reste le sien : `--port`, `--out`, `--host` et les
+  options à venir atteignent l'enfant sans être réinterprétées par Cobra
+- l'outillage de build est versionné et publié sur npmjs indépendamment de la CLI Go : le
+  désaccouplement de versions est possible sans casser `liora`
+- l'installation automatique de la dépendance transforme « il faut installer le toolchain » en
+  detail non bloquant, au lieu d'un prérequis implicite
+
+**Conséquences** :
+- `DisableFlagParsing` sur `artifactCmd` : les options inconnues ne sont pas rejetées, ce qui interdit
+  à la CLI Go d'évoluer son contrat d'options sans casser le passthrough
+- pas de vue par étapes, pas de récapitulatif de build : le flux de la CLI `artifact` est inchangé
+- l'extension du format d'artefact suit `artifact-kit` (`.LiorArtifactPackage`) : la CLI Go ne
+  produit plus d'archive, elle valide, signe et publie ce que `artifact pack` a produit
+- `Ctrl+C` n'est pas capté : le passthrough laisse le signal atteindre toute la hiérarchie de
+  processus, `artifact dev` restant interruptible
+

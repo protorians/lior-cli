@@ -1,4 +1,4 @@
-// Package localinstall implements `liora install <archive.liozip>`: the
+// Package localinstall implements `liora install <archive.LiorArtifactPackage>`: the
 // file-based counterpart of `marketplace install` (spec
 // docs/specs/applications/module-isolated-runtime.md §8.4). No catalog and no
 // api-core are involved — the archive is audited and validated by the same
@@ -31,14 +31,14 @@ import (
 	"github.com/protorians/lior-cli/internal/store"
 )
 
-// Installer installs a local `.liozip` archive into a Liora workspace.
+// Installer installs a local `.LiorArtifactPackage` archive into a Liora workspace.
 type Installer struct {
 	Root string
 	// Force replaces an already-installed version directory.
 	Force bool
 }
 
-// Install reads, verifies and installs a local `.liozip` archive.
+// Install reads, verifies and installs a local `.LiorArtifactPackage` archive.
 func (i *Installer) Install(archivePath string) (*catalog.InstallResult, error) {
 	data, err := os.ReadFile(archivePath)
 	if err != nil {
@@ -111,13 +111,13 @@ func (i *Installer) verifySidecar(archivePath string, data []byte, res *catalog.
 	res.SignatureStatus = catalog.SignatureVerified
 }
 
-// manifestFromArchive reads the root manifest.json of a `.liozip` archive. It
+// manifestFromArchive reads the root manifest.json of a `.LiorArtifactPackage` archive. It
 // returns both the parsed manifest and its raw document: the signed
 // `manifestChecksum` covers the document, not the parsed projection.
 func manifestFromArchive(data []byte) (*module.Manifest, []byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, nil, fmt.Errorf("not a valid .liozip archive: %w", err)
+		return nil, nil, fmt.Errorf("not a valid %s archive: %w", config.ArchiveFormatLabel, err)
 	}
 	for _, f := range zr.File {
 		if filepath.ToSlash(f.Name) != config.ManifestFileName {

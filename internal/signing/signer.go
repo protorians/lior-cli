@@ -190,7 +190,7 @@ func ManifestFromArchive(archivePath string) ([]byte, error) {
 
 // LoadPrivateKeyFile loads an Ed25519 private key from a file: raw 32-byte
 // seed or 64-byte private key, optionally hex- or base64-encoded (e.g.
-// `liora sign archive.liozip --key ~/.acme/ed25519`).
+// `liora sign archive.LiorArtifactPackage --key ~/.acme/ed25519`).
 func LoadPrivateKeyFile(path string) (ed25519.PrivateKey, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -222,17 +222,12 @@ func LoadPrivateKeyFile(path string) (ed25519.PrivateKey, error) {
 }
 
 // FindArchive finds the archive for a module in `.lorian/build/`: the
-// canonical `.liozip` first, then the deprecated legacy extensions.
+// canonical `.LiorArtifactPackage`. Only that extension is produced and read.
 func FindArchive(root, moduleName, version string) (string, error) {
 	buildDir := config.BuildDir(root)
-	candidates := []string{filepath.Join(buildDir, moduleName+"-"+version+config.ArchiveExt)}
-	for _, ext := range config.LegacyArchiveExts {
-		candidates = append(candidates, filepath.Join(buildDir, moduleName+"-"+version+ext))
-	}
-	for _, path := range candidates {
-		if pkg.FileExists(path) {
-			return path, nil
-		}
+	path := filepath.Join(buildDir, moduleName+"-"+version+config.ArchiveExt)
+	if pkg.FileExists(path) {
+		return path, nil
 	}
 	return "", errors.New(i18n.Tf("sign.error.archive_not_found", moduleName+"-"+version+config.ArchiveExt, buildDir))
 }

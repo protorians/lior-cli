@@ -12,7 +12,7 @@ La CLI est un binaire Go (module `github.com/protorians/lior-cli`, **Go 1.26.0**
 cycle de vie :
 
 ```
-init → create → develop → debug → audit → pack → sign → link → publish
+init → create → develop → debug → audit → artifact → pack → sign → link → publish
 ```
 
 Architecture respectée (TECH-006) : `cmd/` (Cobra, présentation) → `internal/*` (services)
@@ -73,13 +73,27 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - `pkg.OpenBrowser` (cross-platform `open` / `rundll32` / `xdg-open`) ; l'échange de token est
   tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
+### `liora artifact <action> [args…]` (FR-033 → FR-035) — passthrough `@liorian/artifact-kit`
+- **Aucune réimplémentation** : `cmd/artifact.go` (Cobra, `DisableFlagParsing`) délègue à
+  `internal/artifactkit`, qui localise le binaire `node_modules/.bin/artifact` du module visé et
+  lui transmet `<action> [args…]` **verbatim**.
+- Résolution du module (ordre) : répertoire nommé en argument avec `manifest.json` → module du
+  répertoire courant → `config.ResolveModuleDir`. Le répertoire n'est ajouté en dernier argument
+  que s'il diffère du répertoire courant et n'a pas été nommé explicitement.
+- `Ensure` : si `@liorian/artifact-kit` est absent des dépendances du `package.json` du module,
+  installation via le gestionnaire du projet (`project.packageManager`, sinon `bun` → `pnpm` →
+  `yarn` → `npm`) ; **fail-closed** si le gestionnaire réussit sans que la dépendance apparaisse
+  (`artifact.error.install_undeclared`).
+- `Exec` : stdio relié au terminal, pas de groupe de processus dédié (`Ctrl+C` atteint toute la
+  hiérarchie), code de sortie propagé tel quel.
+
 ### `liora pack [module]` (FR-010, FR-011)
-- Zip `library/modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.lorian/build/<module>-<version>.SenMod`.
+- Zip `library/modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.lorian/build/<module>-<version>.LiorArtifactPackage`.
 - Validation préalable du manifest (via `Validator`), limite 50 Mo (`MaxArchiveSize`).
 
 ### `liora sign` (FR-021 → FR-024) — `sign keygen` / `sign <module>` / `sign verify <module>`
 - Paires de clés **Ed25519**, stockées dans le keychain (service `lorian-cli-signing`).
-- Signature binaire 64 octets dans `<archive>.SenMod.sig` ; vérification sur archive + clé publique.
+- Signature binaire 64 octets dans `<archive>.LiorArtifactPackage.sig` ; vérification sur archive + clé publique.
 - Fingerprint SHA-256 de la clé publique (commande `sign` sans argument).
 
 ### `liora publish [module]` (FR-012, FR-013)
@@ -89,7 +103,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   1. résolution/création du produit module (`POST /api/developer-store/modules`) ;
   2. création de la version (`POST .../versions`) ;
   3. déclaration de l'artefact (`POST .../versions/:versionId/artifact` : `manifest` +
-     checksum SHA-256 + signature `.SenMod.sig` + `size`).
+     checksum SHA-256 + signature `.LiorArtifactPackage.sig` + `size`).
 - Conflit SemVer → bump patch interactif (jusqu'à 5 essais) ; après succès, le manifest local
   est synchronisé (version publiée + **token produit résolu**).
 
@@ -351,8 +365,9 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >   4 verbes), domaine canonique `mod.*` (`IsCanonicalDomain`, WARNING sinon) ;
 >   `NewManifest` canonique (`WEB_APP_LOCAL`, compat `0.17.x`/`0.27.x`, `User:Get`…) ;
 >   mockup = miroir 1:1 du socle ; `create` défaut `WEB_APP_LOCAL`.
-> - **Pack `.liozip`** (`config`, `packer.go`, `cmd/pack.go`) : extension canonique ADR-003
->   (legacy lu, jamais produit), `manifest.json` canonique à la racine (TECH-002), quotas
+> - **Pack `.LiorArtifactPackage`** (`config`, `packer.go`, `cmd/pack.go`) : extension canonique ADR-003
+>   (casse exacte, **rupture sèche** : `config.LegacyArchiveExts` supprimé, plus aucun repli en
+>   lecture), `manifest.json` canonique à la racine (TECH-002), quotas
 >   NFR-006..008 (50 Mo, 5 000 entrées, ratio 100:1, 10 Mo/fichier, symlinks/exécutables
 >   refusés), empreintes SHA-256 (archive + manifeste) exposées (`PackResult`) et affichées ;
 >   flags `--out`/`--version`, args normalisés (`./x`, `library/modules/x`).
@@ -366,7 +381,7 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 >   (`web`, `tauri-desktop-*`, `tauri-mobile-*`) envoyés à la création de version.
 > - **Install fail-closed** (`catalog/install.go`) : checksum absent → erreur, signature
 >   absente/invérifiable → erreur (`--allow-unsigned` en dev), audit d'archive bloquant
->   (§7.2) ; mock E2E canonique (artefacts `.liozip`, manifeste racine).
+>   (§7.2) ; mock E2E canonique (artefacts `.LiorArtifactPackage`, manifeste racine).
 > - **Validateur** : `compatibility`/`oauth.scopes`/`capabilities`/`permissions`/`type`/
 >   domaine canonique/`CONFIGURATION` (`entry: index.json`, `dataModel`) en WARNING,
 >   `index.tsx` exigé hors `CONFIGURATION` ; `publisher` absent = OK (schéma), incomplet =

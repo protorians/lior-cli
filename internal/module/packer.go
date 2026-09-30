@@ -38,11 +38,11 @@ var blockedArchiveExts = map[string]bool{
 	".sh": true, ".node": true,
 }
 
-// Packer builds `.liozip` archives (renamed ZIP) for a module.
+// Packer builds `.LiorArtifactPackage` archives (renamed ZIP) for a module.
 type Packer struct {
 	Root    string
 	Version string
-	// Out overrides the archive destination (e.g. `--out acme-crm.liozip`).
+	// Out overrides the archive destination (e.g. `--out acme-crm.LiorArtifactPackage`).
 	// When empty, the archive is written to `.lorian/build/`.
 	Out string
 }
@@ -176,7 +176,7 @@ func (p *Packer) packLegacy(name, moduleSrc string) (*PackResult, error) {
 }
 
 // archiveDestination resolves the output path of the archive: `Out` when set,
-// `.lorian/build/<name>-<version>.liozip` otherwise.
+// `.lorian/build/<name>-<version>.LiorArtifactPackage` otherwise.
 func (p *Packer) archiveDestination(name, version string) (string, error) {
 	archivePath := strings.TrimSpace(p.Out)
 	if archivePath == "" {
@@ -301,7 +301,7 @@ func archiveDigest(archivePath string) (string, int, error) {
 	sum := sha256.Sum256(data)
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return "", 0, fmt.Errorf("not a valid .liozip archive: %w", err)
+		return "", 0, fmt.Errorf("not a valid %s archive: %w", config.ArchiveFormatLabel, err)
 	}
 	var uncompressed int64
 	for _, f := range zr.File {

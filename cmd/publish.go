@@ -26,14 +26,14 @@ var publishCmd = &cobra.Command{
 	Short: "Publish a module to the store",
 	Long: `Builds and publishes a module to the store via the liorian-connect API.
 
-Checks authentication, validates the manifest, builds the .liozip archive,
+Checks authentication, validates the manifest, builds the .LiorArtifactPackage archive,
 signs the canonical publication payload (mandatory, ADR-010) and sends the
 artefact to the store.
 
 Flags --file and --version support the release session flow:
-  liora pack ./acme-crm --version 1.3.0 --out acme-crm.liozip
-  liora sign acme-crm.liozip --key ~/.acme/ed25519
-  liora publish mod.acme.crm --version 1.3.0 --file acme-crm.liozip`,
+  liora pack ./acme-crm --version 1.3.0 --out acme-crm.LiorArtifactPackage
+  liora sign acme-crm.LiorArtifactPackage --key ~/.acme/ed25519
+  liora publish mod.acme.crm --version 1.3.0 --file acme-crm.LiorArtifactPackage`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runPublish(cmd, args)
