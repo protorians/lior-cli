@@ -240,6 +240,11 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 		addLevel(res, "manifest.json", "userScope", false,
 			"userScope present (mandatory for isolated-runtime modules)", LevelError)
 	}
+	// legal (D16, §6.11): optional — a module without it has no gate — but a
+	// declaration that exists must be complete, or the server would refuse the
+	// publication and lock the first user out of the module.
+	add(res, "manifest.json", "legal", ValidateLegalDocuments(manifest.Legal) == nil,
+		"legal declarations compliant (key, kind, version, content; TERMS and PRIVACY together)")
 
 	// CONFIGURATION modules carry their UI in the manifest itself
 	// (`entry: index.json` + `dataModel`/`declarative`): no React entry needed.

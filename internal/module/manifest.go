@@ -58,6 +58,17 @@ type Manifest struct {
 	// the explicit way to declare a module that reads nothing. Same grammar
 	// as `permissions` (`Role:Verbe`), validated at pack time.
 	UserScope []string `json:"userScope,omitempty"`
+	// Legal declares the legal documents an end user must accept before the
+	// module mounts (D16, spec module-isolated-runtime.md §6.11): terms of use,
+	// privacy policy, and optionally a licence contract.
+	//
+	// Optional at pack time — a module without `legal` has no legal obligation
+	// and no gate. But once one document is declared, TERMS and PRIVACY are both
+	// mandatory and LICENSE may be declared with `required: false`. The content
+	// accepts three notations (section array, nested object, Markdown); the
+	// server normalizes all three into one canonical form and checksums it, so
+	// rewriting a document between notations does not force a re-acceptance.
+	Legal []LegalDocument `json:"legal,omitempty"`
 	// Backends is the tier-1 egress declaration (D9, §6.2): the third-party
 	// backends a module may reach through the api-core gateway. The
 	// operator's master list (tier 2) decides separately; the two must
@@ -166,6 +177,48 @@ type BackendDeclaration struct {
 	// (§6.10.5: the approval box lists the declared backends).
 	Description string `json:"description,omitempty"`
 }
+
+// LegalDocumentKind enumerates the categories a module may declare (D16,
+// spec module-isolated-runtime.md §6.11). TERMS and PRIVACY are mandatory
+// once any document is declared; LICENSE is the only optional one.
+const (
+	LegalKindTerms   = "TERMS"
+	LegalKindPrivacy = "PRIVACY"
+	LegalKindLicense = "LICENSE"
+)
+
+// LegalDocument is one entry of `manifest.legal` (D16, §6.11).
+//
+// Content is deliberately kept as raw JSON rather than a typed union. The
+// server owns the canonical form and the checksum (spec §6.11: the acceptance
+// records `documentVersion` + `contentChecksum` over that canonical form), so
+// a Go struct here would be a fourth implementation of the normalizer, free to
+// drift from the one that decides. This type validates the *envelope* — the
+// part whose mistakes make a module unpublishable — and hands the content
+// through untouched, which also keeps `Marshal` byte-exact on re-emission.
+type LegalDocument struct {
+	// Key is the stable kebab-case identifier of the document ("terms"). It is
+	// part of the acceptance key: renaming it forces a re-acceptance.
+	Key string `json:"key"`
+	// Kind is TERMS, PRIVACY or LICENSE.
+	Kind string `json:"kind"`
+	// Title is what the end user reads on the checkbox line; defaults to the
+	// category label server-side. Part of the checksummed content identity.
+	Title string `json:"title,omitempty"`
+	// Version is the document revision, independent of the module version.
+	// Mandatory: it is what triggers re-acceptance when a publisher revises
+	// their terms.
+	Version string `json:"version"`
+	// Required defaults to true. `false` is admitted for LICENSE only.
+	Required *bool `json:"required,omitempty"`
+	// Content is the document body in one of three notations: a section array,
+	// a nested object, or Markdown. Verified structurally by
+	// ValidateLegalContent; normalized server-side.
+	Content json.RawMessage `json:"content"`
+}
+
+// IsRequired reports whether the document blocks module use until accepted.
+func (d LegalDocument) IsRequired() bool { return d.Required == nil || *d.Required }
 
 // ArtifactDeclaration is the `artifact` section of the manifest (§4.4): where
 // the build writes the executable iframe payload.

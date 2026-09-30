@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.29.0] - 2026-09-30
+
+### Added
+- **Section `manifest.legal` — les documents qu'un utilisateur doit accepter avant d'utiliser un
+  module** — un module peut désormais déclarer dans son `manifest.json` les documents légaux qui
+  conditionnent son usage (conditions d'utilisation, politique de confidentialité, et — au choix —
+  un contrat de licence). `pack` refuse une déclaration incomplète, là où le serveur aurait rejeté
+  la publication **et verrouillé son premier utilisateur dehors** (D16, spec
+  `module-isolated-runtime.md` §6.11). La section reste **facultative** : un module qui ne la
+  déclare n'a ni obligation ni porte à l'usage — l'état de tous les modules existants — et le coût
+  de l'absence est nul. Dès qu'un document est déclaré, `TERMS` et `PRIVACY` sont tous deux
+  obligatoires, parce qu'un module qui livre des CGU sans politique de confidentialité est
+  exactement le cas que cette porte d'acceptation existe pour empêcher ; `LICENSE` est la seule
+  catégorie que `required: false` admet.
+  Le contenu reste en `json.RawMessage` et la CLI n'en valide que l'**enveloppe** : clé kebab-case,
+  catégorie connue, `version` en SemVer — indépendante de la version du module, sans quoi deux
+  révisions des mêmes CGU seraient indistinguables et accepter l'une accepterait l'autre — et corps
+  porteur de texte. Les trois notations (tableau de sections, objet de sections, Markdown) sont
+  acceptées et interchangeables : le serveur normalise et checksumme la forme canonique, donc
+  réécrire ses conditions d'une notation à l'autre ne force pas une nouvelle acceptation. La
+  normalisation et l'empreinte restent côté serveur (`@liorian/api-resources/module-legal.util`) :
+  une seconde implémentation ici dériverait librement de celle qui décide, et le `Marshal` demeure
+  byte-exact à la réémission.
+
 ## [v0.28.0] - 2026-09-30
 
 ### Added
