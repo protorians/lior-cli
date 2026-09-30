@@ -138,9 +138,18 @@ var platformCoreModules = map[string]bool{
 	"identity":     true,
 }
 
-// ModuleExists reports whether a module `ref` is available locally, either as
-// an external module in `library/modules/` (matched by its folder domain or
-// by its manifest id) or as an internal module in `src/modules/`.
+// ModuleExists reports whether a module `ref` is available locally, in any of
+// the four trees a workspace holds (spec §7.7) :
+//
+//   - the source tree `modules/<id>/` (D5, first-party development) ;
+//   - the installation tree `library/modules/<id>/` (D11), matched by folder
+//     domain or by manifest id ;
+//   - the socle modules `src/modules/<id>/` (or `apps/liorian-socle/src/modules/`
+//     in the monorepo), never published.
+//
+// A requirement on a module that exists in the source tree but not in the
+// installation tree is satisfied: the developer is working on it, and the
+// socle serves first-party modules from the same declaration.
 func ModuleExists(root, ref string) bool {
 	if pkg.DirExists(config.ModuleDir(root, ref)) {
 		return true
@@ -159,7 +168,51 @@ func ModuleExists(root, ref string) bool {
 			}
 		}
 	}
-	return pkg.DirExists(filepath.Join(root, config.InternalModulesDir, ref))
+	// First-party source tree (D5): `<root>/modules/<id>/`.
+	if pkg.DirExists(config.WorkspaceModuleDir(root, ref)) {
+		return true
+	}
+	// Socle modules: `src/modules/<id>/` or `apps/liorian-socle/src/modules/<id>/`.
+	return config.NativeModuleDir(root, ref) != ""
+}
+
+// moduleTargetName returns the directory name the created module is addressed
+// by, in whichever tree it lands in.
+func (c *Creator) moduleTargetName(spec ModuleSpec) string {
+	if c.usesWorkspaceModules() {
+		return spec.ID
+	}
+	return spec.Domain
+}
+
+// moduleTargetDir returns the directory the module is created in.
+//
+// Two layouts exist and they are not interchangeable:
+//   - `library/modules/<domain>/` is the *installation* tree of a standalone
+//     project — outside any dependency workspace, so the module's own
+//     `package.json` is never installed and the D6-2 typecheck fails on
+//     unresolved `@types/node`;
+//   - `modules/<id>/` is the *first-party source* tree (D5), covered by the
+//     workspace globs, preferred by `config.ResolveModuleDir` when the packer
+//     looks the module up.
+//
+// Creating into the wrong tree therefore produces a module that cannot be
+// typechecked. When the project holds a source tree, the module belongs there.
+func (c *Creator) moduleTargetDir(spec ModuleSpec) string {
+	return filepath.Join(c.Root, c.moduleTargetDirName(spec), c.moduleTargetName(spec))
+}
+
+func (c *Creator) moduleTargetDirName(spec ModuleSpec) string {
+	if c.usesWorkspaceModules() {
+		return config.WorkspaceModulesDir
+	}
+	return config.ExternalModulesDir
+}
+
+// usesWorkspaceModules reports whether the project develops its own modules in
+// `<root>/modules/` — true as soon as that tree exists (the monorepo layout).
+func (c *Creator) usesWorkspaceModules() bool {
+	return pkg.DirExists(config.WorkspaceModulesDirPath(c.Root))
 }
 
 // RequirementSatisfied reports whether a requirement is provided: platform
@@ -243,9 +296,9 @@ func (c *Creator) Create(spec ModuleSpec) (*CreateResult, error) {
 	spec.Type = spec.EffectiveType()
 	spec.Category = spec.EffectiveCategory()
 
-	moduleDir := filepath.Join(c.Root, config.ExternalModulesDir, spec.Domain)
+	moduleDir := c.moduleTargetDir(spec)
 	if pkg.DirExists(moduleDir) {
-		return nil, &moduleExistsError{module: spec.Domain, dir: moduleDir}
+		return nil, &moduleExistsError{module: c.moduleTargetName(spec), dir: moduleDir}
 	}
 
 	var err error

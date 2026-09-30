@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/protorians/lior-cli/internal/auth"
 	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/module"
@@ -128,11 +126,8 @@ func runPack(cmd *cobra.Command, args []string) error {
 // (informational skip, not an error), and an error on real failures.
 func signPackedArchive(root, name string, result *module.PackResult) (string, error) {
 	// The module may live in the workspace source tree (modules/<id>, D5) or
-	// in the legacy installation tree: resolve the manifest accordingly.
+	// in the installation tree: `ManifestPath` resolves both.
 	manifestPath := config.ManifestPath(root, name)
-	if workspace := filepath.Join(config.WorkspaceModuleDir(root, name), config.ManifestFileName); pkg.FileExists(workspace) {
-		manifestPath = workspace
-	}
 	manifest, err := module.LoadManifest(manifestPath)
 	if err != nil {
 		return "", err
@@ -150,23 +145,19 @@ func signPackedArchive(root, name string, result *module.PackResult) (string, er
 		warn(i18n.T("sign.bound_key_mismatch"))
 	}
 
-	// The server recomputes `mod.<publisherSlug>.<moduleSlug>` to verify the
-	// artefact; the identifier must match it. Authenticated, the publisher
-	// slug comes from the store account; offline, the server-side default
-	// (`developer`) is used as the best-effort guess — `liora publish`
-	// re-verifies locally and re-signs when the identifier diverges.
-	publisherSlug := ""
-	if sess, serr := auth.LoadSession(auth.NewStore()); serr == nil && sess != nil && sess.IsAuthenticated() {
-		client := store.NewClient()
-		client.SetToken(sess.AccessToken)
-		client.WithAutoRefresh(sess)
-		if account, aerr := client.GetMyAccount(context.Background()); aerr == nil {
-			publisherSlug = account.Slug
-		}
-	}
-	moduleIdentifier := store.CatalogIdentifier(publisherSlug, store.ProductSlug(manifest))
+	// The identifier the store recomputes to verify the artefact
+	// (`mod.<publisherSlug>.<moduleSlug>`) is covered by the signature: it must
+	// be the catalogue form, not `manifest.domain` (spec §7.1).
+	moduleIdentifier := store.ResolveModuleIdentifier(manifest)
 
 	checksum, err := signing.ArchiveChecksum(result.Path)
+	if err != nil {
+		return "", err
+	}
+	// The signed `manifestChecksum` is the checksum of the manifest *document* —
+	// the file the store re-hashes at publication and the socle re-verifies at
+	// installation (spec §7.1).
+	manifestChecksum, err := module.ManifestFileChecksum(filepath.Dir(manifestPath))
 	if err != nil {
 		return "", err
 	}
@@ -174,7 +165,7 @@ func signPackedArchive(root, name string, result *module.PackResult) (string, er
 		ModuleIdentifier: moduleIdentifier,
 		Version:          manifest.Version,
 		Checksum:         checksum,
-		ManifestChecksum: module.ManifestChecksum(manifest),
+		ManifestChecksum: manifestChecksum,
 		Entry:            manifest.Entry,
 		Type:             manifest.Type,
 	})

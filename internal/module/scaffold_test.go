@@ -1,14 +1,23 @@
 package module
 
 import (
+	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/pkg"
 )
+
+// importSpecifiersRE extracts the module specifiers of a source file — the
+// `from "…"` clauses, kept on a single line so Go does not insert a `;` in the
+// middle of a concatenated literal.
+var importSpecifiersRE = regexp.MustCompile(`from "([^"]+)"`)
 
 // writeScaffoldFixture builds a minimal hello-world-style module mockup plus a
 // page mockup, mirroring the reference mockups used by `liora create module`.
@@ -342,6 +351,159 @@ func TestCreateFromEmbeddedMockup(t *testing.T) {
 		`import {BlogManagerView} from "@/library/modules/com.example.blog-manager/presentation/views/blog-manager.view";`,
 		"function BlogManagerPage()",
 	)
+}
+
+// Un module créé sans `tsconfig.json` échoue à la règle D6-2 dès le premier
+// pack en arbre isolé (`Validator` : `tsconfig.json present`, `LevelError`), et
+// le typecheck du packer n'a rien à comprendre. Le scaffold doit donc embarquer
+// un `tsconfig.json` autonome — sans `extends` : un module créé chez un
+// développeur n'hérite d'aucun `tsconfig.base.json` de monorepo.
+func TestCreateFromEmbeddedMockupShipsAConformingTsConfig(t *testing.T) {
+	root := t.TempDir()
+	creator := &Creator{Root: root}
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
+	raw, err := os.ReadFile(filepath.Join(moduleDir, "tsconfig.json"))
+	if err != nil {
+		t.Fatalf("le scaffold doit embarquer un tsconfig.json (D6-2): %v", err)
+	}
+	var tsconfig struct {
+		CompilerOptions map[string]any `json:"compilerOptions"`
+		Extends         string         `json:"extends"`
+		Include         []string       `json:"include"`
+	}
+	// strictement JSON : `tsc` accepte les commentaires, pas tous les lecteurs
+	// de tsconfig de la chaîne (outillage d'archive, éditeurs, IDE).
+	if err := json.Unmarshal(raw, &tsconfig); err != nil {
+		t.Fatalf("tsconfig.json illisible: %v\n%s", err, raw)
+	}
+	if tsconfig.Extends != "" {
+		t.Errorf("tsconfig.json ne doit pas hériter d'une base (%q) : un module créé hors monorepo n'en a pas", tsconfig.Extends)
+	}
+	// Contrat interne du SDK : le module consomme les sources de `@liorian/sdk`,
+	// compilées avec ces options relâchées. Les hériter ici ferait échouer le
+	// typecheck sur le code du SDK, pas sur celui du module.
+	for option, want := range map[string]any{
+		"verbatimModuleSyntax":     false,
+		"noUncheckedIndexedAccess": false,
+		"noImplicitOverride":       false,
+		"moduleResolution":         "bundler",
+		"jsx":                      "react-jsx",
+		"noEmit":                   true,
+		"strict":                   true,
+		"types":                    []any{"node"},
+	} {
+		if got, ok := tsconfig.CompilerOptions[option]; !ok {
+			t.Errorf("tsconfig.json sans l'option %q", option)
+		} else if !reflect.DeepEqual(got, want) {
+			t.Errorf("tsconfig.json %q = %v, want %v", option, got, want)
+		}
+	}
+	if len(tsconfig.Include) == 0 {
+		t.Error("tsconfig.json sans `include`: le typecheck ne couvre aucun fichier")
+	}
+	// Les sous-chemins du SDK ne se résolvent pas par le `exports` du package
+	// (le glob `./infrastructure/*` cible un chemin sans extension que `tsc`
+	// ne complète pas) : sans ce `paths` vers les sources, chaque import
+	// `@liorian/sdk/...` du module échoue en TS2307 au premier pack.
+	paths, _ := tsconfig.CompilerOptions["paths"].(map[string]any)
+	if got, ok := paths["@liorian/sdk/*"]; !ok {
+		t.Errorf("tsconfig.json sans le mapping %q — le typecheck échouerait sur chaque import du SDK", "@liorian/sdk/*")
+	} else if !reflect.DeepEqual(got, []any{"../../packages/sdk/src/*"}) {
+		t.Errorf("tsconfig.json paths[%q] = %v, want [\"../../packages/sdk/src/*\"]", "@liorian/sdk/*", got)
+	}
+}
+
+// Le mockup embarqué ne doit importer que ce qu'un module peut résoudre seul.
+// `@/core/...` est l'alias interne du socle (`apps/liorian-socle/tsconfig.json`) :
+// un module créé n'a pas de `src/core`, et son `tsconfig.json` ne déclare pas
+// cet alias — le typecheck échouait sur chaque vue scaffoldee. Les autres
+// spécificateurs sont des paquets déclarés par le `package.json` du mockup.
+func TestEmbeddedMockupImportsOnlyResolvableSpecifiers(t *testing.T) {
+	err := fs.WalkDir(embeddedTemplates, embeddedModulePrefix, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if !isTextFile(path) {
+			return nil
+		}
+		data, err := embeddedTemplates.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, match := range importSpecifiersRE.FindAllStringSubmatch(string(data), -1) {
+			if spec := match[1]; strings.HasPrefix(spec, "@/") {
+				t.Errorf("%s importe %q : alias interne au socle, hors de portée d'un module", path, spec)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("parcours du mockup embarqué: %v", err)
+	}
+}
+
+// La façade d'API d'un module est statique (`ApiService` est abstraite à
+// instance) : un scaffold qui l'étendait ne compilait pas
+// (« does not implement inherited abstract member assertAllowed »).
+func TestEmbeddedMockupApiServiceUsesTheStaticModuleFacade(t *testing.T) {
+	source, err := embeddedTemplates.ReadFile(embeddedModulePrefix + "/application/service/hello-world-api-service.ts")
+	if err != nil {
+		t.Fatalf("service du mockup introuvable: %v", err)
+	}
+	body := string(source)
+	if !strings.Contains(body, `from "@liorian/sdk/infrastructure/module-runtime/module-api.service"`) {
+		t.Errorf("le service du mockup doit étendre `ModuleApiService`:\n%s", body)
+	}
+	if strings.Contains(body, "extends ApiService {") {
+		t.Error("le service du mockup ne doit pas étendre `ApiService` (abstraite à instance)")
+	}
+}
+
+// `ModuleDeclarationInterface` exige `external` : sans lui, le module créé ne
+// compile pas et la régression n'apparaît qu'au premier pack.
+func TestEmbeddedMockupDeclarationDeclaresExternal(t *testing.T) {
+	source, err := embeddedTemplates.ReadFile(embeddedModulePrefix + "/" + config.LegacyDeclarationFileName)
+	if err != nil {
+		t.Fatalf("déclaration du mockup introuvable: %v", err)
+	}
+	if !strings.Contains(string(source), "external: false") {
+		t.Errorf("la déclaration du mockup doit porter `external: false` (champ requis par ModuleDeclarationInterface):\n%s", source)
+	}
+}
+
+// Le projet peut développer ses propres modules dans `<root>/modules/`
+// (arbre source D5, couvert par les globs de workspace). Y créer le module
+// sous son id : c'est l'arbre que `config.ResolveModuleDir` privilégie, et le
+// seul où le `package.json` du module est effectivement installé — donc le seul
+// où le typecheck D6-2 peut s'exécuter.
+func TestCreateTargetsTheWorkspaceSourceTreeWhenItExists(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, config.WorkspaceModulesDir), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	creator := &Creator{Root: root}
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	moduleDir := filepath.Join(root, config.WorkspaceModulesDir, "blog-manager")
+	if !pkg.DirExists(moduleDir) {
+		t.Fatalf("module non créé dans l'arbre source: %s", moduleDir)
+	}
+	if pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")) {
+		t.Errorf("le module ne doit pas être créé dans l'arbre d'installation %q", config.ExternalModulesDir)
+	}
+	// Résolution côté packer : par id et par domaine, pour rester adressable
+	// quelle que soit la forme employée ensuite.
+	if got := config.ResolveModuleDir(root, "blog-manager"); got != moduleDir {
+		t.Errorf("ResolveModuleDir(id) = %q, want %q", got, moduleDir)
+	}
+	if got := config.ResolveModuleDir(root, "com.example.blog-manager"); got != moduleDir {
+		t.Errorf("ResolveModuleDir(domain) = %q, want %q", got, moduleDir)
+	}
 }
 
 func TestCreateFromEmbeddedMockupManifestIsCanonical(t *testing.T) {

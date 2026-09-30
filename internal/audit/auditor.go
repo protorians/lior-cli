@@ -15,13 +15,17 @@ import (
 )
 
 // jsxTagRE heuristically recognises JSX elements without a full TS/JSX parser:
-// closing tags (`</div>`), custom (capitalised) components that are
-// self-closing (`<Foo …/>`) or carry content/attributes (`<Foo …>`), and
-// lowercase native elements carrying attributes (`<div className=…/>`). It
-// deliberately ignores type arguments such as `Array<string>`, generic chains
-// such as `this.get<FetchResponse<Item>>(...)`, and capitalised type
-// references used inside generic chains (`<Item>>`).
-var jsxTagRE = regexp.MustCompile(`(?:</[A-Z][A-Za-z0-9._-]*>|</[a-z][a-z0-9_-]*>|<[A-Z][A-Za-z0-9._-]*(?:\s[^<>]*?)?/>|<[A-Z][A-Za-z0-9._-]*(?:\s[^<>]*?)>|<[a-z][a-z0-9_-]*(?:\s+[a-zA-Z-]+=)[^<>]*?/?>)`)
+// closing tags (`</div>`), self-closing components (`<Foo />`, `<Foo attr={x} />`)
+// and elements carrying attributes (`<div className=… />`).
+//
+// Two rules keep it usable on real code. An opening tag must start a token —
+// a `<` glued to the end of an identifier is a **type argument**, not an
+// element, and `this.get<ContactVm>(…)` is the canonical form in every module
+// service. An opening tag must also carry structure that JSX has and a type
+// argument never has: a self-closing slash or an attribute assignment. Without
+// both rules the audit failed all fourteen first-party modules on
+// `Response<ContactVm>`.
+var jsxTagRE = regexp.MustCompile(`(?:</[A-Za-z][A-Za-z0-9._-]*\s*>|(?:^|[^A-Za-z0-9_$.\]])(?:<[A-Z][A-Za-z0-9._-]*(?:\s[^<>]*?)?/>|<[A-Za-z][A-Za-z0-9._-]*\s+[a-zA-Z-]+=[^<>]*?/?>))`)
 
 // Auditor runs all conformance checks on a module.
 type Auditor struct {

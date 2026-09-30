@@ -427,12 +427,19 @@ func TestRawPermissionsIsArray(t *testing.T) {
 }
 
 func TestPermissionCodes(t *testing.T) {
-	for _, ok := range []string{"User:Get", "Editor:Post", "Admin:Delete", "Root:Get", "Viewer:Put"} {
+	// The grammar is the runtime one: `<PascalCaseDomain>:<Verbe>`, the domain
+	// being any backend `PermissionsConfig` domain, not a fixed role list. The
+	// first-party modules declare `AccountingAccount:Get`, `RestaurantDish:Post`…
+	for _, ok := range []string{
+		"User:Get", "Editor:Post", "Admin:Delete", "Root:Get", "Viewer:Put",
+		"AccountingAccount:Get", "RestaurantDish:Post", "StockMovement:Delete",
+		"CalendarEvent:Put", "Writer:Get",
+	} {
 		if !IsPermissionCode(ok) {
 			t.Errorf("IsPermissionCode(%q) = false, want true", ok)
 		}
 	}
-	for _, bad := range []string{"", "hello-world.read", "User:Read", "Writer:Get", "User:Get:Extra", "user:get"} {
+	for _, bad := range []string{"", "hello-world.read", "User:Read", "User:Get:Extra", "user:get", "User:", ":Get", "User: Patch"} {
 		if IsPermissionCode(bad) {
 			t.Errorf("IsPermissionCode(%q) = true, want false", bad)
 		}
@@ -477,16 +484,85 @@ func TestLegacyCapabilitiesNormalized(t *testing.T) {
 	}
 }
 
-func TestManifestChecksumDeterministic(t *testing.T) {
-	a := NewManifest("demo", "")
-	b := NewManifest("demo", "")
-	b.Token = a.Token
-	if ManifestChecksum(&a) != ManifestChecksum(&b) {
-		t.Error("ManifestChecksum must be deterministic")
+// referenceDocument is a manifest as a developer writes it: pretty-printed,
+// keys in authoring order, trailing newline.
+const referenceDocument = `{
+  "id": "demo",
+  "key": "DEMO",
+  "name": "Demo",
+  "version": "1.0.0",
+  "domain": "mod.liorian.demo",
+  "entry": "main.tsx",
+  "type": "WEB_APP_LOCAL",
+  "permissions": ["calendar:Get"],
+  "socle": {
+    "min": "1.0.0"
+  }
+}
+`
+
+// referenceDocumentChecksum is `manifestChecksumOf(referenceDocument)` computed
+// by the shared contract (`canonicalJson` + SHA-256 in
+// `@liorian/api-resources/module-artifact-crypto.util`). The CLI, the store
+// (api-connect), api-core and the socle must all produce this exact value: it
+// is the `manifestChecksum` covered by the artefact signature.
+const referenceDocumentChecksum = "2a4691171f6b59ed1a6aa0b21d6f2d21e9a8a19580443c2ab7c6666f31850be8"
+
+func TestManifestDocumentChecksumMatchesSharedContract(t *testing.T) {
+	got, err := ManifestDocumentChecksum([]byte(referenceDocument))
+	if err != nil {
+		t.Fatalf("ManifestDocumentChecksum: %v", err)
 	}
-	b.Version = "9.9.9"
-	if ManifestChecksum(&a) == ManifestChecksum(&b) {
-		t.Error("ManifestChecksum must change with the manifest content")
+	if got != referenceDocumentChecksum {
+		t.Errorf("ManifestDocumentChecksum = %s, want %s\n"+
+			"the signed manifestChecksum must equal the value the store recomputes "+
+			"on the uploaded document, otherwise every publication is rejected with 422",
+			got, referenceDocumentChecksum)
+	}
+}
+
+func TestManifestDocumentChecksumIgnoresFormatting(t *testing.T) {
+	// Same document, minified and without the trailing newline: the canonical
+	// form is the contract, so formatting must not change the checksum.
+	minified := `{"key":"DEMO","id":"demo","name":"Demo","version":"1.0.0",` +
+		`"domain":"mod.liorian.demo","entry":"main.tsx","type":"WEB_APP_LOCAL",` +
+		`"permissions":["calendar:Get"],"socle":{"min":"1.0.0"}}`
+	full, err := ManifestDocumentChecksum([]byte(referenceDocument))
+	if err != nil {
+		t.Fatalf("ManifestDocumentChecksum(reference): %v", err)
+	}
+	squeezed, err := ManifestDocumentChecksum([]byte(minified))
+	if err != nil {
+		t.Fatalf("ManifestDocumentChecksum(minified): %v", err)
+	}
+	if full != squeezed {
+		t.Errorf("formatting changed the checksum: %s != %s", full, squeezed)
+	}
+}
+
+func TestManifestDocumentChecksumCoversFieldsOutsideTheSchema(t *testing.T) {
+	// The signed value is the checksum of the *document*, not of the Go
+	// projection: a field the schema does not model is still part of what the
+	// store hashes. A struct projection would silently drop it, and the
+	// signature would then cover something the server never computes.
+	extended := strings.Replace(referenceDocument,
+		`  "id": "demo",`, `  "id": "demo",`+"\n"+`  "experimental": {"flag": true},`, 1)
+	plain, err := ManifestDocumentChecksum([]byte(referenceDocument))
+	if err != nil {
+		t.Fatalf("ManifestDocumentChecksum(reference): %v", err)
+	}
+	withExtra, err := ManifestDocumentChecksum([]byte(extended))
+	if err != nil {
+		t.Fatalf("ManifestDocumentChecksum(extended): %v", err)
+	}
+	if plain == withExtra {
+		t.Error("an unmodelled field must change the document checksum")
+	}
+}
+
+func TestManifestDocumentChecksumRejectsInvalidJSON(t *testing.T) {
+	if _, err := ManifestDocumentChecksum([]byte("{not json")); err == nil {
+		t.Error("ManifestDocumentChecksum must reject a malformed manifest")
 	}
 }
 

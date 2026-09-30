@@ -158,14 +158,16 @@ func resolveModule(root string, args []string) (string, error) {
 // source tree (modules/<id>), flat legacy install
 // (library/modules/<id>/manifest.json) or multi-version install
 // (library/modules/<id>/<version>/manifest.json).
+//
+// Resolution goes through `config.ResolveModuleDir` so a module is reachable
+// by the identity its manifest declares (`id` or `domain`) as well as by its
+// directory name — the first-party tree names its directories after the id, and
+// `liora create module` hands out the domain as the next step to run.
 func moduleAvailable(root, name string) bool {
-	if pkg.DirExists(config.WorkspaceModuleDir(root, name)) {
+	if dir := config.ResolveModuleDir(root, name); dir != "" {
 		return true
 	}
 	dir := filepath.Join(root, config.ExternalModulesDir, name)
-	if pkg.FileExists(filepath.Join(dir, config.ManifestFileName)) {
-		return true
-	}
 	return hasVersionSubdir(dir)
 }
 

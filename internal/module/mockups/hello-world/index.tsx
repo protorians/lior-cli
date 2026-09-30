@@ -25,6 +25,7 @@ const helloWorldModule: ModuleDeclarationInterface = {
     isEnabled: true,
     isDefault: false,
     type: 'INTERNAL',
+    external: false,
     category: 'SYSTEM',
     menu: {
         items: [

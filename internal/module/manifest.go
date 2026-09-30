@@ -623,7 +623,10 @@ func IsLegacyModuleType(moduleType string) bool {
 }
 
 // ModuleRoles is the catalogue of backend roles usable in `permissions`
-// (`<ROLE>:<VERBE>`, `docs/modules/module-manifest.md` §6.5).
+// (`<ROLE>:<VERBE>`, `docs/modules/module-manifest.md` §6.5). The roles are a
+// **subset** of the scope grammar: a scope is any PascalCase domain of the
+// backend `PermissionsConfig` (`User`, `RestaurantDish`, `AccountingAccount`…),
+// the roles being the domains the platform names explicitly.
 var ModuleRoles = []string{
 	"Root", "SuperAdmin", "Admin", "Manager", "Editor", "Moderator",
 	"Analyst", "Commercial", "Operator", "Contributor", "Caissier",
@@ -633,11 +636,17 @@ var ModuleRoles = []string{
 // ModuleVerbs maps Raiton controller verbs to permission verbs.
 var ModuleVerbs = []string{"Get", "Post", "Put", "Delete"}
 
-// permissionCodeRE matches a canonical permission code (`<ROLE>:<VERBE>`).
-var permissionCodeRE = regexp.MustCompile(`^(Root|SuperAdmin|Admin|Manager|Editor|Moderator|Analyst|Commercial|Operator|Contributor|Caissier|User|Guest|Viewer):(Get|Post|Put|Delete)$`)
+// permissionCodeRE matches a canonical scope code: `<PascalCaseDomain>:<VERBE>`
+// (D15, spec `module-isolated-runtime.md` §6.10.1). The domain is not a role
+// list but any backend `PermissionsConfig` domain — the grammar the runtime
+// itself enforces (`MODULE_SCOPE_RE`, `@liorian/api-resources/module-scope.util`,
+// reused by `assertValidUserScope` at installation and by the module-consent
+// token checks). A CLI narrower than the runtime would refuse archives the
+// socle then accepts: the two must share one grammar.
+var permissionCodeRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*:(Get|Post|Put|Delete)$`)
 
-// IsPermissionCode reports whether s is a canonical `<ROLE>:<VERBE>`
-// permission code.
+// IsPermissionCode reports whether s is a canonical `<DOMAIN>:<VERBE>` scope
+// code — same grammar for `permissions` and `userScope`.
 func IsPermissionCode(s string) bool {
 	return permissionCodeRE.MatchString(strings.TrimSpace(s))
 }

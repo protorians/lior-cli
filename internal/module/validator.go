@@ -78,16 +78,11 @@ func count(findings []Finding, level string) int {
 
 // ValidateModule checks the core requirements of a single module.
 // Used by `pack` and shared by the audit pipeline. The module is resolved
-// from the workspace source tree first (`modules/<name>`, D5), then from the
-// legacy installation tree (`library/modules/<name>`).
+// in whichever tree holds it (`modules/<name>` first, D5, then
+// `library/modules/<name>`, D11).
 func (v *Validator) ValidateModule(name string) (*Result, error) {
-	for _, dir := range []string{
-		config.WorkspaceModuleDir(v.Root, name),
-		config.ModuleDir(v.Root, name),
-	} {
-		if pkg.DirExists(dir) {
-			return v.validateModuleAt(dir, name)
-		}
+	if dir := config.ResolveModuleDir(v.Root, name); dir != "" {
+		return v.validateModuleAt(dir, name)
 	}
 	return nil, errors.New(i18n.Tf("val.module_not_found", name,
 		config.WorkspaceModulesDir+"|"+config.ExternalModulesDir))
@@ -150,10 +145,10 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	// prefix is no longer required).
 	addLevel(res, "manifest.json", "domain", isDomainName(manifest.Domain),
 		"domain in reverse-DNS format", LevelWarning)
-	// the module directory must be named after its domain
+	// the module directory must name its module
 	if name != "" {
-		addLevel(res, "manifest.json", "domain directory", manifest.Domain == name,
-			"manifest domain matches the module directory (library/modules/<domain>)", LevelWarning)
+		addLevel(res, "manifest.json", "domain directory", directoryMatchesModule(filepath.Base(moduleDir), name, manifest.Domain),
+			"module directory named after the module (library/modules/<domain> or modules/<id>)", LevelWarning)
 	}
 	// permissions must be an array (spec rule, WARNING severity)
 	addLevel(res, "manifest.json", "permissions", rawPermissionsIsArray(manifestPath),
@@ -210,10 +205,16 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 		manifest.Category == "" || ModuleCategories[strings.ToUpper(manifest.Category)],
 		"category in the allowed enum", LevelWarning)
 	// publisher: optional in the canonical schema (completed at publish
-	// time); a half-filled publisher block is a warning.
+	// time); a half-filled publisher block is a warning. A fully empty block
+	// carries no half-typed field to correct — the publisher is completed when
+	// the module is published — so it is not a finding.
 	if rawHasKey(manifestPath, "publisher") {
-		addLevel(res, "manifest.json", "publisher", manifest.Publisher.ID != "" && manifest.Publisher.Name != "",
-			"publisher complete (id and name)", LevelWarning)
+		publisherEmpty := manifest.Publisher.ID == "" && manifest.Publisher.Name == ""
+		publisherPartial := (manifest.Publisher.ID == "") != (manifest.Publisher.Name == "")
+		if !publisherEmpty {
+			addLevel(res, "manifest.json", "publisher", !publisherPartial,
+				"publisher complete (id and name)", LevelWarning)
+		}
 	}
 	// domain: canonical `mod.<éditeur>.<module>` preferred (spec
 	// module-installation §4.3); any reverse-DNS form stays accepted.
@@ -326,15 +327,31 @@ func (v *Validator) validateModernModule(moduleDir, entryPath string, m *Manifes
 		})
 	}
 
-	// Rule 9 (D16): no fetch / XMLHttpRequest / WebSocket in the bundle —
-	// ApiService is the only network surface of a module (§4.5).
-	hits := scanBundleNetworkCalls(bundlePath)
-	add(res, "artifact", "network calls", len(hits) == 0,
-		"no fetch/XHR/WebSocket in the bundle (D16)")
-	for _, hit := range hits {
+	// Rule 9 (D16): no fetch / XMLHttpRequest / WebSocket in the module's own
+	// code — ApiService is the only network surface of a module (spec 4.5).
+	sourceHits := scanSourceNetworkCalls(moduleDir)
+	add(res, "source", "network calls", len(sourceHits) == 0,
+		"no fetch/XHR/WebSocket in the module source (D16)")
+	for _, hit := range sourceHits {
 		res.Findings = append(res.Findings, Finding{
-			Category: "artifact", Rule: "network calls", Severity: LevelError,
-			Message: fmt.Sprintf("%s uses %s — the bundle must go through ApiService (D16)", m.EffectiveArtifactBundle(), hit),
+			Category: "source", Rule: "network calls", Severity: LevelError,
+			Message: fmt.Sprintf("%s — the module must go through ApiService (D16)", hit),
+		})
+	}
+	// The bundle is the module *and* the SDK runtime it embeds, and ApiService
+	// legitimately calls fetch. A bundle hit therefore cannot attribute the
+	// primitive to either side, so it is reported as an observation, not as a
+	// verdict: the blocking D16 verdict is the source scan above, and when the
+	// sources are clean the bundle hits belong to the embedded runtime.
+	bundleHits := scanBundleNetworkCalls(bundlePath)
+	if len(bundleHits) == 0 {
+		add(res, "artifact", "network calls (bundle)", true,
+			"no fetch/XHR/WebSocket in the bundle (D16)")
+	} else if len(sourceHits) == 0 {
+		res.Findings = append(res.Findings, Finding{
+			Category: "artifact", Rule: "network calls (bundle)", Severity: LevelOK,
+			Message: fmt.Sprintf("%s embeds %s — module source clean, hits attributed to the SDK runtime (D16)",
+				m.EffectiveArtifactBundle(), strings.Join(bundleHits, ", ")),
 		})
 	}
 
@@ -419,6 +436,44 @@ func scanSourceImports(moduleDir string) (nextHits, atHits []string) {
 // never use (D16): fetch(), XMLHttpRequest and WebSocket construction.
 var bundleNetworkCallRE = regexp.MustCompile(`\bfetch\s*\(|\bXMLHttpRequest\b|\bnew\s+WebSocket\b`)
 
+// scanSourceNetworkCalls returns `file:line` for every direct use of a network
+// primitive in the module's own TypeScript source (D16). The scan deliberately
+// stops at the module boundary: `@liorian/sdk` is the network surface
+// (ApiService), a third-party dependency is audited on its own, and the
+// generated bundle mixes all of them.
+func scanSourceNetworkCalls(moduleDir string) []string {
+	var hits []string
+	_ = filepath.Walk(moduleDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			if excludedSourceDirs[info.Name()] || (info.Name() != filepath.Base(moduleDir) && strings.HasPrefix(info.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".ts") && !strings.HasSuffix(path, ".tsx") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		rel, err := filepath.Rel(moduleDir, path)
+		if err != nil {
+			return nil
+		}
+		for index, line := range strings.Split(string(data), "\n") {
+			if bundleNetworkCallRE.MatchString(line) {
+				hits = append(hits, fmt.Sprintf("%s:%d", filepath.ToSlash(rel), index+1))
+			}
+		}
+		return nil
+	})
+	return hits
+}
+
 // scanBundleNetworkCalls returns the distinct D16 violations found in a
 // bundle file.
 func scanBundleNetworkCalls(bundlePath string) []string {
@@ -475,6 +530,35 @@ func isSemver(v string) bool {
 // (e.g. com.organization.domain), the accepted manifest domain form.
 func isDomainName(s string) bool {
 	return domainRE.MatchString(s)
+}
+
+// directoryMatchesModule reports whether a module directory names the module it
+// holds. Three conventions coexist and are all legitimate (spec §7.7):
+//
+//   - the installed tree `library/modules/<domain>/` — the directory is the
+//     full domain (`mod.liorian.crm`) ;
+//   - the source tree `modules/<id>/` — the directory is the module identifier
+//     (`crm`, `messenger`) ;
+//   - a workspace module published under a legacy catalog identifier, where the
+//     directory is the id and the domain is the historical name
+//     (`modules/messenger/` with `mod.liorian.chating`).
+//
+// A directory matching none of them is a module installed under a folder that
+// says nothing about it — worth a warning.
+func directoryMatchesModule(dirName, id, domain string) bool {
+	dirName = strings.TrimSpace(dirName)
+	id = strings.TrimSpace(id)
+	domain = strings.TrimSpace(domain)
+	if dirName == "" {
+		return false
+	}
+	if dirName == id || (id != "" && dirName == domain) {
+		return true
+	}
+	if labels := strings.Split(domain, "."); domain != "" && len(labels) > 0 && dirName == labels[len(labels)-1] {
+		return true
+	}
+	return false
 }
 
 // platformsHaveModes reports whether every supported platform declares at

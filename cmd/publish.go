@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/protorians/lior-cli/internal/audit"
@@ -247,20 +248,24 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	// The module identifier is the one the server recomputes from the product
 	// (`mod.<publisherSlug>.<moduleSlug>`) — signing `manifest.Domain` would
 	// diverge whenever the publisher slug is not the one recorded locally.
-	accountSlug := ""
-	if account, aerr := client.GetMyAccount(context.Background()); aerr == nil {
-		accountSlug = account.Slug
-	} else {
-		debugf("developer account slug lookup: %v", aerr)
+	moduleIdentifier := store.ResolveModuleIdentifier(manifest)
+
+	// The signed `manifestChecksum` covers the manifest *document* as uploaded
+	// — the store re-hashes that document on reception (`manifestChecksumOf`),
+	// `api-core` recomputes it at installation and the socle re-verifies it
+	// against the relayed attestation (spec §7.1, E-007). Computed here, after
+	// the normalisation writes above, because the document has just changed.
+	manifestChecksum, cerr := module.ManifestFileChecksum(filepath.Dir(manifestPath))
+	if cerr != nil {
+		return pkg.NewError(i18n.T("cat.manifest"), cerr.Error(), pkg.ExitManifest)
 	}
-	moduleIdentifier := store.CatalogIdentifier(accountSlug, store.ProductSlug(manifest))
 
 	// Local verification/signing BEFORE the upload (spec: verify the
 	// signature locally first — an existing .sig is checked against the
 	// canonical payload; an unsigned artefact prompts the developer to sign
 	// first; a stale .sig is re-signed). The store then verifies the
 	// signature again on reception.
-	signed, keyID, publicKeyPEM, serr := signOrReuseForPublish(packResult.Path, manifest, moduleIdentifier)
+	signed, keyID, publicKeyPEM, serr := signOrReuseForPublish(packResult.Path, manifest, moduleIdentifier, manifestChecksum)
 	if serr != nil {
 		return pkg.NewError(i18n.T("cat.signature"), serr.Error(), pkg.ExitSigning)
 	}
@@ -324,13 +329,20 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println(s.KeyValue(i18n.T("label.new_version"), s.Info.Render(newVersion)))
 
+		// The version bump rewrote the manifest document: the signed
+		// `manifestChecksum` must be recomputed, not carried over.
+		rebuiltChecksum, berr := module.ManifestFileChecksum(filepath.Dir(manifestPath))
+		if berr != nil {
+			return pkg.NewError(i18n.T("cat.manifest"), berr.Error(), pkg.ExitManifest)
+		}
+
 		packResult, err = tui.RunWithSpinner(i18n.T("publish.spinner.rebuild"), func() (*module.PackResult, error) {
 			return packer.Pack(name)
 		})
 		if err != nil {
 			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 		}
-		if resigned, newKeyID, _, serr := signForPublish(packResult.Path, manifest, moduleIdentifier); serr != nil {
+		if resigned, newKeyID, _, serr := signForPublish(packResult.Path, manifest, moduleIdentifier, rebuiltChecksum); serr != nil {
 			return pkg.NewError(i18n.T("cat.signature"), serr.Error(), pkg.ExitSigning)
 		} else {
 			signed = resigned
@@ -460,10 +472,10 @@ func publisherLabel(m *module.Manifest) string {
 // manifest or identifier drift) triggers a re-sign; a missing one prompts the
 // developer to sign first when interactive. `--allow-unsigned` keeps the
 // explicit unsigned escape hatch (dev/mock only — the server refuses it).
-func signOrReuseForPublish(archivePath string, manifest *module.Manifest, moduleIdentifier string) (bool, string, string, error) {
+func signOrReuseForPublish(archivePath string, manifest *module.Manifest, moduleIdentifier, manifestChecksum string) (bool, string, string, error) {
 	sigPath := archivePath + ".sig"
 	if pkg.FileExists(sigPath) {
-		valid, verr := verifyLocalSignature(archivePath, manifest, moduleIdentifier)
+		valid, verr := verifyLocalSignature(archivePath, manifest, moduleIdentifier, manifestChecksum)
 		if verr != nil {
 			return false, "", "", verr
 		}
@@ -487,12 +499,12 @@ func signOrReuseForPublish(archivePath string, manifest *module.Manifest, module
 			return false, "", "", errors.New(i18n.T("publish.error.signature_required"))
 		}
 	}
-	return signForPublish(archivePath, manifest, moduleIdentifier)
+	return signForPublish(archivePath, manifest, moduleIdentifier, manifestChecksum)
 }
 
 // verifyLocalSignature checks the artefact's .sig against the canonical
 // publication payload (same fields the store re-verifies on reception).
-func verifyLocalSignature(archivePath string, manifest *module.Manifest, moduleIdentifier string) (bool, error) {
+func verifyLocalSignature(archivePath string, manifest *module.Manifest, moduleIdentifier, manifestChecksum string) (bool, error) {
 	pub, _, err := signing.LoadKeyPair(signing.NewKeyStore())
 	if err != nil {
 		return false, err
@@ -509,7 +521,7 @@ func verifyLocalSignature(archivePath string, manifest *module.Manifest, moduleI
 		ModuleIdentifier: moduleIdentifier,
 		Version:          manifest.Version,
 		Checksum:         checksum,
-		ManifestChecksum: module.ManifestChecksum(manifest),
+		ManifestChecksum: manifestChecksum,
 		Entry:            manifest.Entry,
 		Type:             manifest.Type,
 	})
@@ -523,7 +535,7 @@ func verifyLocalSignature(archivePath string, manifest *module.Manifest, moduleI
 // publish proceeds explicitly unsigned (dev/mock only). It also returns the
 // signature key id (public-key fingerprint) and the PEM/SPKI public key for
 // the store registration (`EnsureSigningKey`).
-func signForPublish(archivePath string, manifest *module.Manifest, moduleIdentifier string) (signed bool, keyID string, publicKeyPEM string, err error) {
+func signForPublish(archivePath string, manifest *module.Manifest, moduleIdentifier, manifestChecksum string) (signed bool, keyID string, publicKeyPEM string, err error) {
 	ks := signing.NewKeyStore()
 	if !ks.HasKeys() {
 		if publishAllowUnsigned {
@@ -545,7 +557,7 @@ func signForPublish(archivePath string, manifest *module.Manifest, moduleIdentif
 		ModuleIdentifier: moduleIdentifier,
 		Version:          manifest.Version,
 		Checksum:         checksum,
-		ManifestChecksum: module.ManifestChecksum(manifest),
+		ManifestChecksum: manifestChecksum,
 		Entry:            manifest.Entry,
 		Type:             manifest.Type,
 	})

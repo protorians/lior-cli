@@ -78,17 +78,27 @@ func (i *Installer) verifySidecar(archivePath string, data []byte, res *catalog.
 		return
 	}
 
-	manifest, err := manifestFromArchive(data)
+	manifest, document, err := manifestFromArchive(data)
 	if err != nil {
 		res.SignatureStatus = catalog.SignatureUnverified
 		res.Warnings = append(res.Warnings, i18n.T("localinstall.warning.no_key"))
 		return
 	}
+	// Same payload as the one the packer signed: the manifest *document*
+	// checksum (what the store, api-core and the socle recompute) and the
+	// catalogue identifier (what the store verifies against) — a local
+	// verification of a different payload always failed.
+	manifestChecksum, err := module.ManifestDocumentChecksum(document)
+	if err != nil {
+		res.SignatureStatus = catalog.SignatureUnverified
+		res.Warnings = append(res.Warnings, i18n.T("localinstall.warning.unverified"))
+		return
+	}
 	payload := signing.CanonicalPayloadBytes(signing.CanonicalPayload{
-		ModuleIdentifier: store.CatalogIdentifier("", store.ProductSlug(manifest)),
+		ModuleIdentifier: store.ResolveModuleIdentifier(manifest),
 		Version:          manifest.Version,
 		Checksum:         checksumHex(data),
-		ManifestChecksum: module.ManifestChecksum(manifest),
+		ManifestChecksum: manifestChecksum,
 		Entry:            manifest.Entry,
 		Type:             manifest.Type,
 	})
@@ -101,11 +111,13 @@ func (i *Installer) verifySidecar(archivePath string, data []byte, res *catalog.
 	res.SignatureStatus = catalog.SignatureVerified
 }
 
-// manifestFromArchive reads the root manifest.json of a `.liozip` archive.
-func manifestFromArchive(data []byte) (*module.Manifest, error) {
+// manifestFromArchive reads the root manifest.json of a `.liozip` archive. It
+// returns both the parsed manifest and its raw document: the signed
+// `manifestChecksum` covers the document, not the parsed projection.
+func manifestFromArchive(data []byte) (*module.Manifest, []byte, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return nil, fmt.Errorf("not a valid .liozip archive: %w", err)
+		return nil, nil, fmt.Errorf("not a valid .liozip archive: %w", err)
 	}
 	for _, f := range zr.File {
 		if filepath.ToSlash(f.Name) != config.ManifestFileName {
@@ -113,20 +125,20 @@ func manifestFromArchive(data []byte) (*module.Manifest, error) {
 		}
 		in, err := f.Open()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		defer in.Close()
 		var buf bytes.Buffer
 		if _, err := buf.ReadFrom(in); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var m module.Manifest
 		if err := json.Unmarshal(buf.Bytes(), &m); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return &m, nil
+		return &m, buf.Bytes(), nil
 	}
-	return nil, errors.New(i18n.T("marketplace.error.manifest"))
+	return nil, nil, errors.New(i18n.T("marketplace.error.manifest"))
 }
 
 func checksumHex(data []byte) string {

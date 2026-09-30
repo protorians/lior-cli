@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -167,6 +168,28 @@ func WorkspaceModulesDirPath(root string) string {
 	return filepath.Join(root, WorkspaceModulesDir)
 }
 
+// NativeModulesDirs are the roots holding the modules provided by the socle
+// itself — the ones a first-party module declares in `requirements` and that
+// are never published (`notification`, `media-library`, `identity`…). Both
+// project layouts are searched: a standalone project keeps them in
+// `src/modules/`, the monorepo keeps them in `apps/liorian-socle/src/modules/`.
+var NativeModulesDirs = []string{
+	InternalModulesDir,
+	filepath.Join("apps", "liorian-socle", "src", "modules"),
+}
+
+// NativeModuleDir returns the socle source directory of a native module, or
+// the empty string when the project holds none of the known layouts.
+func NativeModuleDir(root, module string) string {
+	for _, dir := range NativeModulesDirs {
+		candidate := filepath.Join(root, dir, module)
+		if fileExists(filepath.Join(candidate, ManifestFileName)) || dirExists(candidate) {
+			return candidate
+		}
+	}
+	return ""
+}
+
 // WorkspaceModuleDir returns the source directory of a first-party module.
 func WorkspaceModuleDir(root, module string) string {
 	return filepath.Join(root, WorkspaceModulesDir, module)
@@ -271,8 +294,102 @@ func BuildDir(root string) string {
 	return filepath.Join(root, LorianBuildsDir)
 }
 
-// ManifestPath returns the path of a module manifest.
+// ResolveModuleDir returns the directory holding a module, searching the trees
+// in the order the lifecycle creates them: the source tree first
+// (`modules/<id>/`, D5 — where a first-party module is developed), then the
+// installation tree (`library/modules/<id>/`, D11). It returns "" when neither
+// holds the module.
+//
+// One resolver for both trees: a command that resolves only the installation
+// tree sees a first-party module as non-existent, so `sign`, `sign verify`,
+// `publish` and `link` all failed on modules that `pack` handled fine.
+// ResolveModuleDir returns the source directory of a module in whichever tree
+// holds it, searching the first-party tree (`modules/`) before the installation
+// tree (`library/modules/`).
+//
+// A module is addressable by its directory name *and* by the identity its
+// manifest declares (`id` or `domain`): `liora create module` prints
+// `liora pack <domain>` as the next step, and the first-party tree names its
+// directories after the id. Without the manifest scan that instruction would
+// resolve to nothing, and the freshly created module could not be packed.
+func ResolveModuleDir(root, module string) string {
+	if dir := WorkspaceModuleDir(root, module); dirExists(dir) {
+		return dir
+	}
+	if dir := ModuleDir(root, module); dirExists(dir) {
+		return dir
+	}
+	for _, tree := range []string{WorkspaceModulesDir, ExternalModulesDir} {
+		if dir := matchModuleByManifest(filepath.Join(root, tree), module); dir != "" {
+			return dir
+		}
+	}
+	return ""
+}
+
+// IsWorkspaceModuleDir reports whether a resolved module directory belongs to
+// the first-party source tree (`<root>/modules/`). The packer keys the
+// isolated-runtime layout (D4) and the legacy one on that distinction.
+func IsWorkspaceModuleDir(root, dir string) bool {
+	if dir == "" || root == "" {
+		return false
+	}
+	source, err := filepath.Abs(WorkspaceModulesDirPath(root))
+	if err != nil {
+		return false
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(source, abs)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// matchModuleByManifest scans a module tree for the directory whose manifest
+// declares the requested identity. Manifests are read with a minimal decoder:
+// `config` cannot depend on `internal/module`, which depends on `config`.
+func matchModuleByManifest(tree, reference string) string {
+	entries, err := os.ReadDir(tree)
+	if err != nil {
+		return ""
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names) // deterministic when two manifests claim the identity
+	for _, name := range names {
+		raw, err := os.ReadFile(filepath.Join(tree, name, ManifestFileName))
+		if err != nil {
+			continue
+		}
+		var identity struct {
+			ID     string `json:"id"`
+			Domain string `json:"domain"`
+		}
+		if err := json.Unmarshal(raw, &identity); err != nil {
+			continue
+		}
+		if identity.ID == reference || identity.Domain == reference {
+			return filepath.Join(tree, name)
+		}
+	}
+	return ""
+}
+
+// ManifestPath returns the path of a module manifest, in whichever tree holds
+// the module. When neither does, the installation path is returned so the
+// caller reports a coherent "not found" on a single location.
 func ManifestPath(root, module string) string {
+	if dir := ResolveModuleDir(root, module); dir != "" {
+		return filepath.Join(dir, ManifestFileName)
+	}
 	return filepath.Join(ModuleDir(root, module), ManifestFileName)
 }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import {View} from "@liorian/sdk/presentation/themes/katon/view";
-import {AutoBreadcrumb} from "@/core/presentation/components/auto-breadcrumb";
+import {AutoBreadcrumb} from "@liorian/sdk/presentation/components/auto-breadcrumb";
 import {Activity} from "@liorian/sdk/presentation/components/activity";
 
 export function HelloWorldView() {

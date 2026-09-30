@@ -1,4 +1,4 @@
-import {ApiService} from "@liorian/sdk/infrastructure/utilities/api-service";
+import {ModuleApiService} from "@liorian/sdk/infrastructure/module-runtime/module-api.service";
 import {FetchResponseWithMetaInterface} from "@liorian/sdk/domain/typing/response";
 import {
     CreateHelloWorldInterface,
@@ -7,7 +7,7 @@ import {
     UpdateHelloWorldInterface,
 } from "../../domain/hello-world.interface";
 
-export class HelloWorldApiService extends ApiService {
+export class HelloWorldApiService extends ModuleApiService {
     static async getAll(options?: Record<string, any>) {
         return await this.get<FetchResponseWithMetaInterface<HelloWorldInterface[]>>('/hello-world/', options);
     }

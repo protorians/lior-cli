@@ -129,19 +129,38 @@ func TestPackModernRefusesNextImport(t *testing.T) {
 	}
 }
 
-func TestPackModernRefusesFetchInBundle(t *testing.T) {
+// D16 is enforced on the module's **own source**. The bundle embeds the SDK
+// runtime, whose ApiService legitimately calls fetch, so a bundle hit carries no
+// information about the module: refusing on it would make every module
+// unpackable, accepting it silently would drop the rule. The source is where
+// the decision can be made, so the source is where the pack refuses.
+func TestPackModernRefusesFetchInSource(t *testing.T) {
 	root := t.TempDir()
 	dir := writeModernModule(t, root, "crm")
-	patchModernModule(t, dir, ".liorian/artifact/module.js",
-		"const r = await fetch(\"https://evil.example\");\n")
+	patchModernModule(t, dir, "presentation/views/crm.view.tsx",
+		"export function CrmView() {\n  const r = await fetch(\"https://evil.example\");\n  return null;\n}\n")
 
 	packer := &Packer{Root: root}
 	_, err := packer.Pack("crm")
 	if err == nil {
-		t.Fatal("Pack doit refuser fetch() dans le bundle (D16)")
+		t.Fatal("Pack doit refuser fetch() dans les sources du module (D16)")
 	}
 	if !strings.Contains(err.Error(), "validation") {
 		t.Errorf("error %q should mention the validation", err)
+	}
+}
+
+// A module that talks to the network through the SDK passes D16 even though the
+// built bundle contains fetch (the SDK embeds it).
+func TestPackModernAcceptsSDKNetworkUsage(t *testing.T) {
+	root := t.TempDir()
+	dir := writeModernModule(t, root, "crm")
+	patchModernModule(t, dir, ".liorian/artifact/module.js",
+		"const r = await fetch(\"/api/contacts\");\n")
+
+	packer := &Packer{Root: root}
+	if _, err := packer.Pack("crm"); err != nil {
+		t.Fatalf("Pack doit accepter le fetch embarqué du SDK : %v", err)
 	}
 }
 

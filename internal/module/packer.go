@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -66,15 +67,19 @@ type PackResult struct {
 // that only exists in the legacy installation tree (`library/modules/<name>`)
 // still packs the legacy layout until the phase-8 migration.
 func (p *Packer) Pack(name string) (*PackResult, error) {
-	switch {
-	case pkg.DirExists(config.WorkspaceModuleDir(p.Root, name)):
-		return p.packModern(name, config.WorkspaceModuleDir(p.Root, name))
-	case pkg.DirExists(config.ModuleDir(p.Root, name)):
-		return p.packLegacy(name, config.ModuleDir(p.Root, name))
-	default:
+	// Une seule résolution pour toute la chaîne : `config.ResolveModuleDir`
+	// cherche l'arbre source puis l'arbre d'installation, et accepte l'identité
+	// déclarée par le manifeste comme le nom de répertoire. Réimplémenter la
+	// recherche ici faisait dépendre le pack du seul nom de dossier.
+	moduleDir := config.ResolveModuleDir(p.Root, name)
+	if moduleDir == "" {
 		return nil, errors.New(i18n.Tf("val.module_not_found", name,
 			config.WorkspaceModulesDir+"|"+config.ExternalModulesDir))
 	}
+	if config.IsWorkspaceModuleDir(p.Root, moduleDir) {
+		return p.packModern(name, moduleDir)
+	}
+	return p.packLegacy(name, moduleDir)
 }
 
 // packModern packs an isolated-runtime module (D4/§4.4): the module sources
@@ -112,7 +117,10 @@ func (p *Packer) packModern(name, moduleSrc string) (*PackResult, error) {
 		return nil, err
 	}
 
-	manifestChecksum := ManifestChecksum(m)
+	manifestChecksum, err := ManifestFileChecksum(moduleSrc)
+	if err != nil {
+		return nil, err
+	}
 	if err := p.createModernArchive(archivePath, moduleSrc, m); err != nil {
 		return nil, err
 	}
@@ -157,7 +165,10 @@ func (p *Packer) packLegacy(name, moduleSrc string) (*PackResult, error) {
 	appSrc := config.ModuleAppSrcDir(p.Root, pageDir)
 	assetsSrc := config.ModuleAssetsDir(p.Root, name)
 
-	manifestChecksum := ManifestChecksum(m)
+	manifestChecksum, err := ManifestFileChecksum(moduleSrc)
+	if err != nil {
+		return nil, err
+	}
 	if err := p.createArchive(archivePath, moduleSrc, appSrc, assetsSrc, m); err != nil {
 		return nil, err
 	}
@@ -243,24 +254,41 @@ func RunTypecheck(moduleDir string) error {
 	return nil
 }
 
-// ManifestChecksum returns the SHA-256 hex of the canonical manifest JSON:
-// keys sorted, UTF-8, no whitespace (spec §7.1, `manifestChecksum`).
-func ManifestChecksum(m *Manifest) string {
-	sum := sha256.Sum256(CanonicalManifestJSON(m))
-	return hex.EncodeToString(sum[:])
+// ManifestDocumentChecksum returns the SHA-256 hex of the canonical form of a
+// manifest *document* — the `manifest.json` bytes parsed generically and
+// re-serialized with the shared canonical-JSON contract (keys sorted, no
+// whitespace, no HTML escaping).
+//
+// This is the `manifestChecksum` covered by the artefact signature (spec §7.1),
+// and it must be computed on the document, never on the Go projection of it:
+// the store recomputes it at publication (`manifestChecksumOf` in
+// `@liorian/api-resources`), `api-core` recomputes it at installation
+// (`module-artifact-verifier`) and the socle re-verifies it against the relayed
+// attestation (E-007). A struct projection silently drops the fields the schema
+// does not model and normalizes the ones it does, so the two values differ for
+// virtually every real manifest — the signature then verifies locally and is
+// rejected server-side with `422`.
+func ManifestDocumentChecksum(document []byte) (string, error) {
+	var parsed any
+	if err := json.Unmarshal(document, &parsed); err != nil {
+		return "", fmt.Errorf("manifest is not valid JSON: %w", err)
+	}
+	canonical, err := pkg.CanonicalJSON(parsed)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:]), nil
 }
 
-// CanonicalManifestJSON serializes a manifest with the shared canonical-JSON
-// contract (object keys sorted recursively, no whitespace, no HTML escaping) —
-// byte-identical to the `canonicalJson` normalization the server applies to
-// the uploaded manifest before hashing it (`manifestChecksumOf`). A struct-
-// order `json.Marshal` would produce a checksum the server never recomputes.
-func CanonicalManifestJSON(m *Manifest) []byte {
-	data, err := pkg.CanonicalJSON(m)
+// ManifestFileChecksum is ManifestDocumentChecksum on the manifest file of a
+// module directory.
+func ManifestFileChecksum(moduleDir string) (string, error) {
+	document, err := os.ReadFile(filepath.Join(moduleDir, config.ManifestFileName))
 	if err != nil {
-		return nil
+		return "", err
 	}
-	return data
+	return ManifestDocumentChecksum(document)
 }
 
 // archiveDigest returns the SHA-256 hex of an archive file and its entry
@@ -468,17 +496,23 @@ func (p *Packer) createArchive(dest, moduleSrc, appSrc, assetsSrc string, m *Man
 		return err
 	}
 
-	// Canonical manifest at the archive root: the installation chain
-	// (spec §7.1) verifies the signature against these exact bytes.
-	manifestJSON := append(CanonicalManifestJSON(m), '\n')
+	// The manifest document at the archive root, verbatim: the signed
+	// `manifestChecksum` covers the developer's own file (the store re-hashes
+	// the uploaded document, the local installer re-hashes the archived one).
+	// Embedding a normalized projection here made the two disagree, and the
+	// signature unverifiable after install.
+	manifestDocument, err := os.ReadFile(filepath.Join(moduleSrc, config.ManifestFileName))
+	if err != nil {
+		return fmt.Errorf("failed to read the manifest: %w", err)
+	}
 	count++
-	w, err := zw.Create("manifest.json")
+	w, err := zw.Create(config.ManifestFileName)
 	if err != nil {
 		return fmt.Errorf("failed to write the manifest to archive: %w", err)
 	}
-	if _, err := w.Write(manifestJSON); err != nil {
+	if _, err := w.Write(manifestDocument); err != nil {
 		return fmt.Errorf("failed to write the manifest to archive: %w", err)
 	}
-	uncompressed += int64(len(manifestJSON))
+	uncompressed += int64(len(manifestDocument))
 	return nil
 }

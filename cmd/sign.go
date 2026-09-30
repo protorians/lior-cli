@@ -51,6 +51,7 @@ Subcommands:
    sign keygen                  Generate an Ed25519 key pair
    sign <module|archive>        Sign a module's .liozip archive
    sign verify <module|archive> Verify a module's signature
+   sign trust                   Export the public key to pin in the socle
 
 Without arguments, shows the SHA-256 fingerprint of the public key.`,
 	Args: cobra.MaximumNArgs(1),
@@ -218,7 +219,8 @@ type signTarget struct {
 	label        string // display name (module domain or archive base)
 	archivePath  string
 	manifest     *module.Manifest
-	manifestJSON []byte // canonical embedded bytes when read from the archive
+	manifestJSON []byte // manifest document bytes when read from the archive
+	manifestPath string // manifest document path when resolved from a module
 }
 
 // resolveSignTarget resolves a `sign`/`sign verify` argument to an archive and
@@ -258,7 +260,11 @@ func resolveSignTarget(root, arg string) (*signTarget, error) {
 	}
 
 	name := normalizeModuleArg(arg)
-	if !pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, name)) {
+	// A first-party module is developed in `modules/<id>/` (D5) and has no copy
+	// under `library/modules/` until it is installed: resolving only the
+	// installation tree made `sign`/`sign verify` refuse the very modules `pack`
+	// had just built.
+	if !moduleAvailable(root, name) {
 		return nil, pkg.NewErrorWithFix(
 			i18n.T("cat.module"),
 			i18n.Tf("modules.error.module_absent", name, config.ExternalModulesDir),
@@ -277,7 +283,7 @@ func resolveSignTarget(root, arg string) (*signTarget, error) {
 			i18n.Tf("sign.error.pack.fix", name),
 			pkg.ExitSigning)
 	}
-	return &signTarget{label: name, archivePath: archivePath, manifest: m}, nil
+	return &signTarget{label: name, archivePath: archivePath, manifest: m, manifestPath: config.ManifestPath(root, name)}, nil
 }
 
 // isArchivePath reports whether arg designates an archive file (by extension
@@ -299,15 +305,22 @@ func signingPayload(t *signTarget) (signing.CanonicalPayload, error) {
 	if err != nil {
 		return signing.CanonicalPayload{}, err
 	}
-	manifestChecksum := ""
+	// The signed `manifestChecksum` covers the manifest *document* — the store
+	// re-hashes the uploaded document at publication, `api-core` recomputes it
+	// from the archived one, and the socle re-verifies it against the relayed
+	// attestation (spec §7.1, E-007). Hashing the raw bytes here (or a Go
+	// projection of the manifest) produced a value no other link ever computes.
+	var manifestChecksum string
 	if len(t.manifestJSON) > 0 {
-		sum := sha256Of(t.manifestJSON)
-		manifestChecksum = sum
+		manifestChecksum, err = module.ManifestDocumentChecksum(t.manifestJSON)
 	} else {
-		manifestChecksum = module.ManifestChecksum(t.manifest)
+		manifestChecksum, err = module.ManifestFileChecksum(filepath.Dir(t.manifestPath))
+	}
+	if err != nil {
+		return signing.CanonicalPayload{}, err
 	}
 	return signing.CanonicalPayload{
-		ModuleIdentifier: t.manifest.Domain,
+		ModuleIdentifier: store.ResolveModuleIdentifier(t.manifest),
 		Version:          t.manifest.Version,
 		Checksum:         checksum,
 		ManifestChecksum: manifestChecksum,
@@ -579,6 +592,14 @@ func verifyTarget(target *signTarget) error {
 		}
 		if signing.VerifyPayload(signing.CanonicalPayloadBytes(payload), sig, pub) {
 			return &verdict{valid: true}, nil
+		}
+		// Migration fallback: signatures produced before the identifier was
+		// resolved to the catalogue form carry `manifest.domain` instead.
+		legacyPayload := payload
+		legacyPayload.ModuleIdentifier = target.manifest.Domain
+		if legacyPayload.ModuleIdentifier != "" &&
+			signing.VerifyPayload(signing.CanonicalPayloadBytes(legacyPayload), sig, pub) {
+			return &verdict{valid: true, legacy: true}, nil
 		}
 		// Migration fallback: archives signed before the canonical payload
 		// (raw-bytes signature).

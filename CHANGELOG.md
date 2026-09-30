@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Commande `liora sign trust`** — exporter la clé publique du trousseau de signature pour l'épinglage du socle : `liora sign trust
+  [--format env|json|pem|keyid] [--merge <fichier>]` écrit la clé locale au format demandé —
+  `NEXT_PUBLIC_MODULE_TRUST_KEYS` prêt à coller (env), le trousseau `keyId → PEM SPKI` (json), la clé
+  seule (pem), ou son `keyId` seul pour un CI (keyid). `--merge` agrège un trousseau existant sans
+  l'écraser, afin de ne pas perdre les clés déjà publiées. Sans trousseau, la commande échoue avec un
+  diagnostic au lieu de rendre un trousseau vide — indiscernable d'une absence de contrôle. Sortie
+  déterministe, rejouable en CI.
+
+### Fixed
+- **Empreinte de manifeste signée : le document, plus la structure canonique** — `pack`, `sign` et `publish` signaient `ManifestChecksum(struct)` — une reconstitution canonique de 1
+  330 octets — alors que l'archive embarque le `manifest.json` verbatim et que le store, `api-core` et
+  le socle recalculent `manifestChecksumOf(document)` : SHA-256 de
+  `canonicalJson(JSON.parse(fichier))`. Aucune publication ne pouvait donc aboutir, et une signature
+  produite en local ne se vérifiait nulle part. La chaîne signe désormais le document ; `publish`
+  recalcule l'empreinte après les écritures de normalisation du manifeste et après tout bump de
+  version, au lieu de reporter un état périmé. Verrouillé par 4 tests de contrat, dont une valeur de
+  référence calculée par le contrat partagé.
+- **Identifiant catalogue unique sur toute la chaîne** — `pack`, `sign`, `sign verify`, `publish` et l'installateur local divergeaient sur la reconstruction
+  de `mod.<publisher>.<module>` — le packer et l'éditeur signaient l'identifiant, `sign verify`
+  recalculait `manifest.domain`, l'installateur codait `developer` en dur : une signature valide en
+  local était illisible partout ailleurs. `store.ResolveModuleIdentifier` impose un ordre d'autorité
+  unique (compte authentifié, puis `publisher.id`, puis le libellé du domaine si la forme
+  `mod.<x>.<y>`, puis le défaut du store) et écarte un `publisher.id` en UUID — identifiant
+  d'enregistrement, jamais slug de catalogue — qui garantissait un rejet à la publication.
+- **Résolution de module unique (`config.ResolveModuleDir`)** — `pack`, `sign`/`sign verify`, `publish` et `link` partageaient leur propre recherche d'arbre. Ils
+  passent par un résolveur unique qui privilégie l'arbre source `modules/`, puis l'arbre
+  d'installation `library/modules/`, et sait enfin retrouver un module par l'identité déclarée dans
+  son manifeste (`id` ou `domain`) — ce qui rend exécutable l'instruction affichée par `create module`
+  (`liora pack <domain>`) sur un module de l'arbre source.
+- **Scaffold conforme et créé dans l'arbre source** — un module créé par `liora create module` n'avait pas de `tsconfig.json` — donc un `LevelError` de la
+  règle D6-2 dès le premier `pack` en arbre isolé —, son service étendait `ApiService` (abstraite à
+  instance, `assertAllowed`), ses vues importaient l'alias interne au socle `@/core/…` et sa
+  déclaration ne portait pas le champ `external` exigé par `ModuleDeclarationInterface`. Le mockup
+  embarqué fournit maintenant un `tsconfig.json` autonome (JSON strict, contrat interne du SDK,
+  `paths` vers les sources du SDK, sans `extends` : un module créé hors monorepo n'a aucune base à
+  hériter) ; `create module` vise `modules/<id>` quand l'arbre source existe, seul arbre où le
+  `package.json` du module est installé et donc le seul où le typecheck s'exécute. Vérifié par
+  exécution : module créé, `tsc --noEmit` 0 erreur, archive signée, verdict `verified` du socle.
+  Quatre tests verrouillent l'option par option et interdisent la réapparition d'un alias hors de
+  portée.
+- **Audit à zéro sur les 14 modules first-party** — 222 erreurs et 25 avertissements ramenés à 0 erreur / 0 avertissement : grammaire
+  `userScope`/`permissions` alignée sur celle qu'impose l'audit, règle « domain directory » qui
+  autorise la forme `mod.liorian.chating` d'un module existant, scan bloquant des sources avec
+  observation des hits dans le bundle, politique `publisher` (bloc vide = sans finding, bloc à moitié
+  rempli = avertissement), `ModuleExists` connaissant les 4 arbres, et une boucle infinie de
+  `runTypecheck` supprimée. `publisher: {id: "", name: ""}` n'est plus compté comme une identité
+  déclarée.
+
 ## [v0.26.0] - 2026-09-28
 
 ### Added
