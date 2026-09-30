@@ -125,7 +125,7 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
 		"package.json":             `{"name":"liorian-socle","scripts":{"dev":"vite"}}`,
 		"library/modules/.gitkeep": "",
-		"lorian.config.toml":       "app = \"template\"\n",
+		"liorian.config.toml":      "app = \"template\"\n",
 	})
 	bin := installFakeBun(t)
 
@@ -152,7 +152,7 @@ func TestRunInitClearsNonEmptyDirectoryWithApproval(t *testing.T) {
 	if _, err := os.Stat("proj/package.json"); err != nil {
 		t.Errorf("the template must have been cloned: %v", err)
 	}
-	if _, err := os.Stat("proj/lorian.config.json"); err != nil {
+	if _, err := os.Stat("proj/liorian.config.json"); err != nil {
 		t.Errorf("the config file must have been written: %v", err)
 	}
 }
@@ -183,15 +183,15 @@ func TestRunInitInCWDWithExistingContentAndApproval(t *testing.T) {
 	if _, err := os.Stat("package.json"); err != nil {
 		t.Errorf("the template must have been cloned into the cwd: %v", err)
 	}
-	if _, err := os.Stat("lorian.config.json"); err != nil {
+	if _, err := os.Stat("liorian.config.json"); err != nil {
 		t.Errorf("the config file must have been written: %v", err)
 	}
 }
 
 func TestRunInitForcesLatestDependencies(t *testing.T) {
 	repo := setupTemplateRepo(t, map[string]string{
-		"package.json":       `{"name":"liorian-socle","dependencies":{"@liorian/sdk":"latest","react":"^19.0.0"}}`,
-		"lorian.config.toml": "app = \"template\"\n",
+		"package.json":        `{"name":"liorian-socle","dependencies":{"@liorian/sdk":"latest","react":"^19.0.0"}}`,
+		"liorian.config.toml": "app = \"template\"\n",
 	})
 
 	bin := t.TempDir()

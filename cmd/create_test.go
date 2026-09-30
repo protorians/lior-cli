@@ -22,7 +22,7 @@ func TestRunCreateUsesMockupAndPageFlags(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +96,7 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -169,7 +169,7 @@ func TestRunCreateSkipInstallFlagSkipsInstallStep(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -245,7 +245,7 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, config.ExternalModulesDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -279,7 +279,7 @@ func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "src", "modules", "analytics"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "lorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "liorian.config.toml"), []byte("app=\"demo\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

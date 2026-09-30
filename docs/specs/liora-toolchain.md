@@ -139,7 +139,7 @@ camouflage structurel et non cosmétique.
 
 ### 5.2 Résolution de la commande (ordre de priorité)
 
-1. **Gestionnaire de paquets** : `project.packageManager` du `lorian.config.json` s'il est
+1. **Gestionnaire de paquets** : `project.packageManager` du `liorian.config.json` s'il est
    disponible sur le PATH, sinon détection `bun → pnpm → yarn → npm`. Aucun gestionnaire →
    erreur catégorisée `Package manager` + indice d'installation (code `1`).
 2. **Nom de script** : clé `toolchain.commands.<cmd>` de la config (si présente et non vide),
@@ -238,7 +238,7 @@ Comportement :
 
 ---
 
-## 6. Configuration projet (`lorian.config.json`)
+## 6. Configuration projet (`liorian.config.json`)
 
 Nouvelle section optionnelle `toolchain` (sauvegardée telle quelle, aucune réécriture) :
 

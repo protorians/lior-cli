@@ -106,7 +106,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto-audit before publishing (spec §5.6) — configurable via
-	// `"publish".autoAudit` in `lorian.config.json` (default: true).
+	// `"publish".autoAudit` in `liorian.config.json` (default: true).
 	cfg, err := config.Load(config.ConfigPath(root))
 	if err != nil {
 		debugf("reading configuration: %v", err)

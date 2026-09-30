@@ -259,7 +259,7 @@ func printCmdError(err error) {
 	fmt.Fprintln(os.Stderr, s.ErrorPanel(s.Error.Render("✗ Error: "+err.Error())))
 }
 
-// debugConfigFlags caches whether the project's lorian.config.json `debug`
+// debugConfigFlags caches whether the project's liorian.config.json `debug`
 // section opts into verbose logging (spec §6.1, NFR-005): `debug.verbose:
 // true` or `debug.logLevel: "debug"`. Resolved once per process from the
 // current project root.
@@ -306,7 +306,7 @@ func warn(message string) {
 }
 
 // persistCliSettings records the `--lang`, `--color` / `--no-color` and
-// `--verbose` root flags in the project's lorian.config.json so the choice
+// `--verbose` root flags in the project's liorian.config.json so the choice
 // survives across runs. Only flags the user explicitly passed are written (each one keeps its
 // own precedence over the config on later runs). Without a project root, the
 // settings cannot be persisted and the call is a silent no-op.

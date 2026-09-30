@@ -6,7 +6,7 @@ stdout 'Inspects the Developer Store resources'
 mkdir project
 cd project
 mkdir -p library/modules
-exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > lorian.config.json'
+exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
 exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
 
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com

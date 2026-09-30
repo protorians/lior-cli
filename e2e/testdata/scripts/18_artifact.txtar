@@ -2,8 +2,8 @@
 # `artifact` CLI of @liorian/artifact-kit: the action and its flags reach the
 # binary verbatim, in the module that holds the current directory.
 chmod 0755 $WORK/project/fakebin/npm
-exec sh -c 'printf "app = \"demo\"\n" > project/lorian.config.toml'
-exec sh -c 'printf "{\"project\":{\"packageManager\":\"npm\"}}\n" > project/lorian.config.json'
+exec sh -c 'printf "app = \"demo\"\n" > project/liorian.config.toml'
+exec sh -c 'printf "{\"project\":{\"packageManager\":\"npm\"}}\n" > project/liorian.config.json'
 mkdir project/modules/blog-manager
 exec sh -c 'printf "{\n  \"schemaVersion\": 1,\n  \"id\": \"blog-manager\",\n  \"domain\": \"com.example.blog-manager\",\n  \"version\": \"1.0.0\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"external\": true,\n  \"entry\": \"entry.tsx\",\n  \"uri\": \"/blog-manager\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"userScope\": [],\n  \"backends\": [],\n  \"artifact\": {\"dir\": \"artifact\", \"bundle\": \"module.js\", \"document\": \"index.html\"},\n  \"platforms\": {\"web\": {\"supported\": true, \"modes\": [\"web\"]}},\n  \"permissions\": [],\n  \"requirements\": {},\n  \"optionalRequirements\": {},\n  \"capabilities\": [\"core:default\"]\n}" > project/modules/blog-manager/manifest.json'
 exec sh -c 'printf "{\"name\":\"@liorian/module-blog-manager\",\"dependencies\":{\"@liorian/artifact-kit\":\"0.4.1\"}}\n" > project/modules/blog-manager/package.json'

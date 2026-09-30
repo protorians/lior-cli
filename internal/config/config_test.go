@@ -20,7 +20,7 @@ func TestConfigDefaults(t *testing.T) {
 }
 
 func TestConfigSaveLoad(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "lorian.config.json")
+	path := filepath.Join(t.TempDir(), "liorian.config.json")
 
 	cfg := Default()
 	cfg.Project.Name = "mon-projet"
@@ -52,7 +52,7 @@ func TestLoadMissingFileUsesDefaults(t *testing.T) {
 }
 
 func TestTestConfigRunnerPersistence(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "lorian.config.json")
+	path := filepath.Join(t.TempDir(), "liorian.config.json")
 
 	cfg := Default()
 	cfg.Project.PackageManager = "bun"
@@ -91,7 +91,7 @@ func TestTestConfigSetRunnerClearsEntry(t *testing.T) {
 }
 
 func TestCliConfigSettingsRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "lorian.config.json")
+	path := filepath.Join(t.TempDir(), "liorian.config.json")
 
 	cfg := Default()
 	cfg.Cli.Lang = "fr-FR"

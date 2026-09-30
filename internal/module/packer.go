@@ -43,7 +43,7 @@ type Packer struct {
 	Root    string
 	Version string
 	// Out overrides the archive destination (e.g. `--out acme-crm.LiorArtifactPackage`).
-	// When empty, the archive is written to `.lorian/build/`.
+	// When empty, the archive is written to `.liorian/build/`.
 	Out string
 }
 
@@ -58,7 +58,7 @@ type PackResult struct {
 	FileCount        int
 }
 
-// Pack builds and moves the archive of `name` into `.lorian/build/` (or `Out`
+// Pack builds and moves the archive of `name` into `.liorian/build/` (or `Out`
 // when set).
 //
 // The module is resolved from the workspace source tree first
@@ -176,7 +176,7 @@ func (p *Packer) packLegacy(name, moduleSrc string) (*PackResult, error) {
 }
 
 // archiveDestination resolves the output path of the archive: `Out` when set,
-// `.lorian/build/<name>-<version>.LiorArtifactPackage` otherwise.
+// `.liorian/build/<name>-<version>.LiorArtifactPackage` otherwise.
 func (p *Packer) archiveDestination(name, version string) (string, error) {
 	archivePath := strings.TrimSpace(p.Out)
 	if archivePath == "" {

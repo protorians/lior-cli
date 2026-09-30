@@ -71,7 +71,7 @@ func buildModernArchive(t *testing.T) []byte {
 
 func TestLocalInstallHappyPath(t *testing.T) {
 	root := t.TempDir()
-	archive := filepath.Join(root, ".lorian", "build", "blog-manager-1.2.0.LiorArtifactPackage")
+	archive := filepath.Join(root, ".liorian", "build", "blog-manager-1.2.0.LiorArtifactPackage")
 	data := buildModernArchive(t)
 	if err := pkg.CreateDir(filepath.Dir(archive)); err != nil {
 		t.Fatal(err)

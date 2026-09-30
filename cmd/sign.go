@@ -76,7 +76,7 @@ var signKeygenCmd = &cobra.Command{
 	Use:   "keygen",
 	Short: "Generate an Ed25519 key pair",
 	Long: `Generates an Ed25519 key pair and stores it in the system keychain
-(fallback: encrypted file ~/.lorian-cli/signing.enc).
+(fallback: encrypted file ~/.liorian-cli/signing.enc).
 
 If keys already exist, asks for confirmation before overwriting them
 (silent regeneration in non-interactive mode).`,

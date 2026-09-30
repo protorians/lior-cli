@@ -221,7 +221,7 @@ func LoadPrivateKeyFile(path string) (ed25519.PrivateKey, error) {
 	return nil, errors.New("unrecognized private key format (want a 32-byte seed or 64-byte key, raw/hex/base64)")
 }
 
-// FindArchive finds the archive for a module in `.lorian/build/`: the
+// FindArchive finds the archive for a module in `.liorian/build/`: the
 // canonical `.LiorArtifactPackage`. Only that extension is produced and read.
 func FindArchive(root, moduleName, version string) (string, error) {
 	buildDir := config.BuildDir(root)

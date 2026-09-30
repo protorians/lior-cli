@@ -52,7 +52,7 @@ func TestBindingsFilePermissions(t *testing.T) {
 	if err := BindBinding("mod.acme.crm", "fp", ""); err != nil {
 		t.Fatalf("BindBinding: %v", err)
 	}
-	path := filepath.Join(dir, ".lorian-cli", "signing-bindings.json")
+	path := filepath.Join(dir, ".liorian-cli", "signing-bindings.json")
 	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatalf("registry file missing: %v", err)

@@ -50,7 +50,7 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 | `liora disconnect` | Invalider le token côté serveur et supprimer les credentials |
 | `liora artifact <action> [args…]` | Passthrough transparent vers la CLI `artifact` de `@liorian/artifact-kit` : l'action et ses options (`--port`, `--out`, `--host`, …) sont transmises **verbatim**, sans réécriture, au binaire `node_modules/.bin/artifact` du module qui porte le répertoire courant (installé au préalable comme dépendance du module s'il est absent) ; le code de sortie de la CLI est celui de la commande |
 | `liora artifact bind:socle <socle> [module]` / `unbind:socle` | Lier un module en développement à un socle hors de son dossier : `library/modules/<id>/` est écrit en **liens symboliques** vers le module (repli copie) et le HMR est câblé dans le `.env.local` non versionné du socle. Le chemin du socle (absolu ou relatif au répertoire d'appel) est résolu avant le passthrough ; `unbind:socle` retire la liaison sans toucher une installation réelle |
-| `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.LiorArtifactPackage` dans `.lorian/build/` — layout runtime isolé : manifeste canonique à la racine + `src/**` (source TS, D4) + `artifact/**` (payload exécutable, §4.4), typecheck bloquant (D6), `userScope` obligatoire (D15), ni `next/*` (D1) ni `fetch`/`WebSocket` (D16) dans le bundle ; quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées |
+| `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.LiorArtifactPackage` dans `.liorian/build/` — layout runtime isolé : manifeste canonique à la racine + `src/**` (source TS, D4) + `artifact/**` (payload exécutable, §4.4), typecheck bloquant (D6), `userScope` obligatoire (D15), ni `next/*` (D1) ni `fetch`/`WebSocket` (D16) dans le bundle ; quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées |
 | `liora sign keygen` | Générer une paire de clés Ed25519 pour la signature |
 | `liora sign [module\|archive.LiorArtifactPackage] [--key F]` | Signer la charge utile canonique de publication (Ed25519, obligatoire pour publier — ADR-010) |
 | `liora sign verify [module\|archive.LiorArtifactPackage]` | Vérifier la signature d'un module (une seule extension admise : `.LiorArtifactPackage`) |
@@ -61,7 +61,7 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 | `liora audit [module]` | Auditer la conformité (Clean Architecture, manifest, dépendances) |
 | `liora repair [module] [--dry-run] [--warnings] [--no-install] [--no-interaction] [--output table\|json]` | Réparer automatiquement les anomalies bloquantes d'un (ou tous les) module(s) : champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé ; les points non réparables deviennent des instructions pas à pas |
 | `liora debug [module]` | Valider le module et lancer un build de diagnostic |
-| `liora test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `lorian.config.json` ; exit `13` en cas d'échec |
+| `liora test [module]` | Exécuter les tests via le gestionnaire choisi à l'installation (script `test`, vitest/jest, `bun test`) ; package de test persisté dans `liorian.config.json` ; exit `13` en cas d'échec |
 | `liora dev [-- args]` | Démarrer le serveur de développement de l'application (script `dev`) via le gestionnaire choisi à l'installation (Ctrl+C pour arrêter) ; exécute d'abord l'`audit` des modules |
 | `liora build [-- args]` | Construire l'application (script `build`) via le gestionnaire choisi à l'installation ; exécute d'abord l'`audit` des modules ; exit = code de la commande |
 | `liora start [-- args]` | Démarrer l'application en production (script `start`) via le gestionnaire choisi à l'installation ; exécute d'abord l'`audit` des modules |
@@ -76,7 +76,7 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 
 ## Configuration
 
-`lorian.config.json` (optionnel, à la racine du projet) :
+`liorian.config.json` (optionnel, à la racine du projet) :
 
 ```json
 {
@@ -161,9 +161,9 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 ## Sécurité
 
 - Credentials stockés dans le keychain système, jamais en clair sur disque
-- Repli : fichier chiffré AES-256-GCM (`~/.lorian-cli/credentials.enc`)
-- Clés de signature Ed25519 dans le keychain (service `lorian-cli-signing`),
-  avec fichier chiffré en repli (`~/.lorian-cli/signing.enc`)
+- Repli : fichier chiffré AES-256-GCM (`~/.liorian-cli/credentials.enc`)
+- Clés de signature Ed25519 dans le keychain (service `liorian-cli-signing`),
+  avec fichier chiffré en repli (`~/.liorian-cli/signing.enc`)
 - Archives `.LiorArtifactPackage` : ZIP contenant `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module>/` + `manifest.json` canonique à la racine — aucun token ni credential ; signature Ed25519 obligatoire, vérification fail-closed
 
 ## Tests

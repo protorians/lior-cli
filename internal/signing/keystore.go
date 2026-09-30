@@ -14,7 +14,7 @@ import (
 
 // Keychain keys for signing key storage.
 const (
-	signingServiceName = "lorian-cli-signing"
+	signingServiceName = "liorian-cli-signing"
 	keyPublicKey       = "signing_public_key"
 	keyPrivateKey      = "signing_private_key"
 )
@@ -70,7 +70,7 @@ func newFallbackKeyStore(path string) *fallbackKeyStore {
 func defaultKeyStorePath() string {
 	dir, err := pkg.DataDir()
 	if err != nil {
-		return filepath.Join(os.TempDir(), "lorian-cli-signing.enc")
+		return filepath.Join(os.TempDir(), "liorian-cli-signing.enc")
 	}
 	return filepath.Join(dir, "signing.enc")
 }
@@ -78,7 +78,7 @@ func defaultKeyStorePath() string {
 // keychainAvailable probes the OS keychain with a harmful read of a key that
 // cannot exist (see auth.credentials.keychainAvailable).
 func keychainAvailable() bool {
-	_, err := keyring.Get(signingServiceName, "__lorian-cli_probe__")
+	_, err := keyring.Get(signingServiceName, "__liorian-cli_probe__")
 	return err == nil || isKeyringNotExist(err)
 }
 

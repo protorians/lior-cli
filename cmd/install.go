@@ -32,7 +32,7 @@ keychain when present; a missing or unverifiable signature is a warning —
 the marketplace/api-core chain remains the trust authority.
 
 Use --force to replace an already-installed version.`,
-	Example: `  liora install .lorian/build/blog-manager-1.2.0.LiorArtifactPackage
+	Example: `  liora install .liorian/build/blog-manager-1.2.0.LiorArtifactPackage
   liora install ./dist/blog-manager-1.2.0.LiorArtifactPackage --force`,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {

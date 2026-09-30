@@ -27,7 +27,7 @@ var packCmd = &cobra.Command{
 	Use:   "pack [<module>[@<version>]]",
 	Short: "Build a module archive (.LiorArtifactPackage)",
 	Long: `Builds a module and creates a compressed .LiorArtifactPackage archive
-(moved to .lorian/build/).
+(moved to .liorian/build/).
 
 The archive is signed automatically with the developer signing key
 (the key bound to the module domain, or the keychain key) — use

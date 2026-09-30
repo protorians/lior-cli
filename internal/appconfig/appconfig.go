@@ -26,7 +26,7 @@ const (
 	ConnectAppID = "liorian-connect"
 )
 
-// Config mirrors the registry schema (lorian.config.schema.json).
+// Config mirrors the registry schema (liorian.config.schema.json).
 type Config struct {
 	Version      string                 `json:"version"`
 	Branch       string                 `json:"branch"`

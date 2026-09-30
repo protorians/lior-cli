@@ -15,14 +15,14 @@ import (
 
 // Well-known directory and file names within a Liora project.
 const (
-	ConfigFileName     = "lorian.config.json"
-	LorianConfigName   = "lorian.config.toml"
+	ConfigFileName     = "liorian.config.json"
+	LorianConfigName   = "liorian.config.toml"
 	ExternalModulesDir = "library/modules"
 	InternalModulesDir = "src/modules"
 	PublicAssetsDir    = "public/assets"
 	AppSrcDir          = "src/app"
-	LorianDir          = ".lorian"
-	LorianBuildsDir    = ".lorian/build"
+	LorianDir          = ".liorian"
+	LorianBuildsDir    = ".liorian/build"
 	ManifestFileName   = "manifest.json"
 	// ModuleEntryFileName is the canonical TypeScript entry of a module
 	// (spec docs/specs/applications/module-isolated-runtime.md, D6). The
@@ -289,7 +289,7 @@ func ResolveInstalledModuleDir(root, module string) string {
 	return ModuleDir(root, module)
 }
 
-// BuildDir returns the `.lorian/build/` directory for a project root.
+// BuildDir returns the `.liorian/build/` directory for a project root.
 func BuildDir(root string) string {
 	return filepath.Join(root, LorianBuildsDir)
 }

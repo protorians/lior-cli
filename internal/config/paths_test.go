@@ -95,12 +95,12 @@ func TestIsProjectRootReconnaîtChaqueMarqueur(t *testing.T) {
 		want     bool
 	}{
 		{
-			nom:      "lorian.config.toml",
+			nom:      "liorian.config.toml",
 			preparer: func(t *testing.T, root string) { writeFile(t, filepath.Join(root, LorianConfigName), "") },
 			want:     true,
 		},
 		{
-			nom:      "lorian.config.json",
+			nom:      "liorian.config.json",
 			preparer: func(t *testing.T, root string) { writeFile(t, filepath.Join(root, ConfigFileName), "{}") },
 			want:     true,
 		},

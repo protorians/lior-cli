@@ -392,7 +392,6 @@ var excludedSourceDirs = map[string]bool{
 	".liorian":                     true,
 	"node_modules":                 true,
 	"dist":                         true,
-	".lorian":                      true,
 	".git":                         true,
 }
 

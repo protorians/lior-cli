@@ -33,7 +33,7 @@ const CacheDuration = 24 * time.Hour
 
 // cachePath returns the path to the update check cache file.
 func cachePath() string {
-	dir := filepath.Join(os.TempDir(), "lorian-cli")
+	dir := filepath.Join(os.TempDir(), "liorian-cli")
 	_ = os.MkdirAll(dir, 0o755)
 	return filepath.Join(dir, ".update-check")
 }

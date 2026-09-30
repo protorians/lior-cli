@@ -1,6 +1,6 @@
 {
-  "$schema": "lorian.config.schema.json",
-  "version": "0.29.0",
+  "$schema": "liorian.config.schema.json",
+  "version": "0.30.0",
   "branch": "alpha",
   "commit": "e7cbd2f",
   "date": "2026-09-21T04:26:39Z",

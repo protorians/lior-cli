@@ -22,7 +22,7 @@ type Binding struct {
 }
 
 // bindings is the on-disk shape of the binding registry: a plain map keyed by
-// module domain. It lives in ~/.lorian-cli/signing-bindings.json — not in the
+// module domain. It lives in ~/.liorian-cli/signing-bindings.json — not in the
 // keychain, because it holds no secret (fingerprints and key ids only).
 type bindings map[string]Binding
 

@@ -14,7 +14,7 @@ import (
 func project(t *testing.T, moduleID string) string {
 	t.Helper()
 	root := t.TempDir()
-	mustWrite(t, filepath.Join(root, "lorian.config.json"), `{"project":{"packageManager":"npm"}}`)
+	mustWrite(t, filepath.Join(root, "liorian.config.json"), `{"project":{"packageManager":"npm"}}`)
 	mustWrite(t, filepath.Join(moduleDirPath(root, moduleID), "manifest.json"), `{"id":"acme.crm"}`)
 	return root
 }

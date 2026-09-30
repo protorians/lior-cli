@@ -18,7 +18,7 @@ import (
 // docs/specs/liora-toolchain.md). Every argument — including flags such as
 // `-p` or `--experimental-https` — is forwarded verbatim to the script (an
 // optional `--` separator is accepted and dropped); hooks configured in
-// `lorian.config.json` run before/after it.
+// `liorian.config.json` run before/after it.
 func toolchainCmd(name string) *cobra.Command {
 	return &cobra.Command{
 		Use:   name + " [--] [args...]",

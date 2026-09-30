@@ -232,7 +232,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		warn(i18n.Tf("init.warn.install_latest", err.Error()))
 	}
 
-	// Step 6 — write lorian.config.json
+	// Step 6 — write liorian.config.json
 	cfg := config.Default()
 	cfg.Project.Name = projectName
 	cfg.Project.PackageManager = pmName
@@ -457,7 +457,7 @@ func mergeTemplateInto(repo, channel, dest string, report func(done, total int64
 	if err != nil {
 		return fmt.Errorf("failed to resolve destination %s: %w", dest, err)
 	}
-	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".lorian-init-*")
+	tmp, err := os.MkdirTemp(filepath.Dir(absDest), ".liorian-init-*")
 	if err != nil {
 		return fmt.Errorf("failed to create a temporary directory: %w", err)
 	}

@@ -230,7 +230,7 @@ func checksumHex(data []byte) string {
 // Nothing touches the workspace when the archive is invalid or fails
 // validation, so a bad install never leaves partial files.
 func unpack(data []byte, root string, force bool, res *InstallResult) error {
-	tmp, err := os.MkdirTemp("", "lorian-marketplace-*")
+	tmp, err := os.MkdirTemp("", "liorian-marketplace-*")
 	if err != nil {
 		return fmt.Errorf("failed to create a temporary directory: %w", err)
 	}

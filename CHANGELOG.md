@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.30.0] - 2026-09-30
+
+### Changed
+- **Le code projet redevient `liorian` sur tous les chemins que la CLI écrit** — `v0.13.0` avait
+  raccourci la couche « code de projet » de `liorian` à `lorian` (fichiers de configuration, dossier
+  projet, vault utilisateur, services keychain) alors que le reste de l'écosystème — plateforme
+  `Liorian`, domaines `*.liorian.protorians.com`, SDK `@liorian/sdk`, variables `LIORIAN_*` — n'avait
+  jamais suivi. Le CLI se retrouvait avec une graphie qui ne correspondait à aucun de ses propres
+  livrables ; elle redevient `liorian`, ce qui homogénéise `liorian.config.json` / `liorian.config.toml`,
+  le dossier projet `.lierian/` (dont `.lierian/build/`), le vault `~/.lierian-cli` et les services
+  keychain `liorian-cli` / `liorian-cli-signing` avec le reste de la marque. Le schéma du registre
+  d'applications est renommé à l'identique (`liorian.config.schema.json`), sans quoi le pointeur
+  `$schema` de `app.config.json` visait un fichier inexistant et l'éditeur perdait la complétion.
+- **La graphie est alignée partout où l'utilisateur la lit** — aide et exemples des commandes,
+  catalogues i18n `en-US` / `fr-FR`, `README.md`, specs `docs/specs/liora.md` et
+  `docs/specs/liora-toolchain.md`, et scénarios E2E. Le `.gitignore` suit : il ignorait encore
+  `.lorian/` alors que le CLI écrivait `.lierian/`, donc toutes les archives produites depuis
+  `v0.13.0` se retrouvaient versionnées.
+- **Rupture** — un projet existant doit renommer `lorian.config.{json,toml}` en `liorian.config.*` et
+  `.lorian/` en `.lierian/` (`.lorian/build/` → `.lierian/build/`) ; les archives déjà packées sous
+  l'ancien nom restent lisibles, il faut seulement les déplacer ou les reconstruire. Le vault local et
+  le keychain sont renommés eux aussi : `~/.lorian-cli` et les services `liorian-cli` /
+  `liorian-cli-signing` deviennent illisibles, il faut se ré-authentifier (`liora connect`) et
+  re-générer les clés de signature (`liora sign keygen`). Bump `v0.30.0` (ligne 0.x).
+
+### Technical Details
+- **Entrée `lorian` retirée des répertoires exclus du scan de module** — le renommage en laissait
+  une seconde clé dans `excludedSourceDirs`, devenue redondante.
+
 ## [v0.29.0] - 2026-09-30
 
 ### Added
@@ -229,7 +258,7 @@ All notable changes to this project will be documented in this file.
 - **Flag `--color`** — force l'activation des couleurs (profil le plus riche supporté par le
   terminal), y compris lorsque la sortie est redirigée ou que `NO_COLOR` est défini. `--no-color`
   reste prioritaire lorsque les deux flags sont fournis ; la préférence est persistée dans
-  `lorian.config.json` sous `cli.noColor`.
+  `liorian.config.json` sous `cli.noColor`.
 - **Révocation OAuth2 à la déconnexion** — `liora disconnect` révoque les jetons d'accès et de
   rafraîchissement auprès de l'endpoint `/oauth/revoke` (RFC 7009), en meilleur effort
   (spec §8.1 / §6.3).
@@ -444,7 +473,7 @@ All notable changes to this project will be documented in this file.
   passe-plat vers les scripts `package.json` du projet via le gestionnaire de paquets choisi à
   l'installation (`dev`→`dev`, `build`→`build`, `start`→`start`, `check`→`lint`). Les arguments
   après `--` sont transmis au script (`npm` insère `--`). Actions `before`/`after` configurables
-  dans la section `toolchain` de `lorian.config.json` (`commands`, `before`, `after`) ; un échec
+  dans la section `toolchain` de `liorian.config.json` (`commands`, `before`, `after`) ; un échec
   de `before` abandonne l'opération, `after` s'exécute même si la commande échoue. Exit codes :
   `1` résolution impossible, code de la commande propagé, `130` interruption (Ctrl+C).
   `dev`/`start` (serveurs) s'arrêtent via Ctrl+C, `build`/`check` sont one-shot. Le moteur du
@@ -503,7 +532,7 @@ All notable changes to this project will be documented in this file.
   largeur adaptée au terminal et bornée entre 20 et 50), désormais utilisé par `RunWithProgress` :
   le look de la progression est unifié sur l'ensemble du CLI.
 - **Préférences CLI persistées (spec §5.11)** — `--lang`, `--no-color` et `--verbose`
-  mémorisent désormais leur choix dans `lorian.config.json` (`cli.lang`, `cli.noColor`,
+  mémorisent désormais leur choix dans `liorian.config.json` (`cli.lang`, `cli.noColor`,
   `debug.verbose`) à chaque exécution dans un projet Liorian : le choix est appliqué à tous
   les lancements suivants sans repasser les flags.
 - **Nouvelle clé `cli.noColor`** — désactive les couleurs de sortie au niveau projet. La
@@ -523,7 +552,7 @@ All notable changes to this project will be documented in this file.
   extraction de `newSelectModel`, et suppression du style `DimTitle` au profit de `Question`.
 
 ### Docs
-- Synchro de la spec §5.11 (`lorian.config.json`) avec la clé `cli.noColor` et la
+- Synchro de la spec §5.11 (`liorian.config.json`) avec la clé `cli.noColor` et la
   persistance des flags.
 
 ## [v0.16.1] - 2026-09-20
@@ -605,7 +634,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - **`debug.verbose` / `debug.logLevel` effectifs (spec §6.1, NFR-005)** — `debugf` honore
-  désormais la section `debug` de `lorian.config.json` (`debug.verbose: true` ou
+  désormais la section `debug` de `liorian.config.json` (`debug.verbose: true` ou
   `debug.logLevel: "debug"`) en plus de `--verbose` et `LIORIAN_CLI_DEBUG`.
 - **Tests hermétiques** — le PATH des scénarios E2E (et les tests `internal/debug`) est réduit
   aux fixtures du harnais puis `/usr/bin` et `/bin` : les outils globaux de la machine
@@ -619,17 +648,17 @@ All notable changes to this project will be documented in this file.
 ## [v0.13.0] - 2026-09-19
 
 ### Changed
-- **Nom commercial `Lior` / code de projet `lorian`** — le produit reste commandé `liorian`, mais ses surfaces publiques sont réparties
+- **Nom commercial `Lior` / code de projet `liorian`** — le produit reste commandé `liorian`, mais ses surfaces publiques sont réparties
   en trois strates : **nom commercial `Lior`** (module Go `github.com/protorians/liorian-cli` → `github.com/protorians/lior-cli`,
   paquet npm `@liorian/cli` → `@lior/cli`, artefacts de release `liorian-cli_*` → `lior-cli_*`, client OAuth `lior-cli`) ;
-  **code de projet `lorian`** (fichiers `liorian.config.json`/`liorian.config.toml` → `lorian.config.*`, schéma
-  `liorian.config.schema.json` → `lorian.config.schema.json`, dossier projet `.liorian/` → `.lorian/`, vault `~/.liorian-cli` →
-  `~/.lorian-cli`, services keychain `liorian-cli`/`liorian-cli-signing` → `lorian-cli`/`lorian-cli-signing`) ;
+  **code de projet `liorian`** (fichiers `liorian.config.json`/`liorian.config.toml` → `liorian.config.*`, schéma
+  `liorian.config.schema.json` → `liorian.config.schema.json`, dossier projet `.liorian/` → `.liorian/`, vault `~/.liorian-cli` →
+  `~/.liorian-cli`, services keychain `liorian-cli`/`liorian-cli-signing` → `liorian-cli`/`liorian-cli-signing`) ;
   **commande `liorian`** inchangée (binaire, wrapper npm, aide `Lior CLI`, variables `LIORIAN_*`).
 - **L'écosystème reste `Liorian`** — applications plateforme (`Liorian Socle/Connect/Console/Store/Auth`), domaines
   `*.liorian.protorians.com`, template `protorians/liorian-socle`, domaine d'audit `mod.liorian.*` et SDK `@liorian/sdk`
   ne changent pas de nom.
-- **Rupture** — les fichiers de configuration et chemins internes `liorian*` sont renommés `lorian*` ; les scripts et CI
+- **Rupture** — les fichiers de configuration et chemins internes `liorian*` sont renommés `liorian*` ; les scripts et CI
   doivent être mis à jour. Bump `v0.13.0` (ligne 0.x).
 
 ## [v0.12.0] - 2026-09-18

@@ -8,7 +8,7 @@ npm/lior-cli/bin/liorian
 npm/lior-cli/bin/liorian.exe
 
 # Local build outputs
-.lorian/
+.liorian/
 
 # Go
 *.test
