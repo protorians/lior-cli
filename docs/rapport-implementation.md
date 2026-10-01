@@ -40,21 +40,36 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - Installation des dépendances (non bloquante, simple `warn` en cas d'échec).
 - Écrit `liorian.config.json` (config projet).
 
-### `liora create module [nom]` (FR-004, FR-005)
-- Génère la structure `library/modules/<nom>/` : `manifest.json`, `index.tsx`, `README.md`,
+### `liora create module [nom]` (FR-004, FR-005, FR-005b)
+- Génère la structure `library/modules/<domain>/` : `manifest.json`, `index.tsx`, `README.md`,
   `components/`, `hooks/`, `services/` (avec `.gitkeep`).
 - Token UUID v4 dans le manifest (FR-005), key en `UPPER_SNAKE_CASE`.
+- **Wizard piloté par la session** (FR-005b) : type de distribution d'abord (il décide du préfixe
+  canonique via `module.CanonicalDomainPrefix`), puis slug d'organisation résolu par
+  `store.ResolveOrganizationSlug` (`GET /developer-store/accounts/me`), puis domaine proposé
+  **pré-rempli** `<prefixe>.<slug>.` — le développeur ne complète que l'identifiant, et l'identité
+  entière est conservée. `--publisher` court-circuite la session (CI / rejeu de script) ; une
+  organisation sans slug est **forcée de le définir** (`store.RegisterOrganizationSlug` →
+  `POST /developer-store/accounts/register`, kebab-case, `409` = slug déjà posé → réutilisé).
+  Sans session, la création est refusée (`ExitAuth`) plutôt que nominative.
+- `module.CanonicalizeDomain` réécrit le préfixe d'un domaine à trois labels quand il n'est pas
+  celui du type effectif (avertissement explicite) ; un domaine qui n'a pas trois labels est refusé.
 - Vérification des `requirements` (modules requis présents dans `library/modules/` ou `src/modules/` ;
   les modules cœur `organization`/`identity` toujours satisfaits) avec **rollback** en cas de module
   manquant, puis résolution des `dependencies`/`devDependencies` via le gestionnaire de paquets détecté
   (`bun → pnpm → yarn → npm`) à la racine du projet (`--skip-install` pour désactiver).
 
-### `liora connect` (FR-006, FR-007, FR-008)
+### `liora connect` (FR-006, FR-007, FR-008, FR-008b)
 - Sign-in email/mot de passe via `POST /api/auth/sign-in` → `{user, token, device}` (**jeton unique**).
 - MFA via les endpoints **gardés** `POST /api/mfa/challenge`, `/api/mfa/totp/verify`, `/api/mfa/recovery/verify`
   (le token de session est attaché en Bearer après le sign-in).
 - Expiration estimée à 24 h ; rafraîchissement via `POST /api/auth/sessions/refresh` (plus de refresh token).
 - Credentials stockées dans le keychain OS (`go-keyring`), avec store chiffré de repli.
+- **Slug d'organisation** (FR-008b) : `ensureConnectOrganizationSlug` interroge
+  `GET /developer-store/accounts/me` et affiche le slug dans le récapitulatif — y compris quand il est
+  vide, puisque c'est cette information qui décide si `create module` fonctionnera. Store injoignable
+  → avertissement et report sur `create module` ; slug absent en session interactive → définition
+  forcée dans la foulée (même chemin que `create module`, donc même `409` toléré).
 - Base URL et timeout via l'entrée `liorian-auth` de `app.config.json` (`api.baseUrl`, `api.timeout`), surchargée par l'env `LIORIAN_AUTH_API` ; le registre `app.config.json` est embarqué dans le binaire.
 
 ### `liora disconnect` (FR-008, FR-009)
@@ -73,19 +88,20 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
 - `pkg.OpenBrowser` (cross-platform `open` / `rundll32` / `xdg-open`) ; l'échange de token est
   tolérant (JSON OAuth brut **ou** enveloppe Raiton).
 
-### `liora artifact <action> [args…]` (FR-033 → FR-035) — passthrough `@liorian/artifact-kit`
-- **Aucune réimplémentation** : `cmd/artifact.go` (Cobra, `DisableFlagParsing`) délègue à
-  `internal/artifactkit`, qui localise le binaire `node_modules/.bin/artifact` du module visé et
-  lui transmet `<action> [args…]` **verbatim**.
+### `liora artifact <action> [module]` (FR-033 → FR-035) — chaîne native
+- **Implémentation native** : `cmd/artifact.go` (Cobra) délègue à `internal/artifactdev` (build,
+  dev-server, pack) et `internal/artifactbind` (bind/unbind socle). Esbuild est appelé par son
+  **API Go** ; aucune dépendance Node n'est requise dans le module.
 - Résolution du module (ordre) : répertoire nommé en argument avec `manifest.json` → module du
-  répertoire courant → `config.ResolveModuleDir`. Le répertoire n'est ajouté en dernier argument
-  que s'il diffère du répertoire courant et n'a pas été nommé explicitement.
-- `Ensure` : si `@liorian/artifact-kit` est absent des dépendances du `package.json` du module,
-  installation via le gestionnaire du projet (`project.packageManager`, sinon `bun` → `pnpm` →
-  `yarn` → `npm`) ; **fail-closed** si le gestionnaire réussit sans que la dépendance apparaisse
-  (`artifact.error.install_undeclared`).
-- `Exec` : stdio relié au terminal, pas de groupe de processus dédié (`Ctrl+C` atteint toute la
-  hiérarchie), code de sortie propagé tel quel.
+  répertoire courant → `config.ResolveModuleDir`.
+- `dev` : service statique de `.liorian/artifact/`, repli SPA, flux SSE `/-/events` ; port sondé
+  avant le service (bascule sur le port suivant, `--strict-port` pour refuser), double pile de
+  loopback sur `localhost`, TLS mkcert résolu dans l'ordre env → socle lié → `~/.config/liorian/certs`
+  → module.
+- `pack` : `build` (sauf `--no-build`) + validations D6/D16 + politique d'assets (exécutables refusés
+  par extension **et** par contenu, allowlist de code/config/médias) → archive `.LiorArtifactPackage`.
+- `bind:socle` / `unbind:socle` : le premier argument est le dossier du socle (absolutisé depuis le
+  répertoire d'appel) ; même implémentation que `doctor --fix`, donc pas de divergence possible.
 
 ### `liora pack [module]` (FR-010, FR-011)
 - Zip `library/modules/<module>/` + `src/app/<module>/` + `public/assets/<module>/` → `.liorian/build/<module>-<version>.LiorArtifactPackage`.

@@ -13,7 +13,6 @@ import (
 	"github.com/protorians/lior-cli/internal/pkg"
 )
 
-
 // TestCatalogIdentifier pins the identifier form the server recomputes
 // (`catalogIdentifier` in api-resources) to verify the artefact signature.
 func TestCatalogIdentifier(t *testing.T) {

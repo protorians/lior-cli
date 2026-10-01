@@ -84,7 +84,7 @@ init → create → develop → debug → audit → pack → sign → link → p
 - `liora connect` — Authentification développeur (credentials + MFA)
 - `liora auth` — Authentification OAuth2 (code d'autorisation + PKCE, navigation navigateur)
 - `liora disconnect` — Suppression des credentials
-- `liora artifact <action>` — Passthrough transparent vers la CLI `artifact` de `@liorian/artifact-kit` (voir §5.19)
+- `liora artifact <action>` — Chaîne de développement d'un module, native dans le binaire `liora` (voir §5.19)
 - `liora pack` — Build + compression d'un module (`.LiorArtifactPackage`)
 - `liora sign` — Signature numérique Ed25519 des archives `.LiorArtifactPackage` (keygen / sign / verify)
 - `liora publish` — Publication dans le store via Liora Connect
@@ -122,9 +122,11 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-003 | `liora init` installe les dépendances avec le gestionnaire choisi |
 | FR-004 | `liora create module` crée un module dans `library/modules/<domain>/` (domaine reverse-DNS + identifiant kebab-case) à partir d'un mockup de référence embarqué (Clean Architecture, structure standardisée) |
 | FR-005 | `liora create module` génère un token UUID unique dans `manifest.json` et un manifeste conforme au schéma du workspace (`module-manifest.schema.json`, `schemaVersion: 1`) |
+| FR-005b | `liora create module` **exige une session** et compose le domaine canonique depuis le slug d'organisation du compte connecté (`GET /developer-store/accounts/me`) : le type de distribution est d'abord demandé parmi les types supportés (il décide du préfixe), puis le domaine est proposé pré-rempli `<prefixe(type)>.<slug>.` et le développeur ne complète que l'identifiant ; l'identité entière est conservée pour la suite. Une organisation **sans slug** doit en définir un via la CLI avant toute création (normalisation kebab-case + `POST /developer-store/accounts/register`, repli sur le slug déjà posé en cas de `409`) ; `--publisher` est l'échappatoire CI / rejeu de script (voir §5.2) |
 | FR-006 | `liora connect` authentifie le développeur via `liorian-connect` (email + mot de passe) |
 | FR-007 | `liora connect` supporte le MFA (TOTP, backup codes) |
 | FR-008 | `liora connect` stocke les credentials de manière sécurisée (keychain/credential store, fallback vault chiffré) |
+| FR-008b | `liora connect` résout et affiche le **slug d'organisation** du compte connecté, et force sa définition (comme FR-005b) quand le compte n'en expose aucun ; un store injoignable n'interrompt pas la connexion, il reporte l'exigence sur `create module` (voir §5.3) |
 | FR-009 | `liora disconnect` supprime toutes les credentials stockées |
 | FR-010 | `liora pack` compresse `library/modules/<module>/` + `public/assets/<module>/` + `src/app/<module.uri>/` en `.LiorArtifactPackage` (manifeste canonique à la racine) |
 | FR-011 | `liora pack` déplace l'archive vers `.liorian/build/` (`--out` pour un chemin personnalisé, `--version` pour forcer la version) |
@@ -149,8 +151,8 @@ init → create → develop → debug → audit → pack → sign → link → p
 | FR-030 | `liora create view <module> [name]` génère une vue de présentation `presentation/views/<name>.view.tsx` depuis le mockup embarqué (composant, titre, description renommés) |
 | FR-031 | `liora repair [module]` répare automatiquement les anomalies bloquantes d'un audit (champs de manifeste, nom du dossier, dépendances npm manquantes, JSON malformé), re-audite puis liste en instructions les points non réparables |
 | FR-032 | `liora dev`, `build`, `start` et `check` proxient les scripts `package.json` du projet et exécutent l'`audit` de conformité des modules en pre-flight (`dev`/`build`/`start`) — spécifié dans `docs/specs/liora-toolchain.md` (TFC-001 → TFC-017) |
-| FR-033 | `liora artifact <action> [args…]` transmet `<action>` et `args…` **verbatim** à la CLI `artifact` (`@liorian/artifact-kit`) du module portant le répertoire courant, sans parsing d'options ni réécriture ; la CLI est installée comme dépendance du module si absente, et son code de sortie est propagé tel quel (voir §5.19) |
-| FR-034 | `liora artifact` refuse de s'exécuter sans action ; `liora artifact --help` affiche l'aide du passthrough, `liora artifact <action> --help` est transmis à la CLI sous-jacente |
+| FR-033 | `liora artifact <action> [module]` porte **nativement** la chaîne de développement d'un module — `build` (bundle esbuild + document hôte dans `.liorian/artifact/`, D7), `dev` (dev-server + HMR SSE, `--socle` démarre aussi le socle), `pack` (build + validations D6/D16 + archive `.LiorArtifactPackage`), `typecheck`, `test` — sans aucune dépendance Node dans le module ; le module visé est celui du répertoire courant, à défaut celui nommé en argument, à défaut celui sélectionné depuis la racine (voir §5.19) |
+| FR-034 | `liora artifact` sans action affiche son aide ; `liora artifact <action> --help` affiche l'aide de l'action. `bind:socle` / `unbind:socle` prennent le dossier du socle en premier argument (absolutisé depuis le répertoire d'appel) et le module en second argument optionnel |
 | FR-035 | Le format d'artefact est un ZIP nommé `.LiorArtifactPackage` (casse exacte) ; aucune autre extension n'est ni produite ni lue (rupture sèche, ADR-003) |
 
 ### Exigences non-fonctionnelles
@@ -211,6 +213,9 @@ lior-cli/
 │   ├── connect.go                 # liora connect
 │   ├── auth.go                    # liora auth (OAuth2 code + PKCE)
 │   ├── disconnect.go              # liora disconnect
+│   ├── orgslug.go                 # Slug d'organisation de la session (connect + create module)
+│   ├── artifact.go                # liora artifact build|dev|pack|typecheck|test|bind:socle (§5.19)
+│   ├── artifact_target.go         # Résolution du module visé par `liora artifact`
 │   ├── pack.go                    # liora pack
 │   ├── sign.go                    # liora sign (keygen / sign / verify)
 │   ├── publish.go                 # liora publish
@@ -249,8 +254,15 @@ lior-cli/
 │   │   ├── linker.go              # Liaison local ↔ distant + état .liorian/links.json
 │   │   ├── validator.go           # Validation module
 │   │   └── module_test.go         # Tests unitaires
-│   ├── artifactkit/                # Passthrough `artifact` de @liorian/artifact-kit (§5.19)
-│   │   └── artifactkit.go          # Résolution du module, ensure de la dépendance, exec verbatim
+│   ├── artifactdev/               # Chaîne de développement du module, native (§5.19)
+│   │   ├── build.go               # Bundle esbuild (API Go) + document hôte, layout .liorian/artifact/
+│   │   ├── server.go              # Dev-server : service statique, repli SPA, flux SSE /-/events
+│   │   ├── tls.go                 # Résolution TLS mkcert (env → socle lié → ~/.config → module)
+│   │   └── artifactdev.go         # Options de build, watcher, alias first-party
+│   ├── artifactbind/              # bind:socle / unbind:socle (liens symboliques + câblage HMR)
+│   │   └── bind.go               # Matérialisation, retrait, marqueur .liorian-bind.json
+│   ├── devlink/                   # Écriture/lecture du lien de développement .liorian/dev.json
+│   │   └── devlink.go
 │   ├── repair/                    # Réparation automatique des anomalies d'audit (FR-031)
 │   │   └── repair.go              # Repairer (dry-run, warnings, no-install, rename)
 │   ├── toolchain/                 # Outillage dev/build/start/check (docs/specs/liora-toolchain.md)
@@ -454,19 +466,50 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
 #### Comportement
 
 1. **Vérifier le contexte** : être à la racine d'un projet Liora (`liorian.config.json`,
-   `liorian.config.toml` ou présence de `library/modules/`)
-2. **Demander l'identité** du module (chaque prompt a un flag équivalent) :
-   - **domaine** reverse-DNS (`--domain`, ex. `com.organization.domain`) — validation `ValidateDomain`,
-     il nomme le dossier `library/modules/<domain>/` et le champ `manifest.domain`
-   - **identifiant** kebab-case (`--id`, ou argument positionnel `create module <name>`) — 3-64,
-     validation `ValidateName`, il nomme les composants et le champ `manifest.id`
+   `liorian.config.toml` ou présence de `library/modules/`) — ou le répertoire courant pour
+   `--standalone`, qui crée sa propre racine
+2. **Construire l'identité**, dans l'ordre où le développeur la rencontre. La session d'abord :
+   elle est obligatoire en mode interactif, car c'est l'organisation connectée qui nomme les
+   modules qu'elle publie.
+
+   **Étape 1 — le type de module**, demandé parmi les types de distribution supportés (`--type`
+   court-circuite le menu). Le type décide du préfixe canonique du domaine inversé — `config`,
+   `system`, `service`, `widget`, `theme`, sinon `mod` pour les applications web. Le menu affiche
+   le préfixe que chaque type imposera (`WEB_APP_LOCAL (mod.*)`, `SERVICE (service.*)`…) ; les
+   alias legacy `INTERNAL`/`EXTERNAL` n'y sont jamais proposés.
+
+   **Étape 2 — le slug d'organisation**, résolu par `store.ResolveOrganizationSlug`
+   (`GET /developer-store/accounts/me` avec le token de session). Hiérarchie des sources, la plus
+   prioritaire gagnant :
+   - `--publisher` : échappatoire CI / rejeu de script, court-circuite la session ;
+   - le slug du compte développeur connecté ;
+   - à défaut, **la définition forcée** : le wizard demande le slug, le normalise en kebab-case
+     (`store.CatalogSlug`) et l'enregistre via `POST /developer-store/accounts/register`. Un conflit
+     `409` n'est pas une erreur : le slug déjà posé sur le store est relu et réutilisé (défini
+     entre-temps, depuis une autre machine). **Un compte sans slug n'a pas le droit de créer un
+     module.**
+
+   **Étape 3 — le domaine inversé**, proposé **pré-rempli**
+   `<prefixe(type)>.<slug-organisation>.` (curseur en fin de saisie) : le développeur ne complète
+   que l'`<module-id>`. La réponse est validée avant que le wizard n'avance — reverse-DNS, puis
+   kebab-case sur le dernier label. **L'identité entière (préfixe, slug, identifiant) est conservée**
+   pour le reste du processus.
+
+   Quand le domaine n'est pas saisi — mode non interactif, ou `--id` déjà fourni — il est **composé**
+   de `module.CanonicalDomain(type, slug, identifiant)`. L'identifiant, lui, se déduit du dernier
+   label du domaine quand il n'a pas été donné (`--id` prioritaire). Un domaine fourni mais porteur
+   d'un préfixe non canonique pour le type effectif voit son préfixe **réécrit** par
+   `module.CanonicalizeDomain` (avertissement explicite) ; les labels éditeur et identifiant sont
+   préservés. Un domaine qui n'a pas exactement trois labels est refusé, et un domaine vide sans
+   identifiant non plus (`create.error.no_domain`).
+
+   **Puis les métadonnées** (chaque prompt a un flag équivalent) :
    - **nom applicatif** affiché (`--name`, défaut : Title Case de l'identifiant)
-   - **version** SemVer optionnelle (`--version`, défaut `0.0.0`)
+   - **version** SemVer (`--version`, défaut `0.0.0`)
    - **icône** lucide en PascalCase (`--icon`, défaut `PuzzleIcon`)
-   - **url** de page (`--url`, défaut : identifiant) → `manifest.uri = /<url>` et
+   - **url** de page (`--url`, défaut : l'identifiant) → `manifest.uri = /<url>` et
      `src/app/<url>/page.tsx`
    - **description** (`--description`)
-   - **type** de distribution (`--type`, enum canonique `ModuleType`, défaut `WEB_APP_LOCAL` ; `CONFIGURATION` recommandé pour les modules déclaratifs sans code — ADR-011, §7.5 de la spec installation)
    - **catégorie** de store (`--category`, enum `ModuleCategory`, défaut `SYSTEM`)
 3. **Résoudre la source du mockup module** (ordre de priorité) :
    - `--mockup` (champ `Creator.MockupDir`)
@@ -636,6 +679,16 @@ export default function <PascalId>Page() {
 - Le token UUID est **unique** et généré à la création (injection dans le manifest scaffoldé)
 - Le **domaine** (reverse-DNS) ne peut pas entrer en conflit avec un module existant
   (`library/modules/<domain>/`) ; l'identifiant doit être kebab-case (3-64)
+- Le domaine canonique compte **exactement trois labels** en kebab-case et son préfixe appartient
+  aux six acceptés par la grammaire `canonicalDomainRE` (`mod`, `config`, `system`, `service`,
+  `widget`, `theme`) ; un préfixe hors grammaire est réécrit selon le type effectif, pas refusé
+- Une création **sans session** est refusée (`create.error.not_connected`, code `ExitAuth`) : le
+  domaine d'un module est l'identité de son éditeur, elle ne se saisit pas au clavier
+- Un store **injoignable** est distingué de l'absence de session : erreur réseau explicite
+  (`create.error.org_slug_unreachable`, `ExitNetwork`), jamais une dégradation silencieuse qui
+  produirait un domaine ancré sur un slug inventé
+- Le slug d'organisation est une **définition normalisée** (kebab-case via `store.CatalogSlug`) ;
+  c'est la valeur que le store renvoie après enregistrement qui fait foi, pas la saisie brute
 - Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
 - Le manifeste est conforme au schéma canonique (24 champs requis, `schemaVersion: 1`) ;
   `entry` pointe vers `index.tsx` et `domain` correspond au dossier du module
@@ -646,26 +699,65 @@ export default function <PascalId>Page() {
 
 #### Sortie TUI
 
+> Libellés montrés en **fr-FR** (la locale par défaut du binaire est `en-US`, cf. NFR-007).
+
 ```
-? Domaine du module (reverse-DNS) : com.example.blog-manager
-? Identifiant du module (kebab-case) : blog-manager
+? Type de module :
+  ❯ WEB_APP_LOCAL (mod.*)
+    WEB_APP_REMOTE (mod.*)
+    WEB_APP_CACHED (mod.*)
+    …
+    SERVICE (service.*)
+? Domaine inversé du module — complétez l'identifiant : mod.acme.blog-manager▌
 ? Nom de l'application : Blog Manager
-? Version : 0.0.0
-? Icône (lucide) : PuzzleIcon
-? URL de page : blog-manager
-? Description : Gestion de blog et d'articles
+? Version (défaut 0.0.0) : 0.0.0
+? Icône lucide-react (optionnel) : PuzzleIcon
+? URL de la page (défaut : l'identifiant) : blog-manager
+? Description du module : Gestion de blog et d'articles
 
-  ✓ Module créé : library/modules/com.example.blog-manager/
-  ✓ Token généré : a1b2c3d4-e5f6-7890-abcd-ef1234567890
-  ✓ manifest.json initialisé
-  ✓ index.tsx initialisé
-  ✓ Page : src/app/blog-manager/page.tsx
+✓ Module créé : library/modules/mod.acme.blog-manager/
+✓ Jeton généré : a1b2c3d4-e5f6-7890-abcd-ef1234567890
+✓ manifest.json initialisé
+✓ index.tsx initialisé
+✓ Modules requis vérifiés
+✓ Page créée depuis le mockup : src/app/blog-manager/page.tsx
+✓ Dépendances résolues : bun
 
-  Prochaines étapes :
-    liora connect
-    liora pack com.example.blog-manager
-    liora publish
+Étapes suivantes :
+  liora connect
+  liora pack mod.acme.blog-manager
+  liora publish
 ```
+
+> Les trois dernières lignes de succès (`Modules requis vérifiés`, `Page créée depuis le mockup`,
+> `Dépendances résolues : <pm>`) n'apparaissent que si elles ont eu lieu — pas de page sans `uri`,
+> pas de ligne de dépendances avec `--skip-install` ou sans gestionnaire détecté.
+
+Le curseur du domaine est **en fin de saisie** : le préfixe et le slug sont déjà posés, le
+développeur saisit l'identifiant. L'identifiant est déduit du **dernier label** du domaine
+(`mod.acme.blog-manager` → `blog-manager`).
+
+#### Sortie TUI — organisation sans slug
+
+Quand le compte connecté n'expose pas de slug (`/accounts/me` répond un `slug` vide), la définition
+est **forcée** avant toute création. Le `409` du store n'est pas une erreur : il veut dire que le
+slug existe déjà, et la valeur déjà posée est reprise.
+
+```
+Votre organisation n'a pas de slug éditeur — il identifie vos modules dans le domaine
+canonique (mod.<slug>.<module>). Définissez-le maintenant.
+? Slug de votre organisation (kebab-case) : mon-orga
+✓ Slug de l'organisation enregistré : mon-orga
+? Domaine inversé du module — complétez l'identifiant : mod.mon-orga.blog-manager▌
+```
+
+Si le store répond `409` (slug déjà pris par une autre fiche), ce n'est pas un échec : le message
+`slug déjà défini sur le store : <slug>` est affiché et le slug déjà posé est réutilisé — il a pu
+être défini entre-temps, depuis une autre machine.
+
+En mode **non interactif** la définition est impossible : la commande s'arrête sur
+`create.error.org_slug_missing` en renvoyant vers le terminal interactif, plutôt que de créer un
+module sous une identité d'organisation inventée.
 
 ---
 
@@ -692,7 +784,13 @@ manière sécurisée.
      - **TOTP** : demander le code 6 chiffres → `POST /api/mfa/totp/verify`
      - **Backup code** : demander le code → `POST /api/mfa/recovery/verify`
    - Valider → stocker le `mfa_token` retourné
-7. **Afficher le résumé** : connecté en tant que `email`, rôle, organisation
+7. **Résoudre le slug d'organisation** (`ensureConnectOrganizationSlug`) :
+   `GET /developer-store/accounts/me` → `slug`. Si le store est injoignable, avertissement et
+   report sur `create module` (qui l'exigera) ; si le compte répond sans slug en session
+   **interactive**, la définition est forcée dans la foulée — le même chemin que `create module`,
+   donc le même `POST /accounts/register` et le même repli sur `409`. En mode non interactif, on
+   se contente d'avertir : un CI n'a pas de terminal pour définir un slug.
+8. **Afficher le résumé** : connecté en tant que `email`, rôle, **slug d'organisation**, expiration
 
 #### Stockage des credentials
 
@@ -719,19 +817,25 @@ manière sécurisée.
 
 #### Sortie TUI
 
-```
-? Email : dev@example.com
-? Mot de passe : ********
-  ⠋ Vérification des identifiants...
+> Libellés montrés en **fr-FR** (la locale par défaut du binaire est `en-US`, cf. NFR-007).
 
-? Code MFA (TOTP) : 123456
-  ⠋ Vérification du code...
+```
+? E-mail : dev@example.com
+? Mot de passe : ********
+  ⠋ Vérification des informations d'identification...
+
+? Code TOTP : 123456
+  ⠋ Vérification du code…
 
   ✓ Connecté en tant que dev@example.com
     Rôle : Developer
-    Organisation : Mon Organisation
-    Token expire le : 2026-09-17 14:30:00 UTC
+    Organisation (slug) : acme
+    Expiration du jeton : 2026-09-17 14:30:00 UTC
 ```
+
+Le slug d'organisation est affiché **même quand il est vide** : c'est l'information qui décide si
+`create module` fonctionnera, une ligne absente laisserait le développeur découvrir la contrainte
+plus tard, au moment de créer son module.
 
 ---
 
@@ -1153,6 +1257,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **manifest.json** | Champ `token` UUID valide | ERROR |
 | **manifest.json** | Champ `entry` pointe vers un fichier existant | ERROR |
 | **manifest.json** | Champ `domain` au format reverse-DNS (`com.organization.domain` ; le préfixe `mod.liorian.` n'est plus requis) | WARNING |
+| **manifest.json** | Champ `domain` sous forme **canonique** `<prefixe(type)>.<slug-éditeur>.<identifiant>` (`canonicalDomainRE`, `IsCanonicalDomain`) — avertissement distinct du reverse-DNS générique, car une forme non canonique reste acceptée par l'identité existante | WARNING |
 | **manifest.json** | Le `domain` correspond au dossier du module (`library/modules/<domain>`) | WARNING |
 | **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
 | **manifest.json** | `optionalRequirements` est présent (objet, `{}` admis) | WARNING |
@@ -1236,7 +1341,7 @@ Usage:
   liora [command]
 
 Available Commands:
-  artifact   Passthrough to the artifact CLI (@liorian/artifact-kit)
+  artifact   Module development toolchain (build, dev-server, pack, socle link)
   audit       Audit a module's conformance
   auth        Authenticate via OAuth2 (browser)
   build       Build the application for production (project `build` script)
@@ -1717,12 +1822,30 @@ complète (correspondance commandes → scripts, résolution, passthrough d'argu
 sortie, configuration `toolchain`) est dans **`docs/specs/liora-toolchain.md`** (TFC-001 →
 TFC-017).
 
-### 5.19 `liora artifact <action> [args…]`
+### 5.19 `liora artifact <action> [module]`
 
-`artifact` est le **binaire** de `@liorian/artifact-kit` (`artifact build`, `artifact dev`,
-`artifact typecheck`, `artifact pack`, …). `liora artifact` ne le réimplémente pas : c'est un
-**passthrough transparent**, la seule valeur ajoutée étant de trouver *quel* module utiliser et de
-garantir que la dépendance y est installée.
+La chaîne de développement d'un module est **native dans le binaire `liora`** : le bundle esbuild
+est produit par l'**API Go** d'esbuild, le dev-server et la liaison au socle sont écrits en Go. Un
+module n'a plus à déclarer de dépendance ni à embarquer de `node_modules` pour être développé.
+
+| Action | Effet |
+|--------|-------|
+| `build [module]` | Bundle autonome + document hôte templatisé (`{{manifest.*}}`) dans `.liorian/artifact/` (D7) |
+| `dev [module]` | Dev-server : service statique de `.liorian/artifact/`, repli SPA et flux **SSE** `/-/events` qui recharge les iframes après chaque rebuild |
+| `pack [module]` | `build` (sauf `--no-build`) + validations D6/D16 + politique d'assets, puis archive `.LiorArtifactPackage` dans `.liorian/build/` |
+| `typecheck [module]` | `tsc --noEmit` sur le module (règle 2 de §4.4) |
+| `test [module]` | Script `test` du module via le gestionnaire détecté |
+| `bind:socle <socle> [module]` / `unbind:socle` | Pose / retire la liaison module ↔ socle |
+
+Flags par action :
+
+| Action | Flags | Défaut |
+|--------|-------|--------|
+| `dev` | `--port` (`LIORIAN_DEV_PORT`), `--host` (`LIORIAN_DEV_HOST`), `--https`, `--http`, `--strict-port`, `--socle <dir>` | `5178` / `localhost` ; TLS **suit le schéma du socle lié**, `--strict-port` désactive la bascule de port |
+| `pack` | `--out <fichier>`, `--no-build` | archive dans `.liorian/build/` ; `--no-build` empaquette l'artefact existant sans rebuilder |
+
+`--socle <dir>` lance aussi le socle (`<pm> run dev`) : la boucle complète — socle, serveur de
+bibliothèque, dev-server HMR — tient alors dans un seul terminal.
 
 #### 5.19.1 Résolution du module cible
 
@@ -1734,67 +1857,69 @@ Dans cet ordre, le premier qui aboutit gagne :
 | 2 | Le répertoire courant est lui-même un module (`manifest.json` présent) | `cd modules/blog-manager && liora artifact build` |
 | 3 | `config.ResolveModuleDir` à la racine du projet (arbre source `modules/`, puis `library/modules/`, puis identité déclarée) | depuis la racine d'un projet à un seul module |
 
-Le répertoire du module n'est **ajouté** en dernier argument que s'il diffère du répertoire
-courant et qu'il n'a pas été nommé explicitement (règle 1) : la CLI sous-jacente, qui applique son
-propre défaut sur le répertoire courant, reçoit alors exactement la même cible qu'un `cd` manuel.
+#### 5.19.2 HMR par SSE
 
-#### 5.19.2 Transmission verbatim
+Le dev-server ne réinjecte pas de code dans une iframe : il **recharge le document**. Un watcher
+léger (sondage de l'arbre du module — sources, template, manifeste, config) déclenche le rebuild
+incrémental du contexte esbuild, et le flux `/-/events` notifie les iframes connectées, qui se
+rechargent. L'API Go d'esbuild n'expose pas de callback de watch, d'où le watcher maison. Le
+service est ouvert en `Access-Control-Allow-Origin: *` avec repli SPA.
 
-`artifactCmd` est déclaré avec `DisableFlagParsing: true` : aucun option n'est consommée par Cobra,
-`--port`, `--out`, `--host` (ou toute option de la CLI `artifact`) atteignent l'enfant telles
-quelles. `stdin`/`stdout`/`stderr` sont reliés directement au terminal et le processus enfant
-n'est **pas** mis dans son propre groupe de processus — `Ctrl+C` atteint toute la hiérarchie
-(donneur d'ordre + `artifact` + ses enfants), indispensable pour `artifact dev`.
+#### 5.19.3 Port et TLS
 
-#### 5.19.3 Installation automatique
+Le port demandé est **sondé avant le service** : s'il est occupé (`EADDRINUSE` — dev-server orphelin
+qui survit à un terminal fermé sans `SIGINT`, docker-proxy), le serveur **bascule sur le port
+suivant** avec un message explicite, réaligne `.liorian/dev.json` et rappelle de re-binder/redémarrer
+le socle pour que `NEXT_PUBLIC_DEV_MODULES_URL` suive ; `--strict-port` refuse au lieu de basculer.
+Sur `localhost` le serveur écoute sur **les deux piles de loopback** (IPv4 + IPv6), parce qu'un
+navigateur qui résout `localhost` vers `::1` (macOS le fait en premier) ne doit pas dépendre d'un
+bind mono-pile.
 
-Si `@liorian/artifact-kit` est absent des dépendances du `package.json` du module, il est ajouté
-comme **dépendance de runtime** avec le gestionnaire de paquets du projet (`project.packageManager`
-de `liorian.config.json`, sinon détection `bun` → `pnpm` → `yarn` → `npm`) avant l'exécution. Si le
-gestionnaire se déclare réussi sans que la dépendance apparaisse dans `package.json`, la commande
-**échoue** (fail-closed) : mieux vaut un diagnostic qu'un `artifact` silencieusement absent.
+La résolution TLS mkcert conserve son ordre : variable d'environnement explicite → socle lié →
+`~/.config/liorian/certs` → module. Son échec est **fermé** (mixed content impossible à déboguer
+depuis une iframe).
 
 #### 5.19.4 Codes de sortie
 
 | Situation | Code |
 |-----------|------|
-| Succès de la CLI `artifact` | celui de la CLI |
-| Échec de la CLI `artifact` | celui de la CLI, propagé à l'identique |
-| Action manquante, module introuvable, CLI absente, installation impossible | `1` (message i18n) |
+| Succès | `0` |
+| Échec de build, de pack ou de typecheck | code de build (`ExitBuild`) |
+| Module introuvable | code de module (`ExitModuleNotFound`) |
+| Action inconnue / socle invalide / gestionnaire absent | `1` (message i18n) |
+| Interruption `Ctrl+C` du dev-server | `130` |
 
 ```console
 $ liora artifact dev --port 5178          # depuis la racine du projet
 $ cd modules/blog-manager && liora artifact dev --port 5178
 $ liora artifact typecheck modules/blog-manager
 $ liora artifact pack --out blog-1.0.0.LiorArtifactPackage
+$ liora artifact dev --socle ../../apps/liorian-socle   # socle + HMR, un seul terminal
 ```
 
 #### 5.19.5 `bind:socle` / `unbind:socle` — liaison à un socle hors de son dossier
 
-Deux actions font **exception au passthrough aveugle** : leur premier argument est le **dossier du
-socle**, pas un module, et la résolution générique le prendrait pour un module cible. `liora` les
-intercepte donc (`bind:socle`, `unbind:socle`), absolutise le chemin du socle contre le répertoire
-d'appel (un chemin relatif garde son sens), résout le module (règle 1 puis 2 puis 3 de §5.19.1,
-sans jamais interpréter le socle comme module), puis transmet l'action au binaire `artifact` exécuté
-dans le module — le module optionnel n'est pas transmis, le répertoire d'exécution étant déjà la
-cible par défaut de la CLI.
+Leur premier argument est le **dossier du socle**, pas un module : `liora` l'absolutise contre le
+répertoire d'appel (un chemin relatif garde son sens) puis résout le module (règle 1 puis 2 puis 3
+de §5.19.1, sans jamais interpréter le socle comme module). `internal/artifactbind` matérialise le
+module dans `<socle>/library/modules/<id>/` — pointeur `current`, `<version>/manifest.json` et
+`<version>/artifact` — par **liens symboliques** vers le module (repli **copie** quand le système
+de fichiers refuse les liens) : le module apparaît dans le registre du socle et son artefact est
+celui que `artifact dev` réécrit en continu, sans qu'aucun code du module ne soit copié dans le
+dépôt du socle. Le HMR réel est câblé dans le `.env.local` **non versionné** du socle
+(`NEXT_PUBLIC_DEV_MODULES_URL`, `NEXT_PUBLIC_DEV_MODULES`), jamais dans un fichier suivi ;
+l'ajout et le retrait sont **idempotents** et alignent le schéma. `unbind:socle` ne supprime que
+les versions marquées par `bind:socle` (`.liorian-bind.json`) et **restaure** le pointeur `current`
+d'origine : une installation réelle n'est jamais altérée. Le socle doit être redémarré après un
+bind pour relire son `.env.local`. `liora doctor --fix` exécute **la même** implémentation
+(`artifactbind.Bind`) que la commande : le contrat de liaison ne peut pas diverger entre le
+diagnostic et l'action.
 
 ```console
 $ cd modules/blog-manager && liora artifact bind:socle ../../apps/liorian-socle
 $ liora artifact bind:socle apps/liorian-socle modules/blog-manager   # depuis la racine
 $ liora artifact unbind:socle apps/liorian-socle
 ```
-
-Côté `@liorian/artifact-kit`, `bind:socle` matérialise le module dans
-`<socle>/library/modules/<id>/` — pointeur `current`, `<version>/manifest.json` et
-`<version>/artifact` — par **liens symboliques** vers le module (repli **copie** quand le système
-de fichiers refuse les liens) : le module apparaît dans le registre du socle et son artefact est
-celui que `artifact dev` réécrit en continu, sans qu'aucun code du module ne soit copié dans le
-dépôt du socle. Le HMR réel est câblé dans le `.env.local` **non versionné** du socle
-(`NEXT_PUBLIC_DEV_MODULES_URL`, `NEXT_PUBLIC_DEV_MODULES`), jamais dans un fichier suivi. `unbind:socle`
-ne supprime que les versions marquées par `bind:socle` (`.liorian-bind.json`) et **restaure** le
-pointeur `current` d'origine : une installation réelle n'est jamais altérée. Le socle doit être
-redémarré après un bind pour relire son `.env.local`.
 
 ---
 
@@ -2289,8 +2414,8 @@ Suite E2E réelle (16 scripts txtar) : `01_help_version`, `02_init`, `02b_init_b
 |----|----------|
 | TC-001 | `liora init` avec bun détecté (et génération du `.env` depuis l'exemple) |
 | TC-002 | `liora init` avec aucun gestionnaire détecté |
-| TC-003 | `liora create module` avec nom invalide |
-| TC-004 | `liora create module` avec nom valide |
+| TC-003 | `liora create module` avec un domaine invalide (non reverse-DNS, ou nombre de labels ≠ 3) |
+| TC-004 | `liora create module` avec un domaine canonique valide → l'identifiant est déduit du dernier label |
 | TC-005 | `liora connect` succès sans MFA |
 | TC-006 | `liora connect` avec MFA TOTP |
 | TC-007 | `liora connect` échec (mauvais identifiants) |
@@ -2336,11 +2461,13 @@ Scénarios des scripts récents (identifiants préfixés par le numéro du scrip
 | 15/TC-038 | `liora repair` corrige automatiquement les anomalies bloquantes |
 | 15/TC-039 | `liora repair` restitue les points non réparables en instructions (exit non nul) |
 | 15/TC-040 | `liora repair --no-interaction` renomme le dossier sur le domaine du manifeste |
-| 18/TC-041 | `liora artifact build` transmet l'action verbatim depuis le répertoire du module (aucun répertoire ajouté) |
-| 18/TC-042 | Depuis la racine du projet, le module sélectionné est ajouté en dernier argument |
-| 18/TC-043 | Un répertoire nommé explicitement est transmis tel quel, jamais dupliqué |
-| 18/TC-044 | Le code de sortie de la CLI `artifact` est propagé à l'identique |
-| 18/TC-045 | Module sans CLI installée → échec explicite (fail-closed) ; `liora artifact` sans action refuse de s'exécuter |
+| 18/TC-041 | `liora artifact build` depuis le répertoire du module : bundle + document hôte dans `.liorian/artifact/`, aucune dépendance Node requise |
+| 18/TC-042 | Depuis la racine du projet, le module nommé par l'argument est construit |
+| 18/TC-043 | Sans argument depuis la racine, le module est sélectionné depuis le projet |
+| 18/TC-044 | Une erreur de compilation esbuild fait échouer la commande (fail-closed, pas de bundle partiel) |
+| 18/TC-045 | `liora artifact` sans action affiche l'aide de la chaîne native |
+| 19/TC-046 | `liora connect` affiche le slug d'organisation ; `create module` compose le domaine canonique depuis la session (type, slug, identifiant conservés) |
+| 19/TC-047 | Une organisation connectée **sans slug** refuse la création (le slug doit être défini via la CLI) |
 
 ---
 
@@ -2460,9 +2587,12 @@ Product: liora-cli v1.0.0
 - Dépendance au keychain système (fallback nécessaire)
 - Sur Linux, nécessite un agent secret (gnome-keyring, KWallet)
 
-### ADR-003 : `artifact` est un passthrough, pas une commande réimplémentée
+### ADR-003 : la chaîne `artifact` est native dans la CLI Go
 
-**Contexte** : `@liorian/artifact-kit` expose déjà une CLI `artifact` (`build`, `dev`, `pack`,
+**Statut** : *révisé* — la décision initiale (passthrough vers `@liorian/artifact-kit`) est
+**remplacée** par le portage natif, voir §5.19.
+
+**Contexte** : `@liorian/artifact-kit` exposait une CLI `artifact` (`build`, `dev`, `pack`,
 `typecheck`, `test`) déclarée dans les dépendances de chaque module. La CLI `liora` devait-elle la
 réimplémenter, l'encapsuler dans une TUI, ou s'y borner ?
 
@@ -2471,24 +2601,30 @@ réimplémenter, l'encapsuler dans une TUI, ou s'y borner ?
 - **Option B** : encapsuler dans une TUI Bubbletea avec ses propres options
 - **Option C** : passthrough transparent, l'outillage de build restant la propriété du package
 
-**Décision** : Option C — passthrough verbatim
+**Décision initiale** : Option C — passthrough verbatim.
 
-**Justification** :
-- une seule implémentation de la chaîne de build (TypeScript, dans le package) : pas de divergence
-  possible entre `artifact build` et `liora artifact build`
-- le contrat d'options de la CLI `artifact` reste le sien : `--port`, `--out`, `--host` et les
-  options à venir atteignent l'enfant sans être réinterprétées par Cobra
-- l'outillage de build est versionné et publié sur npmjs indépendamment de la CLI Go : le
-  désaccouplement de versions est possible sans casser `liora`
-- l'installation automatique de la dépendance transforme « il faut installer le toolchain » en
-  detail non bloquant, au lieu d'un prérequis implicite
+**Décision révisée** : **Option A** — portage natif. Le passthrough a été retiré (v0.32.0) :
+`internal/artifactkit` et le binaire Node sont supprimés, `build`/`dev`/`pack`/`typecheck`/`test`
+vivent dans `internal/artifactdev` et `internal/artifactbind`, esbuild est appelé par son API Go.
+
+**Justification de la révision** :
+- un module ne dépend plus d'aucun paquet npmjs pour être développé, construit ou empaqueté — pas
+  de `node_modules` à installer,/versionner ou mettre à jour dans le dépôt du module
+- le désaccouplement de versions disparaît : l'outillage de build est celui du binaire `liora`, donc
+  exactement celui qui validera et packera à la publication
+- `Ctrl+C` et le port du dev-server deviennent maîtrisables (bascule de port, double pile de loopback)
+  au lieu d'être délégués à un processus enfant
+- le format d'artefact et les validations sont produits par le **même** code que la chaîne de
+  publication : plus d'écart possible entre ce qu'un développeur empaquette et ce qui est publié
 
 **Conséquences** :
-- `DisableFlagParsing` sur `artifactCmd` : les options inconnues ne sont pas rejetées, ce qui interdit
-  à la CLI Go d'évoluer son contrat d'options sans casser le passthrough
-- pas de vue par étapes, pas de récapitulatif de build : le flux de la CLI `artifact` est inchangé
-- l'extension du format d'artefact suit `artifact-kit` (`.LiorArtifactPackage`) : la CLI Go ne
-  produit plus d'archive, elle valide, signe et publie ce que `artifact pack` a produit
-- `Ctrl+C` n'est pas capté : le passthrough laisse le signal atteindre toute la hiérarchie de
-  processus, `artifact dev` restant interruptible
+- le contrat d'options appartient désormais à la CLI Go : `--port`, `--out`, `--host` sont des
+  options Cobra explicites, non transmises verbatim
+- l'extension du format d'artefact suit l'implémentation Go (`.LiorArtifactPackage`, ADR-003 du
+  format) ; `artifact pack` et `liora pack` produisent la même archive
+- le HMR reste un rechargement de document piloté par SSE, pas une injection de code : le navigateur
+  continue d'évaluer le bundle produit par esbuild
+- un module qui embarquait encore `@liorian/artifact-kit` dans ses scripts doit les réécrire en
+  `liora artifact …` — la migration est faite côté workspace Liora (`packages/artifact-kit`
+  supprimé)
 

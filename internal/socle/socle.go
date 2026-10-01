@@ -11,10 +11,10 @@
 // `liora doctor` puisse nommer la cause au lieu de laisser le développeur
 // chercher.
 //
-// Le contrat est volontairement identique à celui implémenté par
-// `@liorian/artifact-kit` (`src/socle.ts`, `src/dev-link.ts`) : les deux
-// lectures portent sur les mêmes fichiers, sans dépendance d'exécution entre
-// les deux outils.
+// Le contrat de liaison est celui posé par `internal/artifactbind` — la même
+// implémentation que `liora artifact bind:socle` et `liora doctor --fix` : un
+// seul code écrit la bibliothèque et le `.env.local`, donc le diagnostic et la
+// commande ne peuvent pas diverger.
 package socle
 
 import (

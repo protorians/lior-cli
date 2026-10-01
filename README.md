@@ -43,13 +43,13 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 | Commande | Description |
 |----------|-------------|
 | `liora init [--channel alpha\|beta\|rc\|stable] [--auto-env]` | Télécharger la release ZIP de `protorians/liorian-socle` (canal stable par défaut) + installer les dépendances (détection bun/pnpm/yarn/npm) ; génère le `.env` depuis l'exemple du template (clé applicative, paire VAPID, nom/slug) — `--auto-env` (ou `LIORIAN_CLI_ENV_AUTO`) accepte toutes les valeurs suggérées sans question |
-| `liora create module [nom] [--domain d] [--type TYPE] [--category CAT] [--mockup dir] [--page-mockup file] [--standalone]` | Créer un module dans `library/modules/` depuis le mockup hello-world canonique (miroir du socle : `compatibility`, `oauth`, `capabilities`, permissions `Role:Verbe`), surchargeable via `--mockup` / `--page-mockup` (`LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) ; `--type` (enum `ModuleType`, défaut `WEB_APP_LOCAL`) et `--category` (défaut `SYSTEM`) sont écrits dans le manifeste et la déclaration. `--standalone` crée à la place un **dépôt de module autonome** dans le répertoire courant (racine `liorian.config.json`, `.gitignore`, `README.md`, module sous `modules/<id>/` sans page `src/app/` et `uri` préfixé `/m/<id>`) — sans exiger de projet existant ; un répertoire non vide ou imbriqué dans un autre projet est refusé |
+| `liora create module [nom] [--domain d] [--id id] [--publisher slug] [--type TYPE] [--category CAT] [--mockup dir] [--page-mockup file] [--standalone]` | Créer un module dans `library/modules/` depuis le mockup hello-world canonique (miroir du socle : `compatibility`, `oauth`, `capabilities`, permissions `Role:Verbe`), surchargeable via `--mockup` / `--page-mockup` (`LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) ; `--type` (enum `ModuleType`, défaut `WEB_APP_LOCAL`) et `--category` (défaut `SYSTEM`) sont écrits dans le manifeste et la déclaration. **Le wizard interactif est piloté par la session** : le type est d'abord demandé (il décide du préfixe canonique du domaine), puis le slug d'organisation est récupéré du compte connecté, puis le domaine inversé est proposé **pré-rempli** `<prefixe(type)>.<slug>.` — le développeur ne complète que l'identifiant, et l'identité entière est conservée pour la suite. Une organisation **sans slug** doit en définir un via la CLI avant toute création ; `--publisher` est l'échappatoire CI / rejeu de script. `--standalone` crée à la place un **dépôt de module autonome** dans le répertoire courant (racine `liorian.config.json`, `.gitignore`, `README.md`, module sous `modules/<id>/` sans page `src/app/` et `uri` préfixé `/m/<id>`) — sans exiger de projet existant ; un répertoire non vide ou imbriqué dans un autre projet est refusé |
 | `liora create view <module> [nom] [--name id] [--label titre] [--description texte] [--mockup file]` | Créer une vue de présentation (`presentation/views/<id>.view.tsx`) dans un module existant depuis le mockup embarqué (composant `<Id>View`, titre et description renommés) |
-| `liora connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) |
+| `liora connect` | Authentification via liorian-connect (email + mot de passe, MFA TOTP / backup codes) ; le récapitulatif affiche le **slug d'organisation** du compte connecté, et une organisation qui n'en expose aucun est invitée à le définir dans la foulée (c'est ce slug qui nomme ensuite vos modules dans `create module`) |
 | `liora auth` | Authentification OAuth2 (code d'autorisation + PKCE) via le navigateur — endpoints issus de `app.config.json` (`oauth` de `liorian-auth`) ; mode CI via `LIORIAN_CLI_AUTH_CODE` |
 | `liora disconnect` | Invalider le token côté serveur et supprimer les credentials |
-| `liora artifact <action> [args…]` | Passthrough transparent vers la CLI `artifact` de `@liorian/artifact-kit` : l'action et ses options (`--port`, `--out`, `--host`, …) sont transmises **verbatim**, sans réécriture, au binaire `node_modules/.bin/artifact` du module qui porte le répertoire courant (installé au préalable comme dépendance du module s'il est absent) ; le code de sortie de la CLI est celui de la commande |
-| `liora artifact bind:socle <socle> [module]` / `unbind:socle` | Lier un module en développement à un socle hors de son dossier : `library/modules/<id>/` est écrit en **liens symboliques** vers le module (repli copie) et le HMR est câblé dans le `.env.local` non versionné du socle. Le chemin du socle (absolu ou relatif au répertoire d'appel) est résolu avant le passthrough ; `unbind:socle` retire la liaison sans toucher une installation réelle |
+| `liora artifact build\|dev\|pack\|typecheck\|test [module]` | Chaîne de développement d'un module, **native dans le binaire `liora`** (esbuild via son API Go, aucune dépendance Node) : `build` produit le bundle + le document hôte dans `.liorian/artifact/` (D7), `dev` sert ce layout avec un flux **SSE** `/-/events` qui recharge les iframes après chaque rebuild (`--port`, `--host`, `--https`/`--http`, `--strict-port`, `--socle <dir>` pour démarrer aussi le socle), `pack` enchaîne build + validations D6/D16 + archive `.LiorArtifactPackage`, `typecheck` exécute `tsc --noEmit`, `test` lance le script `test` du module. Le module visé est celui qui porte le répertoire courant, à défaut celui nommé en argument, à défaut celui sélectionné depuis la racine du projet |
+| `liora artifact bind:socle <socle> [module]` / `unbind:socle` | Lier un module en développement à un socle hors de son dossier : `library/modules/<id>/` est écrit en **liens symboliques** vers le module (repli copie) et le HMR est câblé dans le `.env.local` non versionné du socle. Le chemin du socle est absolutisé depuis le répertoire d'appel avant la résolution du module ; `unbind:socle` retire la liaison sans toucher une installation réelle |
 | `liora pack [module[@version]] [--version V] [--out F]` | Construire l'archive `.LiorArtifactPackage` dans `.liorian/build/` — layout runtime isolé : manifeste canonique à la racine + `src/**` (source TS, D4) + `artifact/**` (payload exécutable, §4.4), typecheck bloquant (D6), `userScope` obligatoire (D15), ni `next/*` (D1) ni `fetch`/`WebSocket` (D16) dans le bundle ; quotas 50 Mo/5 000 fichiers/ratio 100:1, empreintes SHA-256 affichées |
 | `liora sign keygen` | Générer une paire de clés Ed25519 pour la signature |
 | `liora sign [module\|archive.LiorArtifactPackage] [--key F]` | Signer la charge utile canonique de publication (Ed25519, obligatoire pour publier — ADR-010) |
@@ -125,22 +125,19 @@ Voir la section « Installation » de la spécification (`docs/specs/liora.md`,
 > sans module le contrôle est ignoré). Les contrôles `debug`/`test` restent des commandes
 > dédiées (`liora debug`, `liora test`) et ne sont plus lancés par la porte.
 >
-> **`artifact` est un passthrough, pas une commande à option** — `liora artifact <action>` ne
-> réimplémente rien : il localise le module qui porte le répertoire courant, s'assure que
-> `@liorian/artifact-kit` y est déclaré (installation automatique sinon, avec le gestionnaire de
-> paquets du projet) puis exécute `node_modules/.bin/artifact` en lui transmettant l'action et ses
-> arguments tels quels, avec les flux du processus liés au terminal (Ctrl+C, couleurs, `stdin`
-> interactif) et le code de sortie propagé. Un répertoire passé en argument (ou le module
-> sélectionné depuis la racine du projet) est ajouté en dernier argument ; l'utilisateur peut donc
-> écrire `liora artifact build modules/blog-manager` comme `cd modules/blog-manager && liora artifact
-> build`. L'extension `.LiorArtifactPackage` (ZIP renommé) est produite par `artifact pack` — et par
-> `liora pack` pour la chaîne de publication (signature, store).
+> **`artifact` est la chaîne de développement du module, pas un passthrough** — `liora artifact
+> <action>` réimplémente la chaîne dans le binaire `liora` (`internal/artifactdev` pour le build, le
+> dev-server et le pack, `internal/artifactbind` pour la liaison au socle, esbuild appelé par son
+> **API Go**) : le module n'a plus à déclarer de dépendance ni à embarquer de `node_modules`. Le
+> module visé est celui qui porte le répertoire courant, sinon celui nommé en argument, sinon celui
+> sélectionné depuis la racine du projet — `liora artifact build modules/blog-manager` et
+> `cd modules/blog-manager && liora artifact build` visent donc la même cible. L'extension
+> `.LiorArtifactPackage` (ZIP renommé) est produite par `artifact pack` — et par `liora pack` pour la
+> chaîne de publication (signature, store).
 >
-> **`bind:socle` / `unbind:socle` font exception au passthrough** — leur premier argument est le
-> dossier du socle, pas un module : `liora` l'absolutise contre le répertoire d'appel, résout le
-> module en cours (répertoire courant, argument ou sélection), puis transmet l'action au binaire
-> `artifact`, exécuté dans le module. Le module apparaît alors dans le registre du socle et son
-> artefact est celui du dev-server — sans copier son code dans le dépôt du socle.
+> **`bind:socle` / `unbind:socle` prennent le dossier du socle en premier argument** — `liora`
+> l'absolutise contre le répertoire d'appel, résout le module (répertoire courant, argument ou
+> sélection depuis la racine), puis pose ou retire la liaison.
 
 ## Variables d'environnement
 

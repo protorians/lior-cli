@@ -134,8 +134,8 @@ camouflage structurel et non cosmétique.
 
 > Distinction avec les commandes modules : `dev`/`build`/`start`/`check` opèrent au niveau
 > **application** (racine du projet) ; `debug` (build des modules), `pack` (archive
-> `.LiorArtifactPackage`), `test` (suites des modules) et `artifact` (passthrough vers la CLI
-> `@liorian/artifact-kit` d'un module, spec `liora.md` §5.19) restent inchangés.
+> `.LiorArtifactPackage`), `test` (suites des modules) et `artifact` (chaîne de développement d'un
+> module, spec `liora.md` §5.19) restent inchangés.
 
 ### 5.2 Résolution de la commande (ordre de priorité)
 

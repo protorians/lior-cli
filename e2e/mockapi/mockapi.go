@@ -113,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/api/developer-store/modules/", s.storeModules)
 	mux.HandleFunc("/api/developer-store/modules", s.storeModules)
 
+	mux.HandleFunc("/api/developer-store/accounts/me", s.myAccount)
 	mux.HandleFunc("/api/developer-store/signing-keys", s.signingKeys)
 	mux.HandleFunc("/api/developer-store/signing-keys/", s.signingKeys)
 	mux.HandleFunc("/api/developer-store/accreditations", s.accreditations)
@@ -222,6 +223,32 @@ func (s *Server) signIn(w http.ResponseWriter, r *http.Request) {
 		"organizations": []map[string]string{
 			{"id": "org-1", "name": "My Organization", "slug": "my-org"},
 		},
+	})
+}
+
+// myAccount serves `GET /api/developer-store/accounts/me` — the developer
+// account the session-based `create module` flow resolves the organization
+// slug from. `connected@example.com` is the fixture account of the
+// session-flow scenario and owns the `acme` slug; every other account exposes
+// none, so the existing scenarios keep degrading exactly as before.
+func (s *Server) myAccount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "Method not allowed")
+		return
+	}
+	email, ok := s.bearerEmail(r)
+	if !ok {
+		writeError(w, 401, "Authentication required")
+		return
+	}
+	slug := ""
+	if email == "connected@example.com" {
+		slug = "acme"
+	}
+	writeData(w, http.StatusOK, map[string]any{
+		"id":   "dev_" + strings.Split(email, "@")[0],
+		"slug": slug,
+		"name": strings.Split(email, "@")[0],
 	})
 }
 

@@ -1,0 +1,31 @@
+mkdir project
+cd project
+mkdir -p library/modules
+exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+
+# TC-046 / TC-047 — `create module` est piloté par la session `liora connect` : le slug
+# de l'organisation connectée (`GET /developer-store/accounts/me`) compose le
+# domaine canonique, et le récapitulatif du connect l'affiche.
+env LIORIAN_CLI_CONNECT_EMAIL=connected@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+exec $LIORIAN --no-color connect
+stdout '✓ Connected as connected@example.com'
+stdout 'Organization \(slug\)'
+stdout 'acme'
+
+# Sans --domain ni --publisher, le domaine est composé depuis la session :
+# le type effectif (défaut WEB_APP_LOCAL → préfixe `mod`), le slug `acme`,
+# l'identifiant positionnel — et l'identité entière est conservée.
+exec $LIORIAN --no-color create module crm
+stdout 'Module created'
+exists library/modules/mod.acme.crm/manifest.json
+exec grep -q '"domain": "mod.acme.crm"' library/modules/mod.acme.crm/manifest.json
+exec grep -q '"id": "crm"' library/modules/mod.acme.crm/manifest.json
+
+# TC-047 — un compte connecté sans slug d'organisation refuse la création : le slug doit
+# être défini via la CLI (interactif) avant tout module.
+env LIORIAN_CLI_CONNECT_EMAIL=noslug@example.com
+env LIORIAN_CLI_CONNECT_PASSWORD=secret
+exec $LIORIAN --no-color connect
+! exec $LIORIAN --no-color create module blog
+stderr 'publisher slug'

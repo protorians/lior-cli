@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.33.0] - 2026-10-01
+
+### Added
+- **Scénario E2E `19_create_session.txtar`** — la création pilotée par la session est couverte de bout
+  en bout contre le mock `liorian-connect` : le handler in-memory
+  `GET /api/developer-store/accounts/me` sert désormais le compte développeur de l'email authentifié
+  (`connected@example.com` possède le slug `acme`, les autres comptes n'en exposent aucun — les
+  scénarios existants se dégradent donc exactement comme avant). Le scénario vérifie le récapitulatif
+  de `connect` (slug affiché), la composition du domaine canonique `mod.acme.crm` sans `--domain` ni
+  `--publisher`, et le refus d'une organisation **sans slug** avec le message qui renvoie à la
+  définition interactive (TC-046 / TC-047).
+
+### Changed
+- **Documentation du flux `create module` piloté par la session** — la spécification décrit
+  désormais l'implémentation réelle plutôt que l'ancien ordre de prompts :
+  - **§3 / FR-005b, FR-008b** — les exigences sont scindées (identité composée depuis la session
+    pour `create module`, résolution + affichage du slug pour `connect`) ;
+  - **§5.2 « Comportement »** — les trois étapes réelles (type → slug → domaine pré-rempli) sont
+    documentées avec la hiérarchie des sources (`--publisher` > slug connecté > définition forcée),
+    la réécriture de préfixe par `CanonicalizeDomain`, et la composition non interactive ;
+  - **§5.2 « Contraintes »** — grammaire `canonicalDomainRE` (six préfixes, trois labels),
+    refus sans session (`ExitAuth`) et store injoignable distingué de l'absence de session
+    (`ExitNetwork`), valeur normalisée du slug ;
+  - **§5.19** — la section est réécrite autour de la chaîne native : tableau des actions, tableau des
+    flags par action (`--port`/`LIORIAN_DEV_PORT`, `--host`, `--https`/`--http`, `--strict-port`,
+    `--socle`, `--out`, `--no-build`), résolution de cible, HMR SSE, port/TLS, codes de sortie,
+    `bind:socle`/`unbind:socle` ;
+  - **§5.2 « Sortie TUI »** — l'aperçu du wizard (menu des types avec préfixe, curseur en fin de
+    saisie du domaine, identifiant déduit du dernier label) et un second aperçu pour
+    l'**organisation sans slug**, où le `409` est expliqué comme réutilisation et non comme échec ;
+  - **§5.3 `connect`** — nouvelle étape de résolution du slug et récapitulatif qui affiche le
+    slug **même vide**, avec la raison de ce choix ;
+  - **§5.10** — la règle d'audit « domaine canonique » est distincte du reverse-DNS générique dans
+    le tableau des règles (elle existe bien dans `validator.go`) ;
+  - **§12** — TC-003/TC-004 reformulés en cas de domaine (le test porte sur le domaine, plus sur
+    un « nom ») ;
+  - **README** — ligne `create module` (flags `--id` / `--publisher`, enchaînement du wizard) et
+    ligne `connect` (slug affiché, définition proposée) ;
+  - **`docs/rapport-implementation.md`** — sections `create module` et `connect` alignées sur
+    `store.ResolveOrganizationSlug` / `store.RegisterOrganizationSlug` / `module.CanonicalizeDomain`.
+- **Documentation alignée sur la chaîne `artifact` native** — le README, `docs/specs/liora.md`
+  (§4.1 arbre `internal/artifactdev|artifactbind|devlink`, §5.19, §5.11 ligne d'aide `artifact`),
+  `docs/specs/liora-toolchain.md` et
+  `docs/rapport-implementation.md` décrivent la chaîne portée par le binaire ; l'ADR-003 est marqué
+  **révisé** (l'option C — passthrough vers `@liorian/artifact-kit` — est explicitement abandonnée et
+  remplacée par le portage natif, avec ses justifications). Le commentaire d'en-tête de
+  `internal/socle` ne renvoie plus à un package npm supprimé mais à `internal/artifactbind`, la seule
+  implémentation du contrat de liaison.
+
+### Fixed
+- **`gofmt` sur `internal/store/signing_key_test.go`** — ligne vide superflue (restée de v0.24.0) ;
+  `gofmt -l` ne rapporte plus aucun fichier.
+
 ## [v0.32.0] - 2026-10-01
 
 ### Added
