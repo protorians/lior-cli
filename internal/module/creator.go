@@ -96,6 +96,15 @@ type Creator struct {
 	// when the module declaration declares a `uri`/`url`. When empty, the
 	// embedded page mockup is used.
 	PageMockup string
+	// NoPage skips the `src/app/<url>/page.tsx` scaffolding entirely.
+	//
+	// That page is a **route of the socle**, not of the module: the socle mounts
+	// it under `src/app/` and serves it on `/m/<id>`. A module developed in a
+	// repository of its own has no such route — its URL is declared in
+	// `manifest.json` (`uri`) and served by the socle once the module is bound
+	// or installed. Scaffolding one there would produce a `src/app/` tree that
+	// nothing ever builds, and that a maintainer would have to reason about.
+	NoPage bool
 }
 
 // CreateResult summarises a module creation.
@@ -312,10 +321,12 @@ func (c *Creator) Create(spec ModuleSpec) (*CreateResult, error) {
 	}
 
 	page := ""
-	if src := c.pageMockupSource(); src != "" {
-		page = scaffoldPage(c.Root, moduleDir, spec, src)
-	} else {
-		page = scaffoldEmbeddedPage(c.Root, moduleDir, spec)
+	if !c.NoPage {
+		if src := c.pageMockupSource(); src != "" {
+			page = scaffoldPage(c.Root, moduleDir, spec, src)
+		} else {
+			page = scaffoldEmbeddedPage(c.Root, moduleDir, spec)
+		}
 	}
 
 	manifest, err := LoadManifest(filepath.Join(moduleDir, config.ManifestFileName))

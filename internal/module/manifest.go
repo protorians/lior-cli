@@ -779,16 +779,71 @@ func ValidateUserScopeEntry(scope string) error {
 }
 
 // canonicalDomainRE matches the canonical module domain
-// (`mod.<organization-slug>.<module-identifier>`, spec `module-installation.md` §4.3).
-// Exactly three labels: the organization slug (mandatory — every organization
-// configures it before gaining access to the socle, Connect and the CLI) and
-// the module identifier, both kebab-case.
-var canonicalDomainRE = regexp.MustCompile(`^mod\.[a-z0-9]+(-[a-z0-9]+)*\.[a-z0-9]+(-[a-z0-9]+)*$`)
+// (`<prefix>.<publisher-slug>.<module-identifier>`, contrat
+// `docs/modules/module-manifest.md` §6.2). Exactly three labels: the
+// publisher slug (mandatory — every organization configures it before
+// gaining access to the socle, Connect and the CLI) and the module
+// identifier, both kebab-case. The prefix depends on the module type
+// (`config`, `system`, `service`, `widget`, `theme`, sinon `mod`).
+var canonicalDomainRE = regexp.MustCompile(
+	`^(?:mod|config|system|service|widget|theme)\.[a-z0-9]+(-[a-z0-9]+)*\.[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// canonicalDomainPrefixes maps a distribution type onto the canonical domain
+// prefix (`docs/modules/module-manifest.md` §6.2: « Le préfixe dépend du
+// type »). Every other type — the web-application forms and the legacy
+// aliases — shares the `mod` prefix.
+var canonicalDomainPrefixes = map[string]string{
+	"CONFIGURATION": "config",
+	"SYSTEM":        "system",
+	"SERVICE":       "service",
+	"WIDGET":        "widget",
+	"THEME":         "theme",
+}
+
+// CanonicalDomainPrefix returns the canonical domain prefix of a module type:
+// `config`, `system`, `service`, `widget` or `theme` for the types that own
+// one, `mod` for everything else (web applications, legacy aliases, unknown).
+func CanonicalDomainPrefix(moduleType string) string {
+	if prefix, ok := canonicalDomainPrefixes[strings.ToUpper(strings.TrimSpace(moduleType))]; ok {
+		return prefix
+	}
+	return "mod"
+}
+
+// CanonicalDomain builds the canonical domain of a module:
+// `<prefix(type)>.<publisher-slug>.<identifier>`. The publisher slug is
+// normalized (lowercase, kebab) — a publisher label with spaces or capitals
+// must never leak into the identity the store recompute.
+func CanonicalDomain(moduleType, publisherSlug, identifier string) string {
+	slug := strings.ToLower(strings.TrimSpace(publisherSlug))
+	slug = strings.ReplaceAll(slug, " ", "-")
+	slug = strings.Trim(slug, "-")
+	return CanonicalDomainPrefix(moduleType) + "." + slug + "." + strings.TrimSpace(identifier)
+}
 
 // IsCanonicalDomain reports whether domain follows the canonical
-// `mod.<organization-slug>.<module-identifier>` form.
+// `<prefix>.<publisher-slug>.<module-identifier>` form.
 func IsCanonicalDomain(domain string) bool {
 	return canonicalDomainRE.MatchString(strings.TrimSpace(domain))
+}
+
+// CanonicalizeDomain aligns a domain on the canonical form of the module
+// type: a three-label domain keeps its publisher and identifier labels but
+// gets the canonical prefix of the type (`com.acme.billing` declared
+// WEB_APP_LOCAL becomes `mod.acme.billing`). A domain that is not exactly
+// three labels is not canonizable — the error explains the expected form.
+// The boolean reports whether the prefix was rewritten.
+func CanonicalizeDomain(domain, moduleType string) (string, bool, error) {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	labels := strings.Split(domain, ".")
+	prefix := CanonicalDomainPrefix(moduleType)
+	if len(labels) != 3 || ValidateDomain(domain) != nil {
+		return "", false, errors.New(i18n.Tf("module.error.domain_canonical", prefix, domain))
+	}
+	if labels[0] == prefix {
+		return domain, false, nil
+	}
+	return prefix + "." + labels[1] + "." + labels[2], true, nil
 }
 
 // ModuleCategories is the set of store categories accepted by the schema.

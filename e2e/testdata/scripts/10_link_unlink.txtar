@@ -5,32 +5,32 @@ mkdir project
 cd project
 mkdir -p library/modules
 exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
-exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec $LIORIAN --no-color create module blog-manager --domain mod.example.blog-manager --version 1.0.0
 
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
 exec $LIORIAN --no-color connect
-exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
+exec $LIORIAN --no-color publish mod.example.blog-manager --allow-unsigned
 stdout '✓ Published successfully'
 
 # TC-013 — link (remote token read from the manifest, synced by publish).
-exec sh -c 'awk -F\" "/\"token\"/{print \$4}" library/modules/com.example.blog-manager/manifest.json > remote.token'
-exec sh -c '"$LIORIAN" --no-color link com.example.blog-manager "$(cat remote.token)"'
+exec sh -c 'awk -F\" "/\"token\"/{print \$4}" library/modules/mod.example.blog-manager/manifest.json > remote.token'
+exec sh -c '"$LIORIAN" --no-color link mod.example.blog-manager "$(cat remote.token)"'
 stdout '✓ Module linked successfully'
 stdout 'Remote'
 exists .liorian/links.json
 exec grep -q '[0-9a-f]' .liorian/links.json
-exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' library/modules/mod.example.blog-manager/manifest.json
 
 # TC-014 — simple unlink: new local UUID token, remote link removed.
 env LIORIAN_CLI_YES=1
-exec $LIORIAN --no-color unlink com.example.blog-manager
+exec $LIORIAN --no-color unlink mod.example.blog-manager
 stdout '✓ Module unlinked successfully'
-exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' library/modules/mod.example.blog-manager/manifest.json
 
 # Re-link (remote token kept) then unlink with remote synchronization
 # (metadata → PUT /api/developer-store/modules/:id).
-exec sh -c '"$LIORIAN" --no-color link com.example.blog-manager "$(cat remote.token)"'
-exec $LIORIAN --no-color unlink --sync-remote com.example.blog-manager
+exec sh -c '"$LIORIAN" --no-color link mod.example.blog-manager "$(cat remote.token)"'
+exec $LIORIAN --no-color unlink --sync-remote mod.example.blog-manager
 stdout '✓ Metadata synced to the remote module'
 stdout '✓ Module unlinked successfully'

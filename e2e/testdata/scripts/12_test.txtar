@@ -2,16 +2,16 @@ mkdir project
 cd project
 mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
-exec $LIORIAN --no-color create module runner --domain com.test.runner
-exec $LIORIAN --no-color create module matcher --domain com.test.matcher
-exec $LIORIAN --no-color create module failing --domain com.test.failing
-exec $LIORIAN --no-color create module untested --domain com.test.untested
+exec $LIORIAN --no-color create module runner --domain mod.test.runner
+exec $LIORIAN --no-color create module matcher --domain mod.test.matcher
+exec $LIORIAN --no-color create module failing --domain mod.test.failing
+exec $LIORIAN --no-color create module untested --domain mod.test.untested
 
 # TC-028 — `test` of a single module: package.json test script detected → OK.
-exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > library/modules/com.test.runner/package.json'
-exec sh -c 'mkdir -p library/modules/com.test.runner/__tests__ && printf "it(\"works\", () => {});\n" > library/modules/com.test.runner/__tests__/basic.ts'
-exec $LIORIAN --no-color test com.test.runner
-stderr 'Testing: com.test.runner'
+exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > library/modules/mod.test.runner/package.json'
+exec sh -c 'mkdir -p library/modules/mod.test.runner/__tests__ && printf "it(\"works\", () => {});\n" > library/modules/mod.test.runner/__tests__/basic.ts'
+exec $LIORIAN --no-color test mod.test.runner
+stderr 'Testing: mod.test.runner'
 stderr 'Module validation'
 stderr 'Test command resolution'
 stderr 'Test execution'
@@ -21,25 +21,25 @@ stdout 'Summary'
 stdout 'success'
 
 # Module without a test script / test files → validation only → WARNING.
-exec $LIORIAN --no-color test com.test.matcher
-stderr 'Testing: com.test.matcher'
+exec $LIORIAN --no-color test mod.test.matcher
+stderr 'Testing: mod.test.matcher'
 stdout 'Status : ⚠ WARNING'
 stdout 'no test script'
 
 # A module with a test script but no test file is skipped instead of failing
 # with "No test files found".
-exec sh -c 'printf "{\"name\":\"untested\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > library/modules/com.test.untested/package.json'
-exec $LIORIAN --no-color test com.test.untested
-stderr 'Testing: com.test.untested'
+exec sh -c 'printf "{\"name\":\"untested\",\"version\":\"0.1.0\",\"scripts\":{\"test\":\"vitest run\"}}\n" > library/modules/mod.test.untested/package.json'
+exec $LIORIAN --no-color test mod.test.untested
+stderr 'Testing: mod.test.untested'
 stdout 'Status : ◆ SKIPPED'
 stdout 'no test file found'
 
 # Failing module → real vitest runner (in its node_modules) exits non-zero →
 # ERROR status and exit code 13.
-exec sh -c 'mkdir -p library/modules/com.test.failing/node_modules/.bin && printf "#!/bin/sh\necho \"[fixture] vitest run failed\"\nexit 42\n" > library/modules/com.test.failing/node_modules/.bin/vitest && chmod 755 library/modules/com.test.failing/node_modules/.bin/vitest'
-exec sh -c 'mkdir -p library/modules/com.test.failing/__tests__ && printf "it(\"works\", () => {});\n" > library/modules/com.test.failing/__tests__/basic.ts'
-exec sh -c '$LIORIAN --no-color test com.test.failing; echo "exit=$?"'
-stderr 'Testing: com.test.failing'
+exec sh -c 'mkdir -p library/modules/mod.test.failing/node_modules/.bin && printf "#!/bin/sh\necho \"[fixture] vitest run failed\"\nexit 42\n" > library/modules/mod.test.failing/node_modules/.bin/vitest && chmod 755 library/modules/mod.test.failing/node_modules/.bin/vitest'
+exec sh -c 'mkdir -p library/modules/mod.test.failing/__tests__ && printf "it(\"works\", () => {});\n" > library/modules/mod.test.failing/__tests__/basic.ts'
+exec sh -c '$LIORIAN --no-color test mod.test.failing; echo "exit=$?"'
+stderr 'Testing: mod.test.failing'
 stderr 'Test execution'
 stdout 'Status : ✗ ERROR'
 stdout 'exit=13'
@@ -50,14 +50,14 @@ stdout 'error'
 # persisted in liorian.config.json.
 grep '"packageManager": "bun"' liorian.config.json
 grep '"runner": "vitest"' liorian.config.json
-grep '"com.test.failing"' liorian.config.json
+grep '"mod.test.failing"' liorian.config.json
 
 # TC-029 — `test` without argument: report of all modules (table); a failing
 # suite makes the whole run exit non-zero.
 ! exec $LIORIAN --no-color test
 stderr 'Testing all modules'
-stderr 'Module com.test.runner'
-stdout 'com.test.matcher'
-stdout 'com.test.runner'
-stdout 'com.test.failing'
+stderr 'Module mod.test.runner'
+stdout 'mod.test.matcher'
+stdout 'mod.test.runner'
+stdout 'mod.test.failing'
 stdout 'Summary'

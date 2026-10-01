@@ -1,127 +1,47 @@
-# TC-034 — `liora artifact <action>` is a transparent passthrough to the
-# `artifact` CLI of @liorian/artifact-kit: the action and its flags reach the
-# binary verbatim, in the module that holds the current directory.
-chmod 0755 $WORK/project/fakebin/npm
-exec sh -c 'printf "app = \"demo\"\n" > project/liorian.config.toml'
-exec sh -c 'printf "{\"project\":{\"packageManager\":\"npm\"}}\n" > project/liorian.config.json'
-mkdir project/modules/blog-manager
-exec sh -c 'printf "{\n  \"schemaVersion\": 1,\n  \"id\": \"blog-manager\",\n  \"domain\": \"com.example.blog-manager\",\n  \"version\": \"1.0.0\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"external\": true,\n  \"entry\": \"entry.tsx\",\n  \"uri\": \"/blog-manager\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"userScope\": [],\n  \"backends\": [],\n  \"artifact\": {\"dir\": \"artifact\", \"bundle\": \"module.js\", \"document\": \"index.html\"},\n  \"platforms\": {\"web\": {\"supported\": true, \"modes\": [\"web\"]}},\n  \"permissions\": [],\n  \"requirements\": {},\n  \"optionalRequirements\": {},\n  \"capabilities\": [\"core:default\"]\n}" > project/modules/blog-manager/manifest.json'
-exec sh -c 'printf "{\"name\":\"@liorian/module-blog-manager\",\"dependencies\":{\"@liorian/artifact-kit\":\"0.4.1\"}}\n" > project/modules/blog-manager/package.json'
-
-# Stand-in for the installed CLI: it records the arguments it received.
-mkdir project/modules/blog-manager/node_modules/.bin
-exec sh -c 'printf "#!/bin/sh\necho \"[artifact] \$*\"\necho \"[artifact] cwd=\$(pwd)\"\n" > project/modules/blog-manager/node_modules/.bin/artifact'
-chmod 0755 project/modules/blog-manager/node_modules/.bin/artifact
-
-# Inside the module: the CLI defaults its target to the current directory, so
-# nothing is appended to the forwarded arguments.
-cd project/modules/blog-manager
-exec $LIORIAN --no-color artifact build
-stdout '\[artifact\] build'
-stdout 'cwd=.*modules/blog-manager$'
-! stdout 'cwd=.*modules/blog-manager/modules/blog-manager'
-
-# Flags reach the underlying CLI verbatim (Cobra does not parse them).
-exec $LIORIAN --no-color artifact dev --port 5178 --host 0.0.0.0
-stdout '\[artifact\] dev --port 5178 --host 0.0.0.0'
-
-# `pack` produces the .LiorArtifactPackage of the module (extension, ADR-003).
-exec $LIORIAN --no-color artifact pack
-stdout '\[artifact\] pack'
-
-cd ../../..
+# TC-034 — `liora artifact <action>` est la chaîne de développement native du
+# binaire `liora` : le bundler est esbuild (API Go), embarqué — aucune
+# dépendance Node, aucun passthrough vers un package de build tiers. La cible
+# est le module désigné par un argument, à défaut celui du répertoire courant,
+# à défaut celui sélectionné à la racine du projet.
+mkdir project
 cd project
+exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
+mkdir modules/blog-manager
+exec sh -c 'printf "{\n  \"schemaVersion\": 1,\n  \"id\": \"blog-manager\",\n  \"domain\": \"mod.example.blog-manager\",\n  \"version\": \"1.0.0\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"external\": true,\n  \"entry\": \"entry.tsx\",\n  \"uri\": \"/blog-manager\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"userScope\": [],\n  \"backends\": [],\n  \"artifact\": {\"dir\": \"artifact\", \"bundle\": \"module.js\", \"document\": \"index.html\"},\n  \"platforms\": {\"web\": {\"supported\": true, \"modes\": [\"web\"]}},\n  \"permissions\": [],\n  \"requirements\": {},\n  \"optionalRequirements\": {},\n  \"capabilities\": [\"core:default\"]\n}" > modules/blog-manager/manifest.json'
+exec sh -c 'printf "export function mount(el: HTMLElement): void {\n    el.textContent = \"blog-manager\";\n}\nexport function unmount(): void {}\n" > modules/blog-manager/entry.tsx'
+exec sh -c 'printf "<!doctype html>\n<html>\n  <body>\n    <div id=\"{{manifest.id}}\"></div>\n    <script type=\"module\" src=\"./module.js\"></script>\n  </body>\n</html>\n" > modules/blog-manager/index.html'
 
-# From the project root the module is selected and appended to the forwarded
-# arguments, so the CLI still builds the right directory.
-exec $LIORIAN --no-color artifact build
-stdout '\[artifact\] build modules/blog-manager'
-stdout 'cwd=.*modules/blog-manager$'
+# Le dépôt autonome résout le bootstrap du runtime depuis node_modules (le
+# monorepo l'alias vers packages/sdk) : un stub minimal garde le scénario
+# hermétique.
+mkdir -p modules/blog-manager/node_modules/@liorian/sdk/infrastructure/module-runtime
+exec sh -c 'printf "export function bootstrapModule(d: any): void {}\n" > modules/blog-manager/node_modules/@liorian/sdk/infrastructure/module-runtime/module-bootstrap.ts'
 
-# An explicit directory argument is forwarded as-is and never duplicated.
-exec $LIORIAN --no-color artifact typecheck modules/blog-manager
-stdout '\[artifact\] typecheck modules/blog-manager'
-! stdout 'typecheck modules/blog-manager modules/blog-manager'
-
-# The exit code of the underlying CLI is the exit code of the passthrough.
-exec sh -c 'printf "#!/bin/sh\necho \"[artifact] boom\" 1>&2\nexit 3\n" > modules/blog-manager/node_modules/.bin/artifact'
-chmod 0755 modules/blog-manager/node_modules/.bin/artifact
-! exec $LIORIAN --no-color artifact build
-stderr 'boom'
-stderr 'exited with code 3'
-
-# Fail-closed: a module that declares the toolchain but has not installed it
-# reports the missing CLI instead of silently doing nothing.
-mkdir modules/acme-crm
-exec sh -c 'printf "{\"id\":\"acme-crm\",\"version\":\"1.0.0\"}" > modules/acme-crm/manifest.json'
-exec sh -c 'printf "{\"name\":\"@liorian/module-acme-crm\",\"dependencies\":{\"@liorian/artifact-kit\":\"0.4.1\"}}\n" > modules/acme-crm/package.json'
-env PATH=$WORK/project/fakebin:$PATH
-! exec $LIORIAN --no-color artifact build modules/acme-crm
-stderr 'artifact CLI is not installed'
-! stderr 'installed @liorian/artifact-kit'
-
-# A module that does not declare @liorian/artifact-kit gets it installed before
-# the action is forwarded — the stand-in package manager declares the dependency
-# and lays the CLI down, as a real install does.
-mkdir modules/nova-shop
-exec sh -c 'printf "{\"id\":\"nova-shop\",\"version\":\"1.0.0\"}" > modules/nova-shop/manifest.json'
-exec sh -c 'printf "{\"name\":\"@liorian/module-nova-shop\",\"dependencies\":{}}\n" > modules/nova-shop/package.json'
-exec $LIORIAN --no-color artifact build modules/nova-shop
-stderr 'installed @liorian/artifact-kit \(npm\) into modules/nova-shop'
-stdout '\[artifact\] \(fresh\) build modules/nova-shop'
-exists modules/nova-shop/node_modules/.bin/artifact
-exec sh -c 'grep -q "@liorian/artifact-kit" modules/nova-shop/package.json'
-# The install runs in the module directory, not in the project root.
-grep 'project/modules/nova-shop: install @liorian/artifact-kit' $WORK/npm.log
-
-# No second install once the dependency is declared: the declaration alone is
-# enough, re-installing on every command would be a tax on each invocation.
-exec $LIORIAN --no-color artifact typecheck modules/nova-shop
-stdout '\[artifact\] \(fresh\) typecheck modules/nova-shop'
-! stderr 'installed @liorian/artifact-kit'
-exec sh -c 'test "$(grep -c . "$WORK/npm.log")" = 1'
-
-# An action is mandatory: `liora artifact` alone prints the passthrough usage.
-! exec $LIORIAN --no-color artifact
-stderr 'requires at least 1 arg'
-exec $LIORIAN --no-color artifact --help
-stdout '@liorian/artifact-kit'
-
-# `bind:socle` resolves the socle argument the generic passthrough would
-# mistake for a module: liora absolutises it against the invocation directory
-# and forwards it to the artifact CLI, which runs inside the module directory.
-mkdir socle
-exec sh -c 'printf "#!/bin/sh\necho \"[artifact] \$*\"\necho \"[artifact] cwd=\$(pwd)\"\n" > modules/blog-manager/node_modules/.bin/artifact'
-chmod 0755 modules/blog-manager/node_modules/.bin/artifact
-exec $LIORIAN --no-color artifact bind:socle socle modules/blog-manager
-stdout '\[artifact\] bind:socle .*project/socle'
-stdout 'cwd=.*modules/blog-manager$'
-! stdout 'bind:socle .*socle .*modules/blog-manager'
-
-# From inside the module, the relative socle path keeps its meaning (cleaned,
-# absolutised) and no module argument is needed or forwarded.
+# Depuis l'intérieur du module : la cible par défaut est le répertoire courant.
 cd modules/blog-manager
-exec $LIORIAN --no-color artifact bind:socle ../../socle
-stdout '\[artifact\] bind:socle .*project/socle'
-! stdout 'bind:socle .*socle modules/blog-manager'
+exec $LIORIAN --no-color artifact build
+stdout 'Build complete'
+exists .liorian/artifact/module.js
+exists .liorian/artifact/index.html
+exec grep -q 'blog-manager' .liorian/artifact/module.js
+exec grep -q 'module.js' .liorian/artifact/index.html
+
+# Depuis la racine du projet : le module nommé par l'argument est construit.
 cd ../..
+exec $LIORIAN --no-color artifact build modules/blog-manager
+stdout 'Build complete'
 
-exec $LIORIAN --no-color artifact unbind:socle socle modules/blog-manager
-stdout '\[artifact\] unbind:socle .*project/socle'
-stdout 'cwd=.*modules/blog-manager$'
+# Sans argument, le module est sélectionné depuis la racine du projet.
+exec $LIORIAN --no-color artifact build
+stdout 'Build complete'
 
-# A bind without the socle path is refused with the expected usage.
-! exec $LIORIAN --no-color artifact bind:socle
-stderr 'bind:socle <socle>'
+# Fail-closed : une erreur de compilation esbuild fait échouer la commande —
+# le bundle n'est jamais produit à moitié.
+exec sh -c 'printf "export function mount(el: HTMLElement): void {\n  el.textContent = ;\n}\n" > modules/blog-manager/entry.tsx'
+! exec $LIORIAN --no-color artifact build modules/blog-manager
+stderr 'esbuild'
+exec sh -c 'printf "export function mount(el: HTMLElement): void {\n    el.textContent = \"blog-manager\";\n}\nexport function unmount(): void {}\n" > modules/blog-manager/entry.tsx'
 
--- project/fakebin/npm --
-#!/bin/sh
-# Stand-in package manager: records the invocation, declares the dependency in
-# the module package.json and lays the `artifact` CLI down, as a real install
-# would. The install itself is quiet (its output is captured, not forwarded),
-# so this log is the only way the test sees which directory it ran in.
-echo "$(pwd | sed "s|$WORK/||"): $*" >> "$WORK/npm.log"
-mkdir -p node_modules/.bin
-printf '{"name":"@liorian/module","dependencies":{"%s":"0.4.1"}}\n' "$2" > package.json
-printf '#!/bin/sh\necho "[artifact] (fresh) $*"\n' > node_modules/.bin/artifact
-chmod +x node_modules/.bin/artifact
+# `liora artifact` sans action affiche l'aide de la chaîne native.
+exec $LIORIAN --no-color artifact
+stdout 'liora artifact build'

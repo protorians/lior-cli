@@ -31,12 +31,13 @@ const (
 )
 
 // blockedArchiveExts are never packed: executables and platform packages have
-// no place in a module artefact (spec §7.2, fail-closed archive audit).
-var blockedArchiveExts = map[string]bool{
-	".so": true, ".dylib": true, ".dll": true, ".exe": true,
-	".bat": true, ".cmd": true, ".msi": true, ".dmg": true,
-	".sh": true, ".node": true,
-}
+// no place in a module artefact (spec §7.2, fail-closed archive audit). The
+// full policy — extensions, magic bytes and asset allowlist — lives in
+// artifact_assets.go (`checkArchiveEntry`).
+//
+// Deprecated: kept for the legacy error-message contract; superseded by
+// executableArchiveExts.
+var blockedArchiveExts = executableArchiveExts
 
 // Packer builds `.LiorArtifactPackage` archives (renamed ZIP) for a module.
 type Packer struct {
@@ -80,6 +81,26 @@ func (p *Packer) Pack(name string) (*PackResult, error) {
 		return p.packModern(name, moduleDir)
 	}
 	return p.packLegacy(name, moduleDir)
+}
+
+// PackPath packs the module directory given explicitly (the `liora artifact
+// pack <dir>` contract, where the module is named by a path rather than by a
+// workspace name). The isolated-runtime layout applies: `manifest.json` +
+// `src/**` + `artifact/**`. The module name comes from its manifest id.
+func (p *Packer) PackPath(moduleDir string) (*PackResult, error) {
+	absDir, err := filepath.Abs(moduleDir)
+	if err != nil {
+		return nil, err
+	}
+	m, err := LoadManifest(filepath.Join(absDir, config.ManifestFileName))
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(m.ID)
+	if name == "" {
+		name = filepath.Base(absDir)
+	}
+	return p.packModern(name, absDir)
 }
 
 // packModern packs an isolated-runtime module (D4/§4.4): the module sources
@@ -230,13 +251,24 @@ func (p *Packer) finalizeArchive(archivePath, name, version, manifestChecksum st
 func RunTypecheck(moduleDir string) error {
 	np := pkg.LoadNodePackage(filepath.Join(moduleDir, "package.json"))
 
+	// Un module dont le script `typecheck` ré-invoque cette CLI (`liora
+	// artifact typecheck`, la convention livrée par le scaffold) ne doit pas
+	// être délégué : la délégation relancerait le script, qui relancerait la
+	// CLI — une boucle infinie qui fait passer le typecheck pour un figeage.
+	// Même garde que le scaffold : on exécute alors `tsc` en direct.
+	if np.HasScript("typecheck") && !isSelfDelegatedTypecheck(np) {
+		if bun, ok := exec.LookPath("bun"); ok == nil {
+			cmd := exec.Command(bun, "run", "typecheck")
+			cmd.Dir = moduleDir
+			return runTypecheckCmd(cmd)
+		}
+	}
+
 	bun, _ := exec.LookPath("bun")
 	tsc, _ := exec.LookPath("tsc")
 
 	var cmd *exec.Cmd
 	switch {
-	case np.HasScript("typecheck") && bun != "":
-		cmd = exec.Command(bun, "run", "typecheck")
 	case tsc != "":
 		cmd = exec.Command(tsc, "--noEmit")
 	case bun != "":
@@ -245,6 +277,31 @@ func RunTypecheck(moduleDir string) error {
 		return errors.New(i18n.T("pack.error.no_typecheck"))
 	}
 	cmd.Dir = moduleDir
+	return runTypecheckCmd(cmd)
+}
+
+// isSelfDelegatedTypecheck reports whether the module `typecheck` script
+// re-invokes this CLI (liora/liorian/artifact) instead of a real checker.
+func isSelfDelegatedTypecheck(np *pkg.NodePackage) bool {
+	script := strings.TrimSpace(np.Scripts["typecheck"])
+	if script == "" {
+		return false
+	}
+	command := strings.Fields(script)[0]
+	binary := command
+	if i := strings.LastIndexAny(binary, "/\\"); i >= 0 {
+		binary = binary[i+1:]
+	}
+	switch strings.ToLower(binary) {
+	case "liora", "liorian", "artifact", "artifact-kit", "artifact.mjs":
+		return true
+	}
+	return false
+}
+
+// runTypecheckCmd executes a typecheck command in the module directory and
+// formats the failure with the captured output.
+func runTypecheckCmd(cmd *exec.Cmd) error {
 	var output bytes.Buffer
 	cmd.Stderr = &output
 	cmd.Stdout = &output
@@ -336,7 +393,10 @@ func (p *Packer) createModernArchive(dest, moduleSrc string, m *Manifest) error 
 	// The manifest travels at the archive root only; it is not module
 	// source (D4).
 	if err := counter.addTree(moduleSrc, "src", func(name string) bool {
-		return name == config.ManifestFileName || excludedSourceDirs[name]
+		return name == config.ManifestFileName || excludedSourceDirs[name] ||
+			// Fichiers et dossiers cachés (`.env`, `.gitignore`, `.DS_Store`) :
+			// le socle refuse tout segment caché (§5.2), ils ne voyagent pas.
+			(strings.HasPrefix(name, ".") && name != "." && name != filepath.Base(moduleSrc))
 	}); err != nil {
 		return err
 	}
@@ -395,8 +455,10 @@ func (c *zipCounter) addFile(filePath, archivePath string) error {
 	if info.Size() > MaxArchiveFileMB*1024*1024 {
 		return fmt.Errorf("file too large for archive (max %d MB): %s", MaxArchiveFileMB, filePath)
 	}
-	if blockedArchiveExts[strings.ToLower(filepath.Ext(filePath))] {
-		return fmt.Errorf("executable refused in archive: %s", filePath)
+	// Politique fail-closed partagée : exécutables refusés (extension +
+	// contenu), allowlist d'assets (code, config, médias).
+	if err := checkArchiveEntry(filePath, archivePath); err != nil {
+		return err
 	}
 	if archivePath == "" || strings.HasPrefix(archivePath, "/") || strings.HasPrefix(archivePath, "../") {
 		return fmt.Errorf("unsafe path in archive: %s", archivePath)
@@ -454,9 +516,6 @@ func (p *Packer) createArchive(dest, moduleSrc, appSrc, assetsSrc string, m *Man
 			if info.Size() > MaxArchiveFileMB*1024*1024 {
 				return fmt.Errorf("file too large for archive (max %d MB): %s", MaxArchiveFileMB, path)
 			}
-			if blockedArchiveExts[strings.ToLower(filepath.Ext(path))] {
-				return fmt.Errorf("executable refused in archive: %s", path)
-			}
 			rel, err := filepath.Rel(p.Root, path)
 			if err != nil {
 				return err
@@ -464,6 +523,9 @@ func (p *Packer) createArchive(dest, moduleSrc, appSrc, assetsSrc string, m *Man
 			rel = filepath.ToSlash(rel)
 			if rel == "" || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "../") {
 				return fmt.Errorf("unsafe path in archive: %s", rel)
+			}
+			if err := checkArchiveEntry(path, rel); err != nil {
+				return err
 			}
 			count++
 			if count > MaxArchiveFiles {

@@ -131,7 +131,13 @@ func doConnect() error {
 		return pkg.NewError(i18n.T("cat.authentication"), i18n.Tf("connect.error.store", err.Error()), pkg.ExitAuth)
 	}
 
-	printConnectSummary(session)
+	// The organization slug anchors the canonical identity of every module the
+	// developer will create (`mod.<slug>.<module>`): it is recovered from the
+	// account right after the sign-in, and its definition is forced through the
+	// CLI when the organization carries none.
+	slug := ensureConnectOrganizationSlug()
+
+	printConnectSummary(session, slug)
 	return nil
 }
 
@@ -170,7 +176,7 @@ func classifyConnectorError(categoryKey, fixKey string, err error) error {
 		i18n.T("connect.error.network.fix"), pkg.ExitNetwork)
 }
 
-func printConnectSummary(session *auth.Session) {
+func printConnectSummary(session *auth.Session, orgSlug string) {
 	s := tui.NewStyles()
 	email := ""
 	role := i18n.T("label.developer")
@@ -188,6 +194,7 @@ func printConnectSummary(session *auth.Session) {
 	card := s.SummaryCard(
 		s.Success.Render(i18n.Tf("connect.success", email)),
 		s.KeyValue(i18n.T("label.role"), s.Value.Render(role)),
+		s.KeyValue(i18n.T("label.organization_slug"), s.Value.Render(orgSlug)),
 		s.KeyValue(i18n.T("label.token_expires"), s.Value.Render(expiry)),
 	)
 	fmt.Println()

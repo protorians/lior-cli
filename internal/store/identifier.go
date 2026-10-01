@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -13,6 +15,51 @@ import (
 // publisher slug must be exercisable offline, where a developer's real session
 // would otherwise decide the outcome of the test.
 var lookupAuthenticatedSlug = authenticatedPublisherSlug
+
+// ErrNotConnected reports that no active session can resolve the developer
+// organization: a flow that needs the organization slug must start with
+// `liora connect`.
+var ErrNotConnected = errors.New("no active session — run `liora connect` first")
+
+// ResolveOrganizationSlug returns the publisher slug of the organization behind
+// the active session (`GET /api/developer-store/accounts/me`), or "" when the
+// account exposes none. It fails when no session is stored — the caller decides
+// whether that state is fatal or degradable.
+func ResolveOrganizationSlug(ctx context.Context) (string, error) {
+	sess, err := auth.LoadSession(auth.NewStore())
+	if err != nil || sess == nil || !sess.IsAuthenticated() {
+		return "", ErrNotConnected
+	}
+	client := NewClient()
+	client.SetToken(sess.AccessToken)
+	client.WithAutoRefresh(sess)
+	account, err := client.GetMyAccount(ctx)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(account.Slug), nil
+}
+
+// RegisterOrganizationSlug registers the developer account of the active
+// session with an explicit organization slug (`POST
+// /api/developer-store/accounts/register`). It is the only way a developer
+// names their organization: the auto-provisioning of `/accounts/me` derives a
+// slug, the register endpoint accepts the chosen one.
+func RegisterOrganizationSlug(ctx context.Context, name, slug string) (*DeveloperAccount, error) {
+	sess, err := auth.LoadSession(auth.NewStore())
+	if err != nil || sess == nil || !sess.IsAuthenticated() {
+		return nil, ErrNotConnected
+	}
+	client := NewClient()
+	client.SetToken(sess.AccessToken)
+	client.WithAutoRefresh(sess)
+	var out DeveloperAccount
+	body := map[string]string{"name": name, "slug": slug}
+	if err := client.http().Do(ctx, "POST", accountsPath+"/register", body, &out); err != nil {
+		return nil, fmt.Errorf("failed to register the developer account: %w", err)
+	}
+	return &out, nil
+}
 
 // ResolveModuleIdentifier returns the canonical catalogue identifier the store
 // recomputes when it verifies an artefact: `mod.<publisherSlug>.<moduleSlug>`
@@ -86,3 +133,12 @@ func authenticatedPublisherSlug() string {
 // produce `mod.19c5e69b-….calendar` and guarantee a `422` at publication, so
 // it is discarded in favour of the next source of authority.
 var uuidLikeRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// PublisherSlugHint returns the publisher slug of the authenticated developer
+// account, or "" when the session is absent or offline. It is a *hint* for
+// `create module` (composing the canonical domain when --domain is omitted),
+// never an authority: the store recomputes the identifier from the session at
+// publish time.
+func PublisherSlugHint() string {
+	return lookupAuthenticatedSlug()
+}

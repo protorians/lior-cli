@@ -5,6 +5,168 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.32.0] - 2026-10-01
+
+### Added
+- **Création de module pilotée par la session (`liora connect`)** — le wizard
+  `liora create module` construit l'identité en trois étapes : (1) la **session est
+  obligatoire** — le slug de l'organisation connectée (`GET /developer-store/accounts/me`)
+  ancre l'identité, et une organisation **sans slug est obligée de le définir via la CLI**
+  (`POST /developer-store/accounts/register`, normalisation kebab-case, repli sur le slug
+  déjà défini en cas de conflit) ; le même contrôle renforce `liora connect`, dont le
+  récapitulatif affiche désormais le slug d'organisation ; (2) le **type de module est
+  demandé** parmi les types de distribution supportés (`tui.Select` — il décide du préfixe
+  canonique du domaine) ; (3) le **domaine inversé est proposé pré-rempli**
+  `<prefixe(type)>.<slug-organisation>.` — le développeur ne complète que l'identifiant
+  (`tui.AskTextPrefilled`, curseur en fin de saisie) et l'identité entière est conservée
+  pour la suite du processus. `--publisher` devient l'échappatoire CI / rejeu de script ;
+  la question interactive du publisher est retirée.
+- **`liora artifact` devient la chaîne de développement native du module** — `build`, `dev`, `pack`,
+  `typecheck`, `test`, `bind:socle` et `unbind:socle` vivent désormais dans le binaire `liora`
+  (`internal/artifactdev` + `internal/artifactbind`), avec esbuild intégré via son **API Go** : le
+  bundle, le document hôte templatisé (`{{manifest.*}}`), les alias first-party (`@liorian/sdk`,
+  `@liorian/module-*` → sources), le wrapper d'amorçage et la validation non-vide sont portés à
+  l'identique. Le dev-server sert `.liorian/artifact/` (D7) avec `Access-Control-Allow-Origin: *`,
+  un repli SPA et un flux **SSE** `/-/events` qui recharge les iframes après chaque rebuild — le
+  HMR reste un rechargement de document, piloté par un watcher maison (sondage léger de l'arbre du
+  module, sources + template + manifeste + config) qui déclenche le rebuild incrémental du contexte
+  esbuild (l'API Go de esbuild v0.28 n'expose pas de callback de watch). La résolution TLS mkcert
+  conserve son ordre (env explicite → socle lié → `~/.config/liorian/certs` → module) et son échec
+  fermé. Aucune dépendance Node n'est requise dans le module pour la toolchain.
+- **Gestion du port du dev-server (EADDRINUSE)** — le port demandé (5178 par défaut) est sondé
+  avant le service et, s'il est occupé (dev-server orphelin qui survit à un terminal fermé sans
+  SIGINT, docker-proxy), le serveur **bascule sur le port suivant** avec un message explicite,
+  réaligne `.liorian/dev.json` et rappelle de re-binder/redémarrer le socle pour que
+  `NEXT_PUBLIC_DEV_MODULES_URL` suive. `--strict-port` refuse au lieu de basculer. Sur `localhost`,
+  le serveur écoute sur **les deux piles de loopback** (IPv4 + IPv6) : un navigateur qui résout
+  `localhost` vers `::1` (macOS le fait en premier) n'est plus dépendant d'un bind mono-pile.
+- **Orchestration un-terminal — `liora artifact dev --socle <dir>`** : démarre aussi le socle
+  (script `dev` : next dev + serveur de bibliothèque) dans son propre groupe de processus et le
+  stoppe avec le dev-server (`Ctrl+C`). La boucle complète — socle, bibliothèque, dev-server HMR —
+  tient dans un seul terminal.
+- **`liora artifact pack`** : build + validations §4.4 (`Validator.ValidateModuleDir`, D16 compris)
+  + archive `.LiorArtifactPackage` dans `.liorian/build/` (ou `--out`), sans signature —
+  l'itération locale ; `liora pack` reste le cycle signé avant publication. Le packer gagne
+  `PackPath` (module désigné par son répertoire) et `RunTypecheck` ignore désormais un script
+  `typecheck` du module qui ré-invoque la CLI (`liora artifact typecheck`) — la délégation
+  créait une boucle infinie ; `tsc --noEmit` est exécuté en direct.
+- **Domaine canonique du module par type** (`docs/modules/module-manifest.md` §6.2) — le préfixe
+  du domaine dépend du type de distribution : `config`, `system`, `service`, `widget`, `theme`,
+  sinon `mod` pour les applications web. `liora create module` compose le domaine canonique
+  `<prefixe(type)>.<slug-editeur>.<identifiant>` quand `--domain` est omis (slug éditeur fourni
+  par la session authentifiée — `store.ResolveOrganizationSlug` — ou l'échappatoire
+  `--publisher`), déduit l'identifiant du **dernier label** du domaine
+  (`mod.liorian.accounting` → `accounting`), et **réécrit le préfixe** d'un domaine non canonique
+  fourni (`com.acme.billing` + WEB_APP_LOCAL → `mod.acme.billing`, avertissement explicite). Un
+  domaine de plus ou moins de trois labels est refusé. La grammaire `canonicalDomainRE` accepte
+  les six préfixes.
+- **Politique d'assets et d'exécutables au pack (fail-closed)** — deux niveaux sur toutes les
+  entrées (`src/**`, `artifact/**`, layout legacy) : (1) **exécutables refusés**, par extension
+  (`.exe`, `.sh`, `.bash`, `.zsh`, `.ps1`, `.py`, `.rb`, `.php`, `.jar`, `.msi`, `.deb`, `.apk`,
+  `.node`, `.so`, `.dylib`, `.dll`, `.o`, `.obj`…) **et par contenu** — un binaire ELF, Mach-O,
+  PE, *fat binary*, un shebang ou un ZIP imbriqué est refusé quelle que soit son extension ; (2)
+  **allowlist d'assets** : code/config (`ts`, `tsx`, `js`, `css`, `html`, `json`, `svg`, `md`,
+  `yaml`, `csv`, `wasm`…), images (`png`, `jpg`, `webp`, `avif`, `gif`, `bmp`, `ico`), vidéos
+  (`mp4`, `webm`, `mov`, `m4v`), audios (`mp3`, `wav`, `ogg`, `m4a`, `aac`, `flac`), polices
+  (`woff`, `woff2`, `ttf`, `otf`, `eot`) — tout autre type est refusé avec la liste des
+  catégories admises, et un fichier sans extension ne voyage que s'il est du texte. Le packer
+  n'archive enfin plus les fichiers et dossiers cachés (`.env`, `.gitignore`, `.DS_Store`) que le
+  socle refuse de toute façon à l'installation. Miroir côté socle : `ALLOWED_SERVED_EXTENSIONS`
+  (`@liorian/extended-kit`) couvre les mêmes médias et l'audit d'archive refuse bloquante les
+  exécutables à la publication et à l'installation.
+
+### Changed
+- **Le passthrough `@liorian/artifact-kit` est retiré** — `internal/artifactkit` (Ensure/Resolve/
+  Exec) et son binaire Node sont supprimés ; `liora artifact <action>` n'installe plus rien dans
+  le module et n'a plus besoin de `node_modules`. `liora doctor --fix` exécute la **même**
+  implémentation native de `bind:socle` (`artifactbind.Bind`) au lieu de déléguer au binaire du
+  module : le contrat de liaison ne peut plus diverger entre le diagnostic et la commande. Le
+  portage de la liaison reprend les garanties du kit : symlinks (repli copie), pointeur `current`
+  restauré, marqueur `.liorian-bind.json` (une installation réelle n'est jamais touchée),
+  alignement de schéma, préservation des hôtes personnalisés (`host.docker.internal`), ajout/retrait
+  idempotent dans `NEXT_PUBLIC_DEV_MODULES`.
+
+### Removed
+- **Package npm `@liorian/artifact-kit` (côté workspace Liora)** — la source de vérité de la
+  chaîne de build est désormais la CLI. Les scripts `build:modules` / `pack:modules` du workspace
+  délèguent à `liora artifact build|pack` ; un module n'a plus à déclarer la dépendance ni le
+  binaire `artifact` dans ses scripts.
+
+## [v0.31.0] - 2026-10-01
+
+### Added
+- **`create module --standalone` — un module dans son propre dépôt, sans cloner le socle** — la
+  forme normale d'un module tiers est un dépôt git public contenant un seul module, que n'importe qui
+  peut cloner et construire. La CLI ne pouvait pourtant le produire qu'en exigeant un projet déjà
+  initialisé : le développeur devait cloner le socle (`init`), y créer son module, puis extraire le
+  dossier — un détour qui n'a rien à voir avec son travail, et dont le résultat était un dépôt
+  porteur du `.env` et des certificats du socle. `create module --standalone` fait de la racine du
+  répertoire courant la racine du dépôt : `liorian.config.json` minimal (`private: true`,
+  `module: "modules"`), `.gitignore` dédié excluant `.lierian/` — le lien de développement décrit
+  une machine, chemin absolu —, certificats et archives, et un `README.md` écrit en entier parce
+  que la boucle à trois terminaux est la partie qu'un gabarit ne peut pas deviner. Le module est
+  écrit dans `modules/<id>/`, **la disposition exacte d'un module de première partie** : `pack`,
+  `sign`, `publish`, `artifact …` fonctionnent donc sans cas particulier.
+  Le dépôt est **strictement vidé** : un répertoire qui contient autre chose que ce que la commande
+  écrit (ou `.git` / `.github` / un `modules/` vide) est refusé avec sa marche à suivre, parce
+  qu'un dépôt de module a une forme dont `pack`, `publish` et `doctor` dépendent — un scaffold
+  silencieux à côté d'une application existante les casserait de façon difficile à remonter à sa
+  cause. Un dépôt autonome imbriqué dans un autre projet est refusé pour la même raison : la
+  remontée depuis `modules/<id>/` s'arrêterait à la racine la plus proche et le développeur
+  publierait depuis le mauvais arbre.
+- **Aucun `src/app/` dans un dépôt autonome** — la page `src/app/<url>/page.tsx` est une **route
+  du socle**, pas du module : le socle la monte sous `src/app/` et sert le module isolé sur
+  `/m/<id>`. Un module développé dans son dépôt n'a pas de route à lui, et l'arbre produit ne serait
+  construit par rien. `module.Creator.NoPage` retire ce scaffolding, et l'`uri` du manifeste reçoit
+  par défaut le préfixe `/m/<id>` (`config.ModuleRoutePrefix`) — cette valeur est l'adresse que le
+  résolveur de routes du socle lit, donc une adresse sans le préfixe serait déclarée et jamais
+  montée.
+- **`liora doctor` — nommer la cause quand la boucle de développement ne produit aucune erreur** —
+  le symptôme le plus fréquent du modèle isolé — « Module introuvable ou non installé » alors que le
+  module est lié, une page blanche alors que le socle fonctionne — ne laisse **rien** dans les
+  journaux : un registre d'installation vide sous `next dev`, un schéma d'URL divergent que le
+  navigateur refuse en *mixed content* sans message, un certificat absent, un socle arrêté. La
+  commande rend ces états visibles sous forme de contrôles nommés (`ok` / `warn` / `fail` /
+  `skipped`), chacun avec son détail et **la commande à exécuter pour le lever** : identité du socle
+  et de son schéma, `.env`, certificats mkcert, racine de transport de la bibliothèque
+  (`NEXT_PUBLIC_LIBRARY_MODULES_URL`), **réponse effective** de l'index d'installation — la preuve,
+  là où les variables ne sont qu'une déclaration —, `manifest.id`, liaison `.lierian/dev.json`
+  (stale ou vers un autre socle), transport du dev-server, et socle en écoute. Le socle est localisé
+  par `--socle`, puis par la liaison du module, puis par recherche ascendante, puis parmi les dépôts
+  voisins ; un module absent du périmètre n'est pas une erreur, le socle se diagnostique seul.
+- **`doctor --fix` — corriger sans risque ce qui peut l'être** : crée le `.env` du socle depuis son
+  gabarit (secrets synthétisés : clé applicative, paire VAPID), câble la racine de transport de la
+  bibliothèque dans `.env.local`, provisionne les certificats quand `mkcert` est disponible, et
+  **re-lie le module via `artifact bind:socle`** — le même chemin de code que la commande manuelle,
+  dont la liaison corrige d'un geste ce qui la précède : installation dans la bibliothèque, identité
+  de transport et URL du dev-server. Une correction qui échoue reste lisible (l'erreur est
+  affichée sur la ligne) au lieu de rendre le rapport identique à ce qu'il était avant la tentative.
+  Une valeur déclarée mais divergente du port détecté n'est jamais réécrite : elle peut venir d'un
+  proxy, et un diagnostic qui devine se trompe.
+- **`doctor --output json` — un module dont la boucle est cassée doit pouvoir faire échouer une CI** :
+  le rapport sérialise le profil du socle, le module visé, chaque contrôle et les corrections
+  appliquées ; la commande sort en erreur dès qu'un contrôle est en échec, là où `table` se contente
+  de colorer un rapport. Les certificats auto-signés de `mkcert` sont acceptés par la sonde : la
+  question posée est l'atteignabilité, le navigateur valide lui-même la chaîne.
+
+### Technical Details
+- **`internal/socle`** — nouveau package décrivant le dépôt d'un socle tel que la CLI le voit :
+  topologie (schéma, ports, serveur de bibliothèque), état de développement (`.env`, certificats)
+  et contrat de liaison. Le contrat est volontairement identique à celui implémenté par
+  `@liorian/artifact-kit` (`src/socle.ts`, `src/dev-link.ts`) : les deux lectures portent sur les
+  mêmes fichiers, sans dépendance d'exécution entre les deux outils. `ReadProfile` ne échoue
+  jamais — un socle inhabituel produit un profil partiel, parce que le diagnostic doit pouvoir
+  s'afficher quand rien ne va. `IsSocle` retient `library/`, `serve.mjs` ou un `package.json#name`
+  contenant « socle », **jamais le nom du dossier** : un checkout mal nommé n'est pas un socle.
+  L'index d'installation est lu comme ce qu'il est — un **listing de répertoires** —
+  (`[{ "name": "accounting", "type": "directory" }]`, `serve.mjs` / `createLibraryHandler`), dont les
+  entrées non-`directory` sont ignorées comme le fait `hydrateFromLocalLibrary`. 14 tests.
+- **`Creator.NoPage`** n'est qu'un interrupteur : `create` dans un projet continue de scaffolder la
+  page, seul le dépôt autonome l'omet. `createRoot()` isole la différence — sans `--standalone`, la
+  résolution de racine de projet est inchangée.
+- **Le dépôt autonome est marqué `private: true`** dans sa `liorian.config.json` : un module se
+  publie explicitement (`liora publish`), jamais par le seul fait d'être présent.
+
 ## [v0.30.0] - 2026-09-30
 
 ### Changed

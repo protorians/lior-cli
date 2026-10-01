@@ -21,16 +21,24 @@ hello-world mockup, renamed with the given identifier (manifest.json,
 index.tsx, package.json, application/, domain/, infrastructure/,
 presentation/).
 
-Interactive creation asks for the module identifier (reverse-DNS form like
-com.organization.domain) — the kebab-case identifier is deduced by replacing
-the dots with hyphens — then the application name, and optional version /
-icon / page url / description.
-The optional page url drives both the scaffolded src/app/{url}/ page and
-the manifest.json uri of the deployed module (default: the identifier).
+The interactive wizard builds the module identity in three steps. First the
+session is mandatory: the organization behind ` + "`liora connect`" + ` owns the slug
+that anchors the identity, and an organization without a slug is forced to
+define one through the CLI. Then the module type is asked among the supported
+distribution kinds — it decides the canonical prefix of the reverse domain.
+Finally the reverse domain is offered pre-filled
+` + "`<prefix(type)>.<organization-slug>.`" + ` — the developer only completes the
+<module-id>, and the whole identity is kept for the rest of the process.
+
+The kebab-case identifier is deduced from the last label of the domain
+(mod.liorian.accounting -> accounting). The optional page url drives both the
+scaffolded src/app/{url}/ page and the manifest.json uri of the deployed
+module (default: the identifier). --publisher overrides the session slug for
+CI runs and scripted replays.
 
 The module's unique UUID token is generated automatically.
 
-Usage : liora create module [name] [--domain com.org.app] [--id hello-world]`,
+Usage : liora create module [name] [--domain mod.org.app] [--id hello-world]`,
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runCreate(cmd, args)
@@ -41,6 +49,7 @@ var (
 	createMockup      string
 	createPageMockup  string
 	createDomain      string
+	createPublisher   string
 	createID          string
 	createAppName     string
 	createVersion     string
@@ -50,6 +59,7 @@ var (
 	createType        string
 	createCategory    string
 	createSkipInstall bool
+	createStandalone  bool
 )
 
 // createSkipInstallEnv disables the dependency installation step of
@@ -60,6 +70,9 @@ func init() {
 	createCmd.Flags().StringVar(&createMockup, "mockup", "", i18n.T("create.flag.mockup"))
 	createCmd.Flags().StringVar(&createPageMockup, "page-mockup", "", i18n.T("create.flag.page_mockup"))
 	createCmd.Flags().StringVar(&createDomain, "domain", "", i18n.T("create.flag.domain"))
+	// --publisher names the publishing organization slug of the canonical
+	// domain (`mod.<publisher>.<id>`) when --domain is omitted.
+	createCmd.Flags().StringVar(&createPublisher, "publisher", "", i18n.T("create.flag.publisher"))
 	createCmd.Flags().StringVar(&createID, "id", "", i18n.T("create.flag.id"))
 	createCmd.Flags().StringVar(&createAppName, "name", "", i18n.T("create.flag.name"))
 	createCmd.Flags().StringVar(&createVersion, "version", "", i18n.T("create.flag.version"))
@@ -71,8 +84,12 @@ func init() {
 	// --skip-install disables the dependency installation step (spec §5.2
 	// step 6); LIORIAN_CLI_SKIP_INSTALL=1 is the environment equivalent.
 	createCmd.Flags().BoolVar(&createSkipInstall, "skip-install", false, i18n.T("create.flag.skip_install"))
+	// --standalone creates the module in a repository of its own, in the
+	// current directory — the normal shape of a third-party module, which must
+	// not require cloning the socle.
+	createCmd.Flags().BoolVar(&createStandalone, "standalone", false, i18n.T("create.flag.standalone"))
 	i18nHelp(createCmd, "cmd.create.short", "cmd.create.long")
-	for _, name := range []string{"mockup", "page-mockup", "domain", "id", "name", "version", "icon", "url", "description", "type", "category", "skip-install"} {
+	for _, name := range []string{"mockup", "page-mockup", "domain", "publisher", "id", "name", "version", "icon", "url", "description", "type", "category", "skip-install", "standalone"} {
 		i18nFlag(createCmd, name, "create.flag."+name)
 	}
 }
@@ -86,7 +103,10 @@ func runCreate(cmd *cobra.Command, args []string) error {
 		return pkg.NewError(i18n.T("cat.module"), i18n.T("create.error.too_many"), pkg.ExitError)
 	}
 
-	root, err := requireProjectRoot()
+	// Le dépôt autonome crée sa propre racine : exiger un projet existant
+	// empêcherait un développeur tiers de démarrer son module sans cloner le
+	// socle — un détour qui n'a rien à voir avec son travail.
+	root, err := createRoot()
 	if err != nil {
 		return err
 	}
@@ -113,6 +133,10 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	if err := collectCreateSpec(&spec); err != nil {
 		return err
+	}
+
+	if createStandalone {
+		return runCreateStandalone(root, spec)
 	}
 
 	creator := &module.Creator{Root: root, MockupDir: createMockup, PageMockup: createPageMockup}
@@ -188,13 +212,54 @@ func runCreate(cmd *cobra.Command, args []string) error {
 // collectCreateSpec completes the module spec with the interactive prompts and
 // validates each answer before moving on to the next step.
 //
-// The identifier and the domain carry the same information: the reverse-DNS
-// identifier (com.organization.domain) is asked once and the kebab-case module
-// identifier is deduced by replacing the dots with hyphens.
+// The wizard walks in the order the identity is built:
+//
+//  1. `liora connect` — the session is mandatory: it carries the organization
+//     whose slug anchors the module identity, and an organization without a
+//     slug is forced to define one through the CLI before anything is created;
+//  2. the module type, asked among the supported distribution kinds — it
+//     decides the canonical prefix of the reverse domain (config, system,
+//     service, widget, theme, sinon mod);
+//  3. the reverse domain, pre-filled `<prefix(type)>.<organization-slug>.` —
+//     the developer only completes the `<module-id>`, and the whole identity
+//     (prefix, slug, identifier) is kept for the rest of the process.
+//
+// The kebab-case module identifier is deduced from the last label of the
+// domain (mod.liorian.accounting -> accounting), or the domain is composed
+// from the effective type, the organization slug and the identifier when it
+// is omitted. --publisher overrides the session slug for CI runs and scripted
+// replays.
 func collectCreateSpec(spec *module.ModuleSpec) error {
 	interactive := tui.IsInteractive()
-	if interactive && spec.Domain == "" {
-		d, err := askValidated(i18n.T("create.prompt.domain"), "com.organization.domain",
+
+	// Step 1 — the type, asked among the supported kinds: it decides the
+	// canonical prefix of the reverse domain.
+	if interactive && spec.Type == "" {
+		choice, err := tui.Select(i18n.T("create.prompt.type"), createTypeChoices())
+		if err != nil {
+			return err
+		}
+		spec.Type = createTypeValue(choice)
+	}
+
+	// Step 2 — the organization slug, recovered from the `liora connect`
+	// session. The domain is composed from it — never from a free-typed
+	// publisher — and an organization without a slug defines one right here.
+	publisher := ""
+	if interactive || spec.Domain == "" {
+		p, err := organizationSlugForCreate(interactive, createPublisher)
+		if err != nil {
+			return err
+		}
+		publisher = p
+	}
+
+	// Step 3 — the reverse domain, pre-filled `<prefix(type)>.<slug>.`: the
+	// developer completes the module identifier and the answer is validated
+	// before the wizard moves on.
+	if interactive && spec.Domain == "" && spec.ID == "" {
+		prefill := module.CanonicalDomainPrefix(spec.EffectiveType()) + "." + publisher + "."
+		d, err := askValidatedPrefilled(i18n.T("create.prompt.domain"), prefill,
 			func(v string) error {
 				if v == "" {
 					return errors.New(i18n.T("create.error.no_domain"))
@@ -202,7 +267,7 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 				if err := module.ValidateDomain(v); err != nil {
 					return err
 				}
-				return module.ValidateName(strings.ReplaceAll(v, ".", "-"))
+				return module.ValidateName(lastDomainLabel(v))
 			})
 		if err != nil {
 			return err
@@ -210,9 +275,18 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 		spec.Domain = d
 	}
 	// The identifier is deduced from the domain when it was not given
-	// explicitly: com.organization.domain -> com-organization-domain.
-	if spec.ID == "" {
-		spec.ID = strings.ReplaceAll(spec.Domain, ".", "-")
+	// explicitly: mod.liorian.accounting -> accounting.
+	if spec.ID == "" && spec.Domain != "" {
+		spec.ID = lastDomainLabel(spec.Domain)
+	}
+	// The domain is composed from the canonical identity when it was omitted:
+	// <prefix(type)>.<publisher>.<id>. The publisher slug is the one resolved
+	// from the session (step 2).
+	if spec.Domain == "" {
+		if spec.ID == "" {
+			return pkg.NewError(i18n.T("cat.module"), i18n.T("create.error.no_domain"), pkg.ExitError)
+		}
+		spec.Domain = module.CanonicalDomain(spec.EffectiveType(), publisher, spec.ID)
 	}
 	if interactive {
 		if spec.AppName == "" {
@@ -277,7 +351,64 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 	if err := module.ValidateCategory(spec.Category); err != nil {
 		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
 	}
+	// The domain is aligned on the canonical form of the effective type — the
+	// prefix depends on it (mod|config|system|service|widget|theme) — so a
+	// `com.organization.module` habit never produces an identity the store
+	// would refuse. The publisher and identifier labels are preserved.
+	canonical, rewritten, err := module.CanonicalizeDomain(spec.Domain, spec.EffectiveType())
+	if err != nil {
+		return pkg.NewError(i18n.T("cat.module"), err.Error(), pkg.ExitError)
+	}
+	if rewritten {
+		warn(i18n.Tf("create.warn.domain_prefix", spec.Domain, canonical))
+		spec.Domain = canonical
+	}
 	return nil
+}
+
+// createTypeChoice is one entry of the interactive type menu: the label shows
+// the canonical prefix the type puts in the reverse domain, the value is the
+// canonical `ModuleType` enum.
+type createTypeChoice struct {
+	label string
+	value string
+}
+
+// createTypeChoices lists the supported module types, in the order a developer
+// meets them: the web-application forms first (all sharing the `mod` prefix),
+// then the platform kinds owning their own prefix. The legacy `INTERNAL` /
+// `EXTERNAL` aliases are deprecated and never offered.
+var createTypeChoicesList = []createTypeChoice{
+	{"WEB_APP_LOCAL (mod.*)", "WEB_APP_LOCAL"},
+	{"WEB_APP_REMOTE (mod.*)", "WEB_APP_REMOTE"},
+	{"WEB_APP_CACHED (mod.*)", "WEB_APP_CACHED"},
+	{"EXTERNAL_URL (mod.*)", "EXTERNAL_URL"},
+	{"REMOTE_FRONTEND (mod.*)", "REMOTE_FRONTEND"},
+	{"CONFIGURATION (config.*)", "CONFIGURATION"},
+	{"SYSTEM (system.*)", "SYSTEM"},
+	{"SERVICE (service.*)", "SERVICE"},
+	{"WIDGET (widget.*)", "WIDGET"},
+	{"THEME (theme.*)", "THEME"},
+}
+
+// createTypeChoices returns the labels shown by the interactive type menu.
+func createTypeChoices() []string {
+	labels := make([]string, 0, len(createTypeChoicesList))
+	for _, choice := range createTypeChoicesList {
+		labels = append(labels, choice.label)
+	}
+	return labels
+}
+
+// createTypeValue maps a menu label back to its canonical type value; an
+// unknown label falls back to the bare label (the value itself).
+func createTypeValue(label string) string {
+	for _, choice := range createTypeChoicesList {
+		if choice.label == label {
+			return choice.value
+		}
+	}
+	return strings.TrimSpace(label)
 }
 
 // askValidated prompts for a single value and re-asks until it validates, so
@@ -292,6 +423,25 @@ func askValidated(title, placeholder string, validate func(string) error) (strin
 		if validate == nil {
 			return value, nil
 		}
+		if err := validate(value); err != nil {
+			s := tui.NewStyles()
+			fmt.Fprintln(os.Stderr, s.Error.Render("✗ "+err.Error()))
+			continue
+		}
+		return value, nil
+	}
+}
+
+// askValidatedPrefilled is askValidated over a pre-filled input: the answer
+// starts at the given value (cursor at the end) and the developer completes
+// the missing part.
+func askValidatedPrefilled(title, prefill string, validate func(string) error) (string, error) {
+	for {
+		value, err := tui.AskTextPrefilled(title, prefill)
+		if err != nil {
+			return "", err
+		}
+		value = strings.TrimSpace(value)
 		if err := validate(value); err != nil {
 			s := tui.NewStyles()
 			fmt.Fprintln(os.Stderr, s.Error.Render("✗ "+err.Error()))

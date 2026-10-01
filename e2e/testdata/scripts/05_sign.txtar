@@ -2,8 +2,8 @@ mkdir project
 cd project
 mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
-exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
-exec $LIORIAN --no-color pack com.example.blog-manager
+exec $LIORIAN --no-color create module blog-manager --domain mod.example.blog-manager --version 1.0.0
+exec $LIORIAN --no-color pack mod.example.blog-manager
 
 # TC-022 — `sign keygen` generates the Ed25519 pair (file vault, isolated HOME).
 exec $LIORIAN --no-color sign keygen
@@ -17,21 +17,21 @@ stdout 'Developer signing key:'
 stdout 'Fingerprint'
 
 # TC-023 — `sign <module>` signs the archive and produces a 64-byte .sig.
-exec $LIORIAN --no-color sign com.example.blog-manager
+exec $LIORIAN --no-color sign mod.example.blog-manager
 stdout '✓ Archive signed successfully'
-exists .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage.sig
-exec sh -c 'wc -c < .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage.sig'
+exists .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage.sig
+exec sh -c 'wc -c < .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage.sig'
 stdout '^[[:space:]]*64[[:space:]]*$'
 
 # TC-024 — `sign verify` accepts a valid signature.
-exec $LIORIAN --no-color sign verify com.example.blog-manager
+exec $LIORIAN --no-color sign verify mod.example.blog-manager
 stdout '✓ Valid signature'
 
 # TC-025 — tampered archive: verification fails (exit 12), after re-pack to
 # start from a healthy archive.
-exec $LIORIAN --no-color pack com.example.blog-manager
-exec sh -c 'printf "x" >> .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage'
-! exec $LIORIAN --no-color sign verify com.example.blog-manager
+exec $LIORIAN --no-color pack mod.example.blog-manager
+exec sh -c 'printf "x" >> .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage'
+! exec $LIORIAN --no-color sign verify mod.example.blog-manager
 stderr 'invalid signature'
-exec sh -c '"$LIORIAN" --no-color sign verify com.example.blog-manager >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color sign verify mod.example.blog-manager >/dev/null 2>&1; echo $?'
 stdout '^12$'

@@ -131,6 +131,7 @@ func init() {
 		buildCmd,
 		startCmd,
 		checkCmd,
+		doctorCmd,
 	)
 }
 

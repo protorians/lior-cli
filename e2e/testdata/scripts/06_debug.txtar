@@ -2,14 +2,14 @@ mkdir project
 cd project
 mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
-exec $LIORIAN --no-color create module matcher --domain com.test.matcher
-exec $LIORIAN --no-color create module runner --domain com.test.runner
-exec $LIORIAN --no-color create module renderer --domain com.test.renderer
+exec $LIORIAN --no-color create module matcher --domain mod.test.matcher
+exec $LIORIAN --no-color create module runner --domain mod.test.runner
+exec $LIORIAN --no-color create module renderer --domain mod.test.renderer
 
 # TC-015 — `debug` of a single module: build script detected → OK.
-exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > library/modules/com.test.runner/package.json'
-exec $LIORIAN --no-color debug com.test.runner
-stderr 'Debugging: com.test.runner'
+exec sh -c 'printf "{\"name\":\"runner\",\"version\":\"0.1.0\",\"scripts\":{\"build\":\"tsc\"}}\n" > library/modules/mod.test.runner/package.json'
+exec $LIORIAN --no-color debug mod.test.runner
+stderr 'Debugging: mod.test.runner'
 stderr 'Module validation'
 stderr 'Package manager detection'
 stderr 'Build command resolution'
@@ -20,29 +20,29 @@ stdout 'Summary'
 stdout 'success'
 
 # Module without a build script but with TypeScript → tsc --noEmit fallback → OK.
-exec sh -c 'printf "export const helper: number = 42;\n" > library/modules/com.test.matcher/helper.ts'
+exec sh -c 'printf "export const helper: number = 42;\n" > library/modules/mod.test.matcher/helper.ts'
 exec sh -c 'printf "{\"compilerOptions\":{}}\n" > tsconfig.json'
-exec $LIORIAN --no-color debug com.test.matcher
-stderr 'Debugging: com.test.matcher'
+exec $LIORIAN --no-color debug mod.test.matcher
+stderr 'Debugging: mod.test.matcher'
 stdout 'Status : ✓ OK'
 stdout 'tsc --noEmit'
 
 # Module without a build script but with a real bundler (esbuild) in its own
 # node_modules → real bundle into dist/ → OK (spec §5.9, vrai build du module).
-exec sh -c 'mkdir -p library/modules/com.test.renderer/node_modules/.bin && printf "#!/bin/sh\nmkdir -p \"\$4\" && printf \"export default ok;\" > \"\$4/index.js\"\n" > library/modules/com.test.renderer/node_modules/.bin/esbuild && chmod 755 library/modules/com.test.renderer/node_modules/.bin/esbuild'
-exec $LIORIAN --no-color debug com.test.renderer
-stderr 'Debugging: com.test.renderer'
+exec sh -c 'mkdir -p library/modules/mod.test.renderer/node_modules/.bin && printf "#!/bin/sh\nmkdir -p \"\$4\" && printf \"export default ok;\" > \"\$4/index.js\"\n" > library/modules/mod.test.renderer/node_modules/.bin/esbuild && chmod 755 library/modules/mod.test.renderer/node_modules/.bin/esbuild'
+exec $LIORIAN --no-color debug mod.test.renderer
+stderr 'Debugging: mod.test.renderer'
 stdout 'Status : ✓ OK'
 stdout 'esbuild'
-exists library/modules/com.test.renderer/dist/index.js
+exists library/modules/mod.test.renderer/dist/index.js
 
 # TC-016 — `debug` without argument: report of all modules (table).
 exec $LIORIAN --no-color debug
 stderr 'Debugging all modules'
-stderr 'Module com.test.runner'
-stdout 'com.test.matcher'
-stdout 'com.test.runner'
-stdout 'com.test.renderer'
+stderr 'Module mod.test.runner'
+stdout 'mod.test.matcher'
+stdout 'mod.test.runner'
+stdout 'mod.test.renderer'
 stdout 'Summary'
 
 -- esbuild (755) --

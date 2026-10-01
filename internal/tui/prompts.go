@@ -96,14 +96,20 @@ const (
 
 // askInput runs an interactive text input prompt. autoEscape turns <esc> into
 // an auto-complete request (the partially typed value is preserved) instead of
-// a plain cancellation.
-func askInput(title, placeholder string, secret, autoEscape bool) (string, inputQuit, error) {
+// a plain cancellation. A non-empty prefill starts the input with that value
+// (cursor at the end): the developer only completes the missing part instead
+// of retyping what the CLI already knows.
+func askInput(title, placeholder string, secret, autoEscape bool, prefill string) (string, inputQuit, error) {
 	if !IsInteractive() {
 		return "", inputQuitCancel, RequireInteractive(i18n.T("tui.input"))
 	}
 	s := NewStyles()
 	input := textinput.New()
 	input.Placeholder = placeholder
+	if prefill != "" {
+		input.SetValue(prefill)
+		input.CursorEnd()
+	}
 	input.CharLimit = 256
 	input.Width = 48
 	input.Prompt = ""
@@ -133,7 +139,22 @@ func askInput(title, placeholder string, secret, autoEscape bool) (string, input
 
 // AskText collects one line of visible text.
 func AskText(title, placeholder string) (string, error) {
-	value, quit, err := askInput(title, placeholder, false, false)
+	value, quit, err := askInput(title, placeholder, false, false, "")
+	if err != nil {
+		return "", err
+	}
+	if quit != inputQuitEnter {
+		return "", errors.New(i18n.T("tui.error.cancelled"))
+	}
+	return value, nil
+}
+
+// AskTextPrefilled collects one line of visible text whose input starts
+// pre-filled with value, cursor at the end. The prefill also acts as the
+// placeholder: <tab> restores it after a full erase. An empty prefill behaves
+// like AskText.
+func AskTextPrefilled(title, prefill string) (string, error) {
+	value, quit, err := askInput(title, prefill, false, false, prefill)
 	if err != nil {
 		return "", err
 	}
@@ -147,7 +168,7 @@ func AskText(title, placeholder string) (string, error) {
 // the rest". It returns the (possibly empty, possibly partially typed) value
 // and auto=true when the developer pressed <esc>.
 func AskTextAuto(title, placeholder string) (string, bool, error) {
-	value, quit, err := askInput(title, placeholder, false, true)
+	value, quit, err := askInput(title, placeholder, false, true, "")
 	if err != nil {
 		return "", false, err
 	}
@@ -156,7 +177,7 @@ func AskTextAuto(title, placeholder string) (string, bool, error) {
 
 // AskSecret collects a masked secret.
 func AskSecret(title string) (string, error) {
-	value, quit, err := askInput(title, "••••••••", true, false)
+	value, quit, err := askInput(title, "••••••••", true, false, "")
 	if err != nil {
 		return "", err
 	}

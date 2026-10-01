@@ -4,7 +4,7 @@ mkdir project
 cd project
 mkdir -p library/modules
 exec sh -c 'printf "{\"publish\":{\"autoAudit\":false}}\n" > liorian.config.json'
-exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec $LIORIAN --no-color create module blog-manager --domain mod.example.blog-manager --version 1.0.0
 
 # TC-007 — wrong credentials: explicit failure (exit 2 / ExitAuth).
 env LIORIAN_CLI_CONNECT_EMAIL=invalid@example.com
@@ -32,14 +32,14 @@ stdout '✓ Disconnected successfully'
 # the auto-connect flow against the mock API.
 env LIORIAN_CLI_CONNECT_EMAIL=dev@example.com
 env LIORIAN_CLI_CONNECT_PASSWORD=secret
-exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
+exec $LIORIAN --no-color publish mod.example.blog-manager --allow-unsigned
 stdout '✓ Connected as dev@example.com'
 stdout '✓ Published successfully'
 stdout 'URL : https://store.liorian.dev/modules/blog-manager'
-exec grep -q '"token": "[0-9a-f-]' library/modules/com.example.blog-manager/manifest.json
+exec grep -q '"token": "[0-9a-f-]' library/modules/mod.example.blog-manager/manifest.json
 
 # TC-012 — same version already published: 409 conflict (exit 11 / ExitPublish).
-! exec $LIORIAN --no-color publish com.example.blog-manager --allow-unsigned
+! exec $LIORIAN --no-color publish mod.example.blog-manager --allow-unsigned
 stderr 'An identical version already exists'
-exec sh -c '"$LIORIAN" --no-color publish com.example.blog-manager --allow-unsigned >/dev/null 2>&1; echo $?'
+exec sh -c '"$LIORIAN" --no-color publish mod.example.blog-manager --allow-unsigned >/dev/null 2>&1; echo $?'
 stdout '^11$'

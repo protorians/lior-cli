@@ -15,7 +15,7 @@ stderr 'reverse-DNS'
 
 # TC-004 — valid name + domain: complete structure scaffolded from the
 # embedded mockup under library/modules/<domain>.
-exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
+exec $LIORIAN --no-color create module blog-manager --domain mod.example.blog-manager --version 1.0.0
 stdout 'Module created'
 stdout 'Token generated'
 stdout 'manifest.json initialized'
@@ -24,7 +24,7 @@ stdout 'Page created from mockup'
 stdout 'Required modules verified'
 stdout 'Dependencies resolved'
 
-cd library/modules/com.example.blog-manager
+cd library/modules/mod.example.blog-manager
 exists manifest.json
 exists index.tsx
 exists README.md
@@ -36,7 +36,7 @@ exists presentation
 exec grep -q '"version": "1.0.0"' manifest.json
 exec grep -q '"name": "Blog Manager"' manifest.json
 exec grep -q '"id": "blog-manager"' manifest.json
-exec grep -q '"domain": "com.example.blog-manager"' manifest.json
+exec grep -q '"domain": "mod.example.blog-manager"' manifest.json
 exec grep -q '"token": "[0-9a-f-]*"' manifest.json
 exec grep -q '"dependencies"' package.json
 ! exec grep -q '"dependencies"' manifest.json
@@ -57,8 +57,8 @@ cd ../../../src/app/blog-manager
 exists page.tsx
 
 # TC-004b — `create view` scaffolds a presentation view inside the module.
-cd ../../../library/modules/com.example.blog-manager
-exec $LIORIAN --no-color create view com.example.blog-manager user-profile --label 'User Profile' --description 'Profil utilisateur'
+cd ../../../library/modules/mod.example.blog-manager
+exec $LIORIAN --no-color create view mod.example.blog-manager user-profile --label 'User Profile' --description 'Profil utilisateur'
 stdout 'View created'
 stdout 'Exported component: UserProfile'
 exists presentation/views/user-profile.view.tsx
@@ -66,5 +66,5 @@ exec grep -q 'export function UserProfileView()' presentation/views/user-profile
 exec grep -q 'label="User Profile"' presentation/views/user-profile.view.tsx
 
 # TC-004c — an existing view cannot be created twice.
-! exec $LIORIAN --no-color create view com.example.blog-manager user-profile --name user-profile
+! exec $LIORIAN --no-color create view mod.example.blog-manager user-profile --name user-profile
 stderr 'already exists'

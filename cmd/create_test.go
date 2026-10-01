@@ -70,14 +70,14 @@ export default function HelloWorldPage() {
 
 	createMockup = mockupDir
 	createPageMockup = pageMockup
-	createDomain = "com.example.blog-manager"
+	createDomain = "mod.example.blog-manager"
 	defer func() { createMockup, createPageMockup, createDomain = "", "", "" }()
 
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate: %v", err)
 	}
 
-	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "mod.example.blog-manager")
 	if !pkg.FileExists(filepath.Join(moduleDir, "marker.txt")) {
 		t.Error("the custom --mockup directory must be scaffolded (marker.txt missing)")
 	}
@@ -101,28 +101,33 @@ func TestRunCreateIgnoresUnusableMockupFlag(t *testing.T) {
 	}
 
 	createMockup = filepath.Join(root, "not-a-mockup")
-	createDomain = "com.example.blog-manager"
+	createDomain = "mod.example.blog-manager"
 	defer func() { createMockup, createDomain = "", "" }()
 
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate: %v", err)
 	}
 
-	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "package.json")) {
+	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "mod.example.blog-manager", "package.json")) {
 		t.Error("an unusable --mockup must fall back to the embedded mockup (package.json missing)")
 	}
 }
 
 // TestCollectCreateSpecDerivesIdentifierFromDomain verifies that the module
-// identifier is deduced from the reverse-DNS domain by replacing the dots with
-// hyphens when it is not supplied explicitly.
+// identifier is deduced from the last label of the reverse-DNS domain when it
+// is not supplied explicitly, and that a non-canonical domain is aligned on
+// the prefix of the effective type (com.example.blog-manager declared
+// WEB_APP_LOCAL becomes mod.example.blog-manager).
 func TestCollectCreateSpecDerivesIdentifierFromDomain(t *testing.T) {
 	spec := module.ModuleSpec{Domain: "com.example.blog-manager"}
 	if err := collectCreateSpec(&spec); err != nil {
 		t.Fatalf("collectCreateSpec: %v", err)
 	}
-	if spec.ID != "com-example-blog-manager" {
-		t.Errorf("ID = %q, want %q", spec.ID, "com-example-blog-manager")
+	if spec.ID != "blog-manager" {
+		t.Errorf("ID = %q, want %q", spec.ID, "blog-manager")
+	}
+	if spec.Domain != "mod.example.blog-manager" {
+		t.Errorf("Domain = %q, want %q", spec.Domain, "mod.example.blog-manager")
 	}
 }
 
@@ -146,7 +151,7 @@ func TestModuleURLPlaceholderDerivesURIFromDomain(t *testing.T) {
 func TestCreateCommandFlagsRegistered(t *testing.T) {
 	for _, name := range []string{
 		"domain", "id", "name", "version", "icon", "url", "description",
-		"type", "category", "mockup", "page-mockup", "skip-install",
+		"type", "category", "mockup", "page-mockup", "skip-install", "publisher", "standalone",
 	} {
 		if f := createCmd.Flag(name); f == nil {
 			t.Errorf("createCmd must expose the --%s flag", name)
@@ -173,7 +178,7 @@ func TestRunCreateSkipInstallFlagSkipsInstallStep(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	createDomain = "com.example.blog-manager"
+	createDomain = "mod.example.blog-manager"
 	createSkipInstall = true
 	defer func() { createDomain, createSkipInstall = "", false }()
 
@@ -183,7 +188,7 @@ func TestRunCreateSkipInstallFlagSkipsInstallStep(t *testing.T) {
 		}
 	})
 
-	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "index.tsx")) {
+	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "mod.example.blog-manager", "index.tsx")) {
 		t.Fatal("the module must have been created")
 	}
 	if strings.Contains(stderr, i18n.T("create.warn.pm_none")) ||
@@ -253,7 +258,7 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	writeRequirementMockup(t, mockupDir, `{"analytics": true}`)
 
 	createMockup = mockupDir
-	createDomain = "com.example.blog-manager"
+	createDomain = "mod.example.blog-manager"
 	defer func() { createMockup, createDomain = "", "" }()
 
 	err := runCreate(&cobra.Command{}, []string{"blog-manager"})
@@ -263,7 +268,7 @@ func TestRunCreateBlocksMissingRequirement(t *testing.T) {
 	if !strings.Contains(err.Error(), "analytics") || !strings.Contains(err.Error(), "library/modules/") {
 		t.Errorf("error must mention the missing requirement and the lookup dirs, got: %v", err)
 	}
-	if pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")) {
+	if pkg.DirExists(filepath.Join(root, config.ExternalModulesDir, "mod.example.blog-manager")) {
 		t.Error("the module dir must be rolled back when creation is blocked")
 	}
 }
@@ -287,13 +292,13 @@ func TestRunCreateAcceptsRequirementInInternalModules(t *testing.T) {
 	writeRequirementMockup(t, mockupDir, `{"analytics": true}`)
 
 	createMockup = mockupDir
-	createDomain = "com.example.blog-manager"
+	createDomain = "mod.example.blog-manager"
 	defer func() { createMockup, createDomain = "", "" }()
 
 	if err := runCreate(&cobra.Command{}, []string{"blog-manager"}); err != nil {
 		t.Fatalf("runCreate with an internal required module must succeed: %v", err)
 	}
-	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager", "index.tsx")) {
+	if !pkg.FileExists(filepath.Join(root, config.ExternalModulesDir, "mod.example.blog-manager", "index.tsx")) {
 		t.Error("the module must have been created")
 	}
 }

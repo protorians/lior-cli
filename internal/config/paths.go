@@ -59,6 +59,13 @@ const (
 	// `modules/<id>/` is where a module is written, `library/modules/<id>/`
 	// is where an installed module lands.
 	WorkspaceModulesDir = "modules"
+	// ModuleRoutePrefix is the URL segment under which the socle serves the
+	// modules of the isolated runtime (`/m/<id>`, catch-all route
+	// `src/app/m/[[...path]]`). A module declares it in `manifest.uri`, and the
+	// socle reads that declaration to resolve the route — so a scaffolded module
+	// whose `uri` lacks the prefix would declare an address the socle never
+	// mounts, and would be reachable nowhere.
+	ModuleRoutePrefix = "/m/"
 	// ArchiveExt is the canonical extension of built module archives
 	// (`<name>-<version>.LiorArtifactPackage`, a renamed ZIP — ADR-003 of the
 	// module-installation spec). It supersedes `.liozip`, which superseded the

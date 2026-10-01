@@ -2,22 +2,22 @@ mkdir project
 cd project
 mkdir -p library/modules
 exec sh -c 'printf "app = \"demo\"\n" > liorian.config.toml'
-exec $LIORIAN --no-color create module blog-manager --domain com.example.blog-manager --version 1.0.0
-exec sh -c 'mkdir -p public/assets/com.example.blog-manager'
-exec sh -c 'echo "logo" > public/assets/com.example.blog-manager/logo.txt'
+exec $LIORIAN --no-color create module blog-manager --domain mod.example.blog-manager --version 1.0.0
+exec sh -c 'mkdir -p public/assets/mod.example.blog-manager'
+exec sh -c 'echo "logo" > public/assets/mod.example.blog-manager/logo.txt'
 exec sh -c 'mkdir -p src/app/blog-manager'
 exec sh -c 'echo "page" > src/app/blog-manager/page.tsx'
 
 # TC-009 — `pack` of an existing module, produces the .LiorArtifactPackage archive.
-exec $LIORIAN --no-color pack com.example.blog-manager
+exec $LIORIAN --no-color pack mod.example.blog-manager
 stdout '✓ Archive created successfully'
-stdout 'Module : com.example.blog-manager v1.0.0'
-exists .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage
+stdout 'Module : mod.example.blog-manager v1.0.0'
+exists .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage
 
 # TC-010 — the archive contains the module manifest, app sources and assets.
-exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage | grep -q "library/modules/com.example.blog-manager/manifest.json"'
-exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage | grep -q "src/app/blog-manager/page.tsx"'
-exec sh -c 'unzip -l .liorian/build/com.example.blog-manager-1.0.0.LiorArtifactPackage | grep -q "public/assets/com.example.blog-manager/logo.txt"'
+exec sh -c 'unzip -l .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage | grep -q "library/modules/mod.example.blog-manager/manifest.json"'
+exec sh -c 'unzip -l .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage | grep -q "src/app/blog-manager/page.tsx"'
+exec sh -c 'unzip -l .liorian/build/mod.example.blog-manager-1.0.0.LiorArtifactPackage | grep -q "public/assets/mod.example.blog-manager/logo.txt"'
 
 # Missing module: exit 3 (ExitModuleNotFound).
 ! exec $LIORIAN --no-color pack com.example.missing
@@ -26,12 +26,12 @@ exec sh -c '"$LIORIAN" --no-color pack com.example.missing >/dev/null 2>&1; echo
 stdout '^3$'
 
 # TC-011 — `pack <module>@<version>` builds a specific version.
-exec $LIORIAN --no-color pack com.example.blog-manager@2.1.0
+exec $LIORIAN --no-color pack mod.example.blog-manager@2.1.0
 stdout '✓ Archive created successfully'
-stdout 'Module : com.example.blog-manager v2.1.0'
-exists .liorian/build/com.example.blog-manager-2.1.0.LiorArtifactPackage
-exec sh -c 'test -f .liorian/build/com.example.blog-manager-2.1.0.LiorArtifactPackage'
+stdout 'Module : mod.example.blog-manager v2.1.0'
+exists .liorian/build/mod.example.blog-manager-2.1.0.LiorArtifactPackage
+exec sh -c 'test -f .liorian/build/mod.example.blog-manager-2.1.0.LiorArtifactPackage'
 
 # Invalid version: rejected before building.
-! exec $LIORIAN --no-color pack com.example.blog-manager@not-a-version
+! exec $LIORIAN --no-color pack mod.example.blog-manager@not-a-version
 stderr 'invalid version'

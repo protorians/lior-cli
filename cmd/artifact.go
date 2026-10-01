@@ -3,218 +3,376 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 
-	"github.com/protorians/lior-cli/internal/artifactkit"
+	"github.com/protorians/lior-cli/internal/artifactbind"
+	"github.com/protorians/lior-cli/internal/artifactdev"
 	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/i18n"
+	"github.com/protorians/lior-cli/internal/module"
 	"github.com/protorians/lior-cli/internal/pkg"
+	"github.com/protorians/lior-cli/internal/runner"
+	"github.com/protorians/lior-cli/internal/socle"
 	"github.com/protorians/lior-cli/internal/tui"
 	"github.com/spf13/cobra"
 )
 
+// artifactCmd est la chaîne de développement d'un module Liora, native : le
+// build (esbuild), le dev-server (HMR par SSE), le pack, le typecheck, le
+// test et la liaison au socle vivent dans le binaire `liora` — la chaîne de
+// build n'a plus aucune dépendance Node.
 var artifactCmd = &cobra.Command{
-	Use:   "artifact <action> [--] [args...]",
-	Short: "Passthrough to the artifact CLI (@liorian/artifact-kit)",
-	Long: `Forwards an action to the ` + "`artifact`" + ` CLI of @liorian/artifact-kit — the
-build toolchain every Liora module declares.
-
-Actions (build, dev, pack, typecheck, test) and their flags are
-forwarded verbatim, so the underlying CLI keeps its own contract:
-  liora artifact build            bundle + host document
-  liora artifact dev              watch + dev-server
-  liora artifact pack             D6/D16 validation + .LiorArtifactPackage
-  liora artifact typecheck        tsc --noEmit
-  liora artifact test             the module test script
-  liora artifact dev --help       the underlying CLI usage
-
-The module is the one holding the current directory, else the one
-named by the arguments. @liorian/artifact-kit is installed into that
-module when its package.json does not declare it yet.
-
-Two actions take the socle directory as their first argument and are
-resolved before the passthrough:
-  liora artifact bind:socle <socle> [module]    link the module into the
-                                               socle (symlinks + HMR wiring)
-  liora artifact unbind:socle <socle> [module] remove the link`,
-	Example: `  liora artifact build
-  liora artifact dev --port 5178
-  liora artifact pack modules/acme-crm
-  liora artifact typecheck
-  liora artifact bind:socle apps/liorian-socle
-  liora artifact unbind:socle apps/liorian-socle`,
-	Args: cobra.MinimumNArgs(1),
-	// The backing CLI owns its own flags (--port, --out, --host): they must
-	// reach it verbatim instead of being parsed by Cobra. Global flags placed
-	// before the command (`liora --no-color artifact dev`) are still parsed,
-	// because the root command traverses its children first.
-	DisableFlagParsing: true,
+	Use:   "artifact <action>",
+	Short: i18n.T("cmd.artifact.short"),
+	Long:  i18n.T("cmd.artifact.long"),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if isArtifactHelpRequest(args) {
-			return cmd.Help()
-		}
-		return runArtifact(args)
+		return cmd.Help()
 	},
 }
 
+var (
+	artifactPort      int
+	artifactHost      string
+	artifactHTTPS     bool
+	artifactHTTP      bool
+	artifactHTTPSFlag bool
+	artifactStrict    bool
+	artifactSocle     string
+	artifactOut       string
+	artifactNoBuild   bool
+)
+
 func init() {
-	i18nHelp(artifactCmd, "cmd.artifact.short", "cmd.artifact.long")
-}
+	artifactCmd.AddCommand(
+		artifactBuildCmd,
+		artifactDevCmd,
+		artifactPackCmd,
+		artifactTypecheckCmd,
+		artifactTestCmd,
+		artifactBindSocleCmd,
+		artifactUnbindSocleCmd,
+	)
 
-// isArtifactHelpRequest reports whether the invocation only asks for the
-// passthrough usage. `liora artifact <action> --help` is *not* one of them:
-// that help belongs to the underlying CLI and is forwarded.
-func isArtifactHelpRequest(args []string) bool {
-	if len(args) != 1 {
-		return false
+	artifactDevCmd.Flags().IntVar(&artifactPort, "port", 0, i18n.T("artifact.flag.port"))
+	artifactDevCmd.Flags().StringVar(&artifactHost, "host", "", i18n.T("artifact.flag.host"))
+	artifactDevCmd.Flags().BoolVar(&artifactHTTPS, "https", false, i18n.T("artifact.flag.https"))
+	artifactDevCmd.Flags().BoolVar(&artifactHTTP, "http", false, i18n.T("artifact.flag.http"))
+	artifactDevCmd.Flags().BoolVar(&artifactStrict, "strict-port", false, i18n.T("artifact.flag.strict_port"))
+	artifactDevCmd.Flags().StringVar(&artifactSocle, "socle", "", i18n.T("artifact.flag.socle"))
+	artifactPackCmd.Flags().StringVar(&artifactOut, "out", "", i18n.T("pack.flag.out"))
+	artifactPackCmd.Flags().BoolVar(&artifactNoBuild, "no-build", false, i18n.T("artifact.flag.no_build"))
+
+	for _, command := range []*cobra.Command{
+		artifactBuildCmd, artifactDevCmd, artifactPackCmd,
+		artifactTypecheckCmd, artifactTestCmd, artifactBindSocleCmd, artifactUnbindSocleCmd,
+	} {
+		i18nHelp(command, "cmd.artifact_"+artifactHelpKey(command)+"_short", "cmd.artifact_"+artifactHelpKey(command)+"_long")
 	}
-	return args[0] == "--help" || args[0] == "-h" || args[0] == "help"
+	for name, key := range map[string]string{
+		"port": "artifact.flag.port", "host": "artifact.flag.host", "https": "artifact.flag.https",
+		"http": "artifact.flag.http", "strict-port": "artifact.flag.strict_port", "socle": "artifact.flag.socle",
+		"no-build": "artifact.flag.no_build",
+	} {
+		i18nFlag(artifactDevCmd, name, key)
+	}
+	i18nFlag(artifactPackCmd, "out", "pack.flag.out")
+	i18nFlag(artifactPackCmd, "no-build", "artifact.flag.no_build")
 }
 
-func runArtifact(args []string) error {
+// artifactHelpKey dérive la clé i18n du nom de sous-commande.
+func artifactHelpKey(command *cobra.Command) string {
+	switch command {
+	case artifactBindSocleCmd:
+		return "bind_socle"
+	case artifactUnbindSocleCmd:
+		return "unbind_socle"
+	default:
+		return strings.ReplaceAll(command.Name(), "-", "_")
+	}
+}
+
+var artifactBuildCmd = &cobra.Command{
+	Use:  "build [module]",
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		moduleDir, err := artifactModuleDir(root, args)
+		if err != nil {
+			return err
+		}
+		result, err := artifactdev.Build(artifactdev.BuildOptions{ModuleDir: moduleDir}, func(message string) {
+			fmt.Println(message)
+		})
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+		}
+		s := tui.NewStyles()
+		fmt.Println(s.SummaryCard(
+			s.Success.Render(i18n.T("artifact.build.done")),
+			s.KeyValue(i18n.T("label.bundle"), s.Info.Render(result.BundlePath)+
+				fmt.Sprintf(" (%.0f Ko)", float64(result.BundleBytes)/1024)),
+			s.KeyValue(i18n.T("label.document"), s.Info.Render(result.DocumentPath)),
+		))
+		return nil
+	},
+}
+
+var artifactDevCmd = &cobra.Command{
+	Use:  "dev [module]",
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		moduleDir, err := artifactModuleDir(root, args)
+		if err != nil {
+			return err
+		}
+
+		options := artifactdev.BuildOptions{ModuleDir: moduleDir, Dev: artifactdev.DevOptions{
+			Port:       artifactPort,
+			Host:       artifactHost,
+			StrictPort: artifactStrict,
+		}}
+		switch {
+		case artifactHTTPS:
+			options.Dev.HTTPS = &artifactHTTPSFlagTrue
+		case artifactHTTP:
+			options.Dev.HTTPS = &artifactHTTPSFlagFalse
+		}
+
+		// Orchestration un-terminal : `liora artifact dev --socle ../socle`
+		// démarre aussi le socle (next dev + serveur de bibliothèque) et le
+		// stoppe avec le dev-server. La boucle de développement tient alors
+		// dans un seul terminal, HMR compris.
+		var socleProcess *exec.Cmd
+		if strings.TrimSpace(artifactSocle) != "" {
+			socleProcess, err = startSocleDev(artifactSocle)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				runner.InterruptGroup(socleProcess)
+				stopProcessGroup(socleProcess)
+			}()
+		}
+
+		server, err := artifactdev.Start(options, func(message string) {
+			fmt.Println(message)
+		})
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.toolchain"), err.Error(), pkg.ExitError)
+		}
+
+		s := tui.NewStyles()
+		fmt.Println(s.Info.Render(i18n.T("artifact.dev.hint") + " " + server.URL + "/m"))
+		fmt.Println()
+
+		interrupts := make(chan os.Signal, 1)
+		signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
+		<-interrupts
+
+		fmt.Println()
+		server.Stop()
+		return nil
+	},
+}
+
+var (
+	artifactHTTPSFlagTrue  = true
+	artifactHTTPSFlagFalse = false
+)
+
+var artifactPackCmd = &cobra.Command{
+	Use:  "pack [module]",
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		moduleDir, err := artifactModuleDir(root, args)
+		if err != nil {
+			return err
+		}
+
+		if !artifactNoBuild {
+			if _, err := artifactdev.Build(artifactdev.BuildOptions{ModuleDir: moduleDir}, func(message string) {
+				fmt.Println(message)
+			}); err != nil {
+				return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+			}
+		}
+
+		packer := &module.Packer{Root: root, Out: strings.TrimSpace(artifactOut)}
+		result, err := packer.PackPath(moduleDir)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+		}
+
+		s := tui.NewStyles()
+		fmt.Println(s.SummaryCard(
+			s.Success.Render(i18n.T("pack.success")),
+			s.KeyValue(i18n.T("label.module"), result.Module+" v"+result.Version),
+			s.KeyValue(i18n.T("label.file"), s.Info.Render(result.Path)),
+			s.KeyValue(i18n.T("label.size"), humanSize(result.Size)),
+			s.KeyValue(i18n.T("label.checksum"), s.Value.Render(shortDigest(result.Checksum))),
+		))
+		fmt.Println()
+		fmt.Println(s.Info.Render(i18n.T("artifact.pack.sign_hint")))
+		return nil
+	},
+}
+
+var artifactTypecheckCmd = &cobra.Command{
+	Use:  "typecheck [module]",
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		moduleDir, err := artifactModuleDir(root, args)
+		if err != nil {
+			return err
+		}
+		if err := module.RunTypecheck(moduleDir); err != nil {
+			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+		}
+		s := tui.NewStyles()
+		fmt.Println(s.Success.Render(i18n.T("artifact.typecheck.done")))
+		return nil
+	},
+}
+
+var artifactTestCmd = &cobra.Command{
+	Use:  "test [module]",
+	Args: cobra.MaximumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		root, err := requireProjectRoot()
+		if err != nil {
+			return err
+		}
+		moduleDir, err := artifactModuleDir(root, args)
+		if err != nil {
+			return err
+		}
+		np := pkg.LoadNodePackage(filepath.Join(moduleDir, "package.json"))
+		if !np.HasScript("test") {
+			return pkg.NewError(i18n.T("cat.test"), i18n.T("artifact.test.no_script"), pkg.ExitError)
+		}
+		pm := pkg.DetectPackageManager()
+		if pm == "" {
+			return pkg.NewError(i18n.T("cat.test"), i18n.T("artifact.error.pm_missing"), pkg.ExitError)
+		}
+		testCmd := exec.Command(pm, "run", "test")
+		testCmd.Dir = moduleDir
+		testCmd.Stdout = os.Stdout
+		testCmd.Stderr = os.Stderr
+		testCmd.Stdin = os.Stdin
+		if err := testCmd.Run(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				os.Exit(exitErr.ExitCode())
+			}
+			return pkg.NewError(i18n.T("cat.test"), err.Error(), pkg.ExitError)
+		}
+		return nil
+	},
+}
+
+var artifactBindSocleCmd = &cobra.Command{
+	Use:  "bind:socle <socle> [module]",
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runArtifactSocleBind(args, true)
+	},
+}
+
+var artifactUnbindSocleCmd = &cobra.Command{
+	Use:  "unbind:socle <socle> [module]",
+	Args: cobra.MinimumNArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runArtifactSocleBind(args, false)
+	},
+}
+
+// runArtifactSocleBind résout le socle (premier argument, absolutisé depuis
+// le répertoire d'invocation) et le module, puis pose ou retire la liaison.
+func runArtifactSocleBind(args []string, bind bool) error {
 	root, err := requireProjectRoot()
 	if err != nil {
 		return err
 	}
-
-	cfg, err := config.Load(config.ConfigPath(root))
-	if err != nil {
-		debugf("loading config for artifact passthrough: %v", err)
-		cfg = config.Default()
-	}
-
-	action, rest := args[0], args[1:]
-	if isSocleBindAction(action) {
-		return runArtifactSocle(root, cfg, action, rest)
-	}
-
-	moduleDir, explicit := artifactModuleDir(root, rest)
-	if moduleDir == "" {
-		name, err := resolveModule(root, nil)
-		if err != nil {
-			return err
-		}
-		moduleDir = config.ResolveModuleDir(root, name)
-		if moduleDir == "" {
-			return pkg.NewError(i18n.T("cat.module"),
-				i18n.Tf("artifact.error.module_absent", name), pkg.ExitModuleNotFound)
-		}
-	}
-
-	pm := effectiveToolchainPM(cfg)
-	installed, err := artifactkit.Ensure(moduleDir, pm)
-	if err != nil {
-		return err
-	}
-	if installed {
-		reportArtifactInstall(root, moduleDir, pm)
-	}
-
-	binary, err := artifactkit.Resolve(root, moduleDir)
-	if err != nil {
-		return err
-	}
-
-	// The underlying CLI defaults its target to the current directory. When
-	// the module was resolved elsewhere (module selection, or an argument the
-	// CLI reads as a flag value), the target is appended explicitly — it is a
-	// positional the CLI accepts after the action, next to its flags.
-	if !explicit {
-		if cwd, cerr := os.Getwd(); cerr == nil && !sameDir(cwd, moduleDir) {
-			rest = append(rest, displayPath(cwd, moduleDir))
-		}
-	}
-
-	debugf("artifact passthrough: %s %v (in %s)", binary, append([]string{action}, rest...), moduleDir)
-	return artifactkit.Exec(binary, moduleDir, append([]string{action}, rest...))
-}
-
-// socleBindActions are the artifact actions liora resolves itself instead of
-// forwarding blindly: their first argument is the socle directory, not a
-// module, so the generic target resolution would mistake it for one.
-var socleBindActions = map[string]bool{
-	"bind:socle":   true,
-	"unbind:socle": true,
-}
-
-func isSocleBindAction(action string) bool {
-	return socleBindActions[action]
-}
-
-// runArtifactSocle forwards `artifact bind:socle|unbind:socle <socle> [module]`
-// to the artifact CLI. The socle path is resolved against the invocation
-// directory before the child starts in the module directory, so a relative
-// path keeps its meaning. The module is the one holding the current directory,
-// else the one named by the arguments, else the one selected at the root.
-func runArtifactSocle(root string, cfg config.Config, action string, rest []string) error {
-	socleIndex := firstNonFlagIndex(rest)
-	if socleIndex < 0 {
-		return pkg.NewErrorWithFix(
-			i18n.T("cat.link"),
-			i18n.Tf("artifact.error.socle_arg", action, action),
-			i18n.T("artifact.error.socle_arg.fix"),
-			pkg.ExitError,
-		)
-	}
-
 	cwd, err := os.Getwd()
 	if err != nil {
 		return pkg.NewError(i18n.T("cat.project"), i18n.T("modules.error.cwd"), pkg.ExitError)
 	}
 
-	socleAbs := rest[socleIndex]
-	if !filepath.IsAbs(socleAbs) {
-		socleAbs = filepath.Join(cwd, socleAbs)
+	socleDir := args[0]
+	if !filepath.IsAbs(socleDir) {
+		socleDir = filepath.Join(cwd, socleDir)
 	}
-	socleAbs = filepath.Clean(socleAbs)
+	socleDir = filepath.Clean(socleDir)
 
-	moduleArg := ""
-	moduleIndex := -1
-	if next := firstNonFlagIndexFrom(rest, socleIndex+1); next >= 0 {
-		moduleArg = rest[next]
-		moduleIndex = next
+	var moduleArg string
+	if next := firstNonFlagIndex(args[1:]) + 1; next > 0 {
+		moduleArg = args[next]
 	}
 	moduleDir, err := socleBindModuleDir(root, cwd, moduleArg)
 	if err != nil {
 		return err
 	}
 
-	pm := effectiveToolchainPM(cfg)
-	installed, err := artifactkit.Ensure(moduleDir, pm)
-	if err != nil {
-		return err
-	}
-	if installed {
-		reportArtifactInstall(root, moduleDir, pm)
-	}
-
-	binary, err := artifactkit.Resolve(root, moduleDir)
-	if err != nil {
-		return err
-	}
-
-	// The socle path is re-emitted absolutised; the optional module positional
-	// is dropped (the child runs inside the resolved module directory, which is
-	// the CLI's default target) while every flag is forwarded verbatim.
-	forward := []string{action, socleAbs}
-	for i, arg := range rest {
-		if i == socleIndex || i == moduleIndex {
-			continue
+	options := artifactbind.Options{SocleDir: socleDir, ModuleDir: moduleDir, Log: func(message string) {
+		fmt.Println(message)
+	}}
+	s := tui.NewStyles()
+	if bind {
+		result, err := artifactbind.Bind(options)
+		if err != nil {
+			return pkg.NewError(i18n.T("cat.link"), err.Error(), pkg.ExitError)
 		}
-		forward = append(forward, arg)
+		fmt.Println(s.SummaryCard(
+			s.Success.Render(i18n.T("artifact.bind.done")),
+			s.KeyValue(i18n.T("label.module"), result.Identifier+" v"+result.Version),
+			s.KeyValue(i18n.T("label.mode"), string(result.Mode)),
+			s.KeyValue(i18n.T("label.dev_url"), s.Info.Render(result.DevURL)),
+			s.KeyValue(i18n.T("label.env"), s.Info.Render(result.EnvPath)),
+		))
+		fmt.Println()
+		fmt.Println(s.StepsList(i18n.T("artifact.bind.next"),
+			s.Info.Render("liora artifact dev"),
+			s.Info.Render("liora doctor --socle "+displayPath(cwd, result.SocleDir)),
+		))
+		return nil
 	}
-
-	debugf("artifact %s: %s %v (module %s)", action, binary, forward, moduleDir)
-	return artifactkit.Exec(binary, moduleDir, forward)
+	result, err := artifactbind.Unbind(options)
+	if err != nil {
+		return pkg.NewError(i18n.T("cat.link"), err.Error(), pkg.ExitError)
+	}
+	fmt.Println(s.SummaryCard(
+		s.Success.Render(i18n.T("artifact.unbind.done")),
+		s.KeyValue(i18n.T("label.module"), result.Identifier),
+		s.KeyValue(i18n.T("label.removed"), map[bool]string{true: result.RemovedDir, false: "—"}[result.RemovedDir != ""]),
+	))
+	return nil
 }
 
-// socleBindModuleDir resolves the module a bind action applies to: the one
-// named by the argument, else the one holding the current directory, else the
-// one selected from the project root.
+// socleBindModuleDir résout le module qu'une action de liaison vise : celui
+// nommé par l'argument, sinon celui du répertoire courant, sinon celui
+// sélectionné à la racine.
 func socleBindModuleDir(root, cwd, moduleArg string) (string, error) {
 	if moduleArg != "" {
-		if dir := artifactkit.ModuleDirFromArg([]string{moduleArg}); dir != "" {
+		if dir := moduleDirFromArg([]string{moduleArg}); dir != "" {
 			return dir, nil
 		}
 		if dir := absoluteModuleDir(root, moduleArg); dir != "" {
@@ -231,8 +389,11 @@ func socleBindModuleDir(root, cwd, moduleArg string) (string, error) {
 			i18n.Tf("artifact.error.module_absent", moduleArg), pkg.ExitModuleNotFound)
 	}
 
-	if dir := artifactkit.ModuleDirFromCwd(root, cwd); dir != "" {
+	if dir := moduleDirFromCwd(root, cwd); dir != "" {
 		return dir, nil
+	}
+	if pkg.FileExists(filepath.Join(cwd, config.ManifestFileName)) {
+		return cwd, nil
 	}
 	name, err := resolveModule(root, nil)
 	if err != nil {
@@ -245,7 +406,7 @@ func socleBindModuleDir(root, cwd, moduleArg string) (string, error) {
 		i18n.Tf("artifact.error.module_absent", name), pkg.ExitModuleNotFound)
 }
 
-// absoluteModuleDir resolves a module reference to an absolute directory.
+// absoluteModuleDir résout une référence de module en dossier absolu.
 func absoluteModuleDir(root, reference string) string {
 	dir := config.ResolveModuleDir(root, reference)
 	if dir == "" {
@@ -257,67 +418,61 @@ func absoluteModuleDir(root, reference string) string {
 	return dir
 }
 
-// firstNonFlagIndex returns the index of the first argument that is not an
-// option (does not start with "-"), or -1 when none is.
-func firstNonFlagIndex(args []string) int {
-	return firstNonFlagIndexFrom(args, 0)
+// startSocleDev démarre le script `dev` du socle dans son propre groupe de
+// processus : `bun run dev` lance next dev ET le serveur de bibliothèque —
+// les deux terminaux socle de la boucle tiennent dans celui-ci.
+func startSocleDev(socleDir string) (*exec.Cmd, error) {
+	socleDir, err := filepath.Abs(socleDir)
+	if err != nil {
+		return nil, err
+	}
+	if !socle.IsSocle(socleDir) {
+		return nil, pkg.NewError(i18n.T("cat.toolchain"),
+			i18n.Tf("artifact.error.socle_invalid", socleDir), pkg.ExitError)
+	}
+	pm := pkg.DetectPackageManager()
+	if pm == "" {
+		return nil, pkg.NewError(i18n.T("cat.toolchain"), i18n.T("artifact.error.pm_missing"), pkg.ExitError)
+	}
+	socleProcess := exec.Command(pm, "run", "dev")
+	socleProcess.Dir = socleDir
+	socleProcess.Stdout = os.Stdout
+	socleProcess.Stderr = os.Stderr
+	socleProcess.Stdin = os.Stdin
+	if err := runner.Spawn(socleProcess); err != nil {
+		return nil, pkg.NewError(i18n.T("cat.toolchain"),
+			i18n.Tf("artifact.error.socle_start", err.Error()), pkg.ExitError)
+	}
+	s := tui.NewStyles()
+	fmt.Println(s.Info.Render(i18n.Tf("artifact.socle.started", socleDir, pm)))
+	return socleProcess, nil
 }
 
-func firstNonFlagIndexFrom(args []string, start int) int {
-	for i := start; i < len(args); i++ {
-		if !strings.HasPrefix(args[i], "-") {
+// stopProcessGroup attend la fin du processus du socle après l'interruption,
+// en forçant l'arrêt du groupe au-delà d'un délai de grâce.
+func stopProcessGroup(socleProcess *exec.Cmd) {
+	if socleProcess == nil || socleProcess.Process == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = socleProcess.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		runner.KillGroup(socleProcess)
+	}
+}
+
+// firstNonFlagIndex renvoie l'index du premier argument qui n'est pas une
+// option, -1 quand il n'y en a pas.
+func firstNonFlagIndex(args []string) int {
+	for i, arg := range args {
+		if !strings.HasPrefix(arg, "-") {
 			return i
 		}
 	}
 	return -1
-}
-
-// reportArtifactInstall announces the dependency install on stderr, so the
-// passthrough keeps a clean stdout for the underlying CLI's own output.
-func reportArtifactInstall(root, moduleDir, pm string) {
-	s := tui.NewStyles()
-	fmt.Fprintln(os.Stderr, s.Info.Render("→ "+i18n.Tf("artifact.installed",
-		artifactkit.PackageName, pm, relToRoot(root, moduleDir))))
-}
-
-// artifactModuleDir resolves the module an artifact action applies to: the one
-// named by an argument, else the one holding the current directory. The second
-// return value reports whether the arguments already named the directory (so
-// the caller must not append it again).
-func artifactModuleDir(root string, args []string) (string, bool) {
-	if dir := artifactkit.ModuleDirFromArg(args); dir != "" {
-		return dir, true
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", false
-	}
-	if dir := artifactkit.ModuleDirFromCwd(root, cwd); dir != "" {
-		return dir, false
-	}
-	return "", false
-}
-
-// sameDir reports whether two paths designate the same directory.
-func sameDir(a, b string) bool {
-	absA, errA := filepath.Abs(a)
-	absB, errB := filepath.Abs(b)
-	if errA != nil || errB != nil {
-		return false
-	}
-	if absA == absB {
-		return true
-	}
-	resolvedA, errA := filepath.EvalSymlinks(absA)
-	resolvedB, errB := filepath.EvalSymlinks(absB)
-	return errA == nil && errB == nil && resolvedA == resolvedB
-}
-
-// displayPath renders target relative to base when it reads better in a
-// command line (it stays inside the project), else absolute.
-func displayPath(base, target string) string {
-	if rel, err := filepath.Rel(base, target); err == nil && !strings.HasPrefix(rel, "..") {
-		return rel
-	}
-	return target
 }
