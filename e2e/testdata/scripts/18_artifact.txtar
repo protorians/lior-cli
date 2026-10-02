@@ -45,3 +45,36 @@ exec sh -c 'printf "export function mount(el: HTMLElement): void {\n    el.textC
 # `liora artifact` sans action affiche l'aide de la chaîne native.
 exec $LIORIAN --no-color artifact
 stdout 'liora artifact build'
+
+# §8.5 — Router fichier : un arbre `presentation/routes/` suffit à générer le
+# registre (un fichier = une route, `[param]` = paramètre dynamique) ; en
+# `router.mode: auto`, le manifeste est synchronisé (table `routes`, complétion
+# de `menu.items` — les entrées manuelles gagnent).
+exec sh -c 'mkdir -p modules/blog-manager/presentation/routes/customers'
+exec sh -c 'printf "export default function Root(): null {\n    return null;\n}\n" > modules/blog-manager/presentation/routes/index.tsx'
+exec sh -c 'printf "export default function Repertoire(): null {\n    return null;\n}\nexport const route = {title: \"Repertoire\", icon: \"BookUserIcon\"};\n" > modules/blog-manager/presentation/routes/repertoire.tsx'
+exec sh -c 'printf "export default function Customer(): null {\n    return null;\n}\n" > modules/blog-manager/presentation/routes/customers/[id].tsx'
+exec sh -c 'printf "{\n  \"schemaVersion\": 1,\n  \"id\": \"blog-manager\",\n  \"domain\": \"mod.example.blog-manager\",\n  \"version\": \"1.0.0\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"external\": true,\n  \"entry\": \"entry.tsx\",\n  \"uri\": \"/blog-manager\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"userScope\": [],\n  \"backends\": [],\n  \"artifact\": {\"dir\": \"artifact\", \"bundle\": \"module.js\", \"document\": \"index.html\"},\n  \"platforms\": {\"web\": {\"supported\": true, \"modes\": [\"web\"]}},\n  \"permissions\": [],\n  \"requirements\": {},\n  \"optionalRequirements\": {},\n  \"capabilities\": [\"core:default\"],\n  \"router\": {\"mode\": \"auto\"}\n}" > modules/blog-manager/manifest.json'
+exec $LIORIAN --no-color artifact build modules/blog-manager
+stdout 'Build complete'
+exists modules/blog-manager/.liorian/routes.registry.ts
+exec grep -q 'customers/:id' modules/blog-manager/.liorian/routes.registry.ts
+exec grep -q '"routes"' modules/blog-manager/manifest.json
+exec grep -q 'Repertoire' modules/blog-manager/manifest.json
+exec grep -q '/blog-manager/repertoire' modules/blog-manager/manifest.json
+
+# Idempotence de la synchro : un second build ne touche plus au manifeste.
+exec sh -c 'touch -t 202001010000 modules/blog-manager/manifest.json'
+exec $LIORIAN --no-color artifact build modules/blog-manager
+stdout 'Build complete'
+exec sh -c 'test "$(find modules/blog-manager/manifest.json -newermt 2020-01-02 | wc -l | tr -d " ")" = "0"'
+
+# §8.6 — Pipeline de style natif : un import CSS du bundle produit
+# `module.css` et le document hôte référence la feuille de style sans que le
+# template du développeur ait à le faire.
+exec sh -c 'printf ".hero { color: red; }\n" > modules/blog-manager/style.css'
+exec sh -c 'printf "import \"./style.css\";\nexport function mount(el: HTMLElement): void {\n    el.textContent = \"blog-manager\";\n}\nexport function unmount(): void {}\n" > modules/blog-manager/entry.tsx'
+exec $LIORIAN --no-color artifact build modules/blog-manager
+stdout 'Build complete'
+exists modules/blog-manager/.liorian/artifact/module.css
+exec grep -q 'rel="stylesheet" href="./module.css"' modules/blog-manager/.liorian/artifact/index.html

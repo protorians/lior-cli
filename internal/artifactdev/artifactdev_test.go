@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,60 @@ func TestBuildProducesBundleAndRenderedDocument(t *testing.T) {
 	// Le wrapper est retiré de la source du module (§7.7).
 	if _, err := os.Stat(filepath.Join(moduleDir, WrapperName)); !os.IsNotExist(err) {
 		t.Fatalf("wrapper should be removed after build: %v", err)
+	}
+}
+
+func TestBuildInjectsStylesheetLinkWhenBundleHasCSS(t *testing.T) {
+	moduleDir := writeModule(t)
+
+	// Sans CSS importé, aucun lien n'est injecté.
+	plain, err := Build(BuildOptions{ModuleDir: moduleDir}, func(string) {})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	document, _ := os.ReadFile(plain.DocumentPath)
+	if strings.Contains(string(document), "module.css") {
+		t.Fatalf("link injected without css import: %s", document)
+	}
+
+	// Avec un import CSS, esbuild produit module.css et le document hôte le
+	// référence — le développeur n'édite jamais son template pour ça.
+	if err := os.WriteFile(filepath.Join(moduleDir, "main.tsx"), []byte(
+		"import \"./style.css\";\nexport function mount(): void {}\nexport function unmount(): void {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(moduleDir, "style.css"), []byte(
+		".hello { color: red; }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Build(BuildOptions{ModuleDir: moduleDir}, func(string) {})
+	if err != nil {
+		t.Fatalf("build with css: %v", err)
+	}
+	document, err = os.ReadFile(result.DocumentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(document), `<link rel="stylesheet" href="./module.css" />`) {
+		t.Fatalf("stylesheet link missing: %s", document)
+	}
+}
+
+func TestInjectStylesheetLinkIsIdempotent(t *testing.T) {
+	moduleDir := writeModule(t)
+	_, cfg, err := Resolve(BuildOptions{ModuleDir: moduleDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cfg.ArtifactDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg.ArtifactDir, BundleCSS), []byte(".a{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	html := `<html><head><link rel="stylesheet" href="./module.css" /></head><body></body></html>`
+	if got := InjectStylesheetLink(cfg, html); got != html {
+		t.Fatalf("double injection: %s", got)
 	}
 }
 

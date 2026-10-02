@@ -45,6 +45,7 @@ var (
 	artifactSocle     string
 	artifactOut       string
 	artifactNoBuild   bool
+	artifactDevAll    bool
 )
 
 func init() {
@@ -64,6 +65,7 @@ func init() {
 	artifactDevCmd.Flags().BoolVar(&artifactHTTP, "http", false, i18n.T("artifact.flag.http"))
 	artifactDevCmd.Flags().BoolVar(&artifactStrict, "strict-port", false, i18n.T("artifact.flag.strict_port"))
 	artifactDevCmd.Flags().StringVar(&artifactSocle, "socle", "", i18n.T("artifact.flag.socle"))
+	artifactDevCmd.Flags().BoolVar(&artifactDevAll, "all", false, i18n.T("artifact.flag.all"))
 	artifactPackCmd.Flags().StringVar(&artifactOut, "out", "", i18n.T("pack.flag.out"))
 	artifactPackCmd.Flags().BoolVar(&artifactNoBuild, "no-build", false, i18n.T("artifact.flag.no_build"))
 
@@ -76,7 +78,7 @@ func init() {
 	for name, key := range map[string]string{
 		"port": "artifact.flag.port", "host": "artifact.flag.host", "https": "artifact.flag.https",
 		"http": "artifact.flag.http", "strict-port": "artifact.flag.strict_port", "socle": "artifact.flag.socle",
-		"no-build": "artifact.flag.no_build",
+		"no-build": "artifact.flag.no_build", "all": "artifact.flag.all",
 	} {
 		i18nFlag(artifactDevCmd, name, key)
 	}
@@ -126,28 +128,31 @@ var artifactBuildCmd = &cobra.Command{
 }
 
 var artifactDevCmd = &cobra.Command{
-	Use:  "dev [module]",
-	Args: cobra.MaximumNArgs(1),
+	Use:  "dev [modules…]",
+	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		root, err := requireProjectRoot()
 		if err != nil {
 			return err
 		}
-		moduleDir, err := artifactModuleDir(root, args)
+		dirs, multi, err := artifactDevModuleDirs(root, args, artifactDevAll)
 		if err != nil {
 			return err
 		}
+		if !multi && len(dirs) == 0 {
+			moduleDir, err := artifactModuleDir(root, args)
+			if err != nil {
+				return err
+			}
+			dirs = []string{moduleDir}
+		}
 
-		options := artifactdev.BuildOptions{ModuleDir: moduleDir, Dev: artifactdev.DevOptions{
-			Port:       artifactPort,
-			Host:       artifactHost,
-			StrictPort: artifactStrict,
-		}}
+		dev := artifactdev.DevOptions{Port: artifactPort, Host: artifactHost, StrictPort: artifactStrict}
 		switch {
 		case artifactHTTPS:
-			options.Dev.HTTPS = &artifactHTTPSFlagTrue
+			dev.HTTPS = &artifactHTTPSFlagTrue
 		case artifactHTTP:
-			options.Dev.HTTPS = &artifactHTTPSFlagFalse
+			dev.HTTPS = &artifactHTTPSFlagFalse
 		}
 
 		// Orchestration un-terminal : `liora artifact dev --socle ../socle`
@@ -166,25 +171,105 @@ var artifactDevCmd = &cobra.Command{
 			}()
 		}
 
-		server, err := artifactdev.Start(options, func(message string) {
-			fmt.Println(message)
-		})
+		s := tui.NewStyles()
+		log := func(message string) { fmt.Println(message) }
+
+		// Plusieurs modules : un seul serveur, un seul port, chaque module
+		// servi sous son slug (`/<slug>/`) — le socle résout le module par le
+		// chemin, comme pour `/m/<slug>` côté iframe.
+		if multi {
+			server, err := artifactdev.StartMulti(artifactdev.MultiOptions{ModuleDirs: dirs, Dev: dev}, log)
+			if err != nil {
+				return pkg.NewError(i18n.T("cat.toolchain"), err.Error(), pkg.ExitError)
+			}
+			for _, hosted := range server.Modules {
+				fmt.Println(s.Info.Render(i18n.T("artifact.dev.hint") + " " + server.URL + "/" + hosted.Slug + "/"))
+			}
+			fmt.Println()
+			waitForInterrupt()
+			server.Stop()
+			return nil
+		}
+
+		server, err := artifactdev.Start(artifactdev.BuildOptions{ModuleDir: dirs[0], Dev: dev}, log)
 		if err != nil {
 			return pkg.NewError(i18n.T("cat.toolchain"), err.Error(), pkg.ExitError)
 		}
 
-		s := tui.NewStyles()
 		fmt.Println(s.Info.Render(i18n.T("artifact.dev.hint") + " " + server.URL + "/m"))
 		fmt.Println()
 
-		interrupts := make(chan os.Signal, 1)
-		signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
-		<-interrupts
-
-		fmt.Println()
+		waitForInterrupt()
 		server.Stop()
 		return nil
 	},
+}
+
+// waitForInterrupt bloque jusqu'au signal d'arrêt (Ctrl-C, SIGTERM).
+func waitForInterrupt() {
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt, syscall.SIGTERM)
+	<-interrupts
+}
+
+// artifactDevModuleDirs résout les modules que `artifact dev` héberge :
+// --all balaye l'arbre source du workspace (`modules/<id>`), sinon chaque
+// argument nomme un module. Multi dès que plusieurs modules sont désignés ;
+// un seul module nommé garde le serveur mono-module classique.
+func artifactDevModuleDirs(root string, args []string, all bool) ([]string, bool, error) {
+	if all {
+		dirs := workspaceModuleDirs(root)
+		if len(dirs) == 0 {
+			return nil, false, pkg.NewError(i18n.T("cat.module"),
+				i18n.Tf("artifact.error.workspace_empty", filepath.Join(root, config.WorkspaceModulesDir)),
+				pkg.ExitModuleNotFound)
+		}
+		return dirs, true, nil
+	}
+	var named []string
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if dir := moduleDirFromArg([]string{arg}); dir != "" {
+			named = append(named, dir)
+			continue
+		}
+		if dir := absoluteModuleDir(root, arg); dir != "" {
+			named = append(named, dir)
+			continue
+		}
+		return nil, false, pkg.NewError(i18n.T("cat.module"),
+			i18n.Tf("artifact.error.module_absent", arg), pkg.ExitModuleNotFound)
+	}
+	switch len(named) {
+	case 0:
+		return nil, false, nil
+	case 1:
+		return named, false, nil
+	default:
+		return named, true, nil
+	}
+}
+
+// workspaceModuleDirs liste les modules de l'arbre source du workspace
+// (`modules/<id>` portant un manifest.json).
+func workspaceModuleDirs(root string) []string {
+	entries, err := os.ReadDir(filepath.Join(root, config.WorkspaceModulesDir))
+	if err != nil {
+		return nil
+	}
+	dirs := []string{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dir := filepath.Join(root, config.WorkspaceModulesDir, entry.Name())
+		if pkg.FileExists(filepath.Join(dir, config.ManifestFileName)) {
+			dirs = append(dirs, dir)
+		}
+	}
+	return dirs
 }
 
 var (

@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.34.0] - 2026-10-02
+
+### Added
+- **Router fichier (§8.5)** — un arbre `presentation/routes/` suffit désormais à obtenir une
+  table de routes, sans l'écrire à la main : `index.tsx` → racine, `repertoire.tsx` →
+  `/repertoire`, `customers/[id].tsx` → `/customers/:id`, `not-found.tsx` → route `*`. Chaque vue
+  peut déclarer `export const route = {title, icon, order, menu}`. La CLI scanne l'arbre et
+  génère `.liorian/routes.registry.ts`, que le wrapper d'amorçage passe à `bootstrapModule`
+  (`ctx.router` alimente `<ModuleRouter/>`). Sans dossier de routes — ou en
+  `router.mode: "manual"` — rien n'est généré ni touché : le routage manuel reste la norme.
+- **Synchro du manifeste en `router.mode: "auto"`** — le build `auto` reporte l'arbre de routes
+  dans la table `routes` du manifeste et complète `menu.items` à partir des métadonnées de vue
+  (les entrées manuelles sont conservées et classées par `order`). La synchro est idempotente :
+  un second build sans changement ne réécrit pas le manifeste. Elle n'a lieu qu'au build
+  one-shot — le dev-server ne touche jamais au manifeste.
+- **Multi-modules dans un seul dev-server** — `liora artifact dev crm billing` (ou `--all` pour
+  balayer `modules/<id>`) héberge plusieurs modules dans **un seul processus et un seul port**,
+  chacun servi sous son slug (`/<slug>/index.html`) avec son propre contexte esbuild, son watcher
+  et son reload SSE taggué (`reload:<slug>`). Le socle n'a à connaître qu'une URL de transport :
+  `NEXT_PUBLIC_DEV_MODULES_URL`, le chemin résout le module comme `/m/<slug>` résout l'iframe.
+  La slugification est partagée avec le transport TypeScript du SDK. Un watcher par module évite
+  qu'une modification dans `crm` ne reconstruise `billing` ; l'arrêt du serveur (Ctrl-C, SIGTERM)
+  est commun aux deux modes.
+- **Drapeaux du mode multi côté socle** — `NEXT_PUBLIC_DEV_MODULES_MULTI` est posé dans le
+  `.env.local` du socle lié (avec l'URL et la liste des modules) : le transport préfixe alors
+  l'URL par le slug au lieu de viser la racine du dev-server. Le drapeau est retiré avec la liste
+  quand le dernier module est détaché — un `.env.local` pointant vers un dev-server arrêté ferait
+  échouer le chargement de tout autre module en dev.
+- **Pipeline de style (§8.6)** — `internal/artifactdev/style` introduit un contrat unique par
+  moteur derrière le bloc `style` d'`artifact.config.json` :
+  `{ "style": { "engine": "tailwind", "entry": "styles/tailwind.css" } }`. Le moteur `native`
+  (défaut) ne lance rien — esbuild traite les imports CSS du bundle ; `tailwind` et `unocss`
+  s'exécutent via Node. Les moteurs outillés sont **fail-closed** : outil absent, échec ou CSS
+  produit vide remontent en erreur de build, jamais un CSS périmé servi en silence.
+- **CSS du bundle dans le document hôte** — le `<link rel="stylesheet" href="./module.css">` est
+  injecté automatiquement dans le document hôte dès que `module.css` existe (imports CSS du bundle
+  ou moteur de style) : le template du module n'a jamais eu à le référencer. L'injection est
+  idempotente et s'applique aussi au HTML servi par le dev-server, avant le script de reload.
+- **Ordre du pipeline de style dans le dev-server** — le moteur s'exécute après esbuild, à chaque
+  rebuild, et le reload n'est diffusé que si les deux réussissent ; le document hôte est re-rendu
+  après le bundle initial pour référencer le CSS.
+- **`pack` refuse une archive sans CSS** — un module qui déclare un moteur outillé sans
+  `module.css` produit dans `.liorian/artifact/` est bloqué avant l'archive (une archive sans CSS
+  donnerait un module non stylé en production) ; le message renvoie à `liora artifact build`.
+- **Clés i18n** — `artifact.flag.all`, `artifact.error.workspace_empty` et la description longue de
+  `artifact dev` (mono- et multi-modules) en `fr-FR` et `en-US`.
+
+### Changed
+- **`artifact dev` accepte plusieurs arguments** — la commande passe de `dev [module]`
+  (`MaximumNArgs(1)`) à `dev [modules…]` ; l'argument unique garde le serveur mono-module
+  classique (URL racine `/m`), le mode multi est déclenché dès que plusieurs modules sont désignés.
+- **Service de fichiers partagé** — le service statique est extrait en `serveArtifact`, commun au
+  dev-server mono-module (chemins racine) et multi-modules (chemins préfixés par le slug), avec le
+  confinement sous `ArtifactDir`, le repli SPA et la transformation des HTML Centralisés en un seul
+  point.
+- **Surveillance des sources** — `watchModuleSources` délègue à `watchModuleDirs`, qui rapporte le
+  répertoire modifié ; le socle lié, le registre de routes (généré avant chaque rebuild) et la
+  documentation d'`artifact dev` suivent.
+
+### Docs
+- **README** — la ligne `artifact build|dev|pack|typecheck|test` décrit le mode multi (plusieurs
+  modules, un seul port, `/<slug>/`, reload taggué, `.env.local` aligné sur le lot).
+- **`docs/specs/liora.md` §5.19** — deux exemples de ligne de commande pour `artifact dev
+  crm billing` et `artifact dev --all`.
+
 ## [v0.33.0] - 2026-10-01
 
 ### Added

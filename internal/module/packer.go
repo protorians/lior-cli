@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/protorians/lior-cli/internal/artifactdev/style"
 	"github.com/protorians/lior-cli/internal/config"
 	"github.com/protorians/lior-cli/internal/i18n"
 	"github.com/protorians/lior-cli/internal/pkg"
@@ -131,6 +132,23 @@ func (p *Packer) packModern(name, moduleSrc string) (*PackResult, error) {
 
 	if err := RunTypecheck(moduleSrc); err != nil {
 		return nil, err
+	}
+
+	// Pipeline de style (§8.6) : un module qui déclare un moteur outillé
+	// (tailwind, unocss…) doit embarquer le CSS qu'il promet — une archive
+	// sans `module.css` produirait un module non stylé en production.
+	styleOptions, err := style.Load(moduleSrc)
+	if err != nil {
+		return nil, err
+	}
+	if style.RequiresCSS(styleOptions) {
+		cssPath := filepath.Join(moduleSrc, m.SourceArtifactDir(moduleSrc), "module.css")
+		info, statErr := os.Stat(cssPath)
+		if statErr != nil || info.Size() == 0 {
+			return nil, fmt.Errorf(
+				"style: %s absent ou vide — le moteur %q exige un build (`liora artifact build`) avant le pack",
+				cssPath, styleOptions.Engine)
+		}
 	}
 
 	archivePath, err := p.archiveDestination(name, version)

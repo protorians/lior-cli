@@ -33,6 +33,11 @@ const (
 	PortFallbackAttempts = 20
 	// WrapperName est le fichier d'amorçage généré à côté de l'entrée.
 	WrapperName = ".bootstrap-entry.ts"
+	// BundleCSS est le nom du CSS produit à côté du bundle : `EntryNames` vaut
+	// toujours « module », esbuild nomme donc le CSS des imports `module.css`
+	// quel que soit `manifest.artifact.bundle`. Tout le pipeline de style
+	// (moteurs, injection du document hôte, service, pack) s'y réfère.
+	BundleCSS = "module.css"
 )
 
 // Manifest est la projection du manifeste de module consommée par la chaîne
@@ -41,11 +46,18 @@ const (
 // sont lus ici, pour ne jamais rejeter un manifeste valide que la projection
 // Go ne modéliserait pas.
 type Manifest struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Version  string `json:"version"`
-	Domain   string `json:"domain"`
-	Entry    string `json:"entry"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Domain  string `json:"domain"`
+	Entry   string `json:"entry"`
+	// Router porte la déclaration du routeur fichier (§8.5) : `mode` vaut
+	// `auto` (synchro manifeste) ou `manual` (désactivé) ; `dir` surcharge
+	// l'arbre de routes conventionnel (`presentation/routes`).
+	Router *struct {
+		Mode string `json:"mode"`
+		Dir  string `json:"dir"`
+	} `json:"router"`
 	Artifact *struct {
 		Dir      string `json:"dir"`
 		Bundle   string `json:"bundle"`
@@ -115,9 +127,12 @@ type Config struct {
 	Bundle       string
 	Document     string
 	HTMLTemplate string
-	Minify       bool
-	Sourcemap    bool
-	Dev          DevOptions
+	// RoutesDir est l'arbre de routes du routeur fichier (§8.5), absolutisé —
+	// vide en routage manuel (aucun dossier, ou `router.mode: "manual"`).
+	RoutesDir string
+	Minify    bool
+	Sourcemap bool
+	Dev       DevOptions
 }
 
 // Resolve charge le manifeste et calcule la configuration effective.
@@ -152,6 +167,21 @@ func Resolve(options BuildOptions) (*Manifest, *Config, error) {
 	bundle := firstNonEmpty(options.Bundle, manifest.ArtifactBundle(), DefaultBundle)
 	document := firstNonEmpty(options.Document, manifest.ArtifactDocument(), DefaultDocument)
 
+	// Router fichier (§8.5) : actif si `router.mode` n'est pas `manual` et
+	// qu'un arbre de routes existe — celui de `router.dir`, sinon l'arbre
+	// conventionnel. Un dossier de routes suffit à activer la génération :
+	// le développeur qui crée `presentation/routes/` opte pour le router.
+	routesDir := ""
+	if manifest.Router == nil || manifest.Router.Mode != "manual" {
+		dir := DefaultRoutesDir
+		if manifest.Router != nil && strings.TrimSpace(manifest.Router.Dir) != "" {
+			dir = manifest.Router.Dir
+		}
+		if candidate := filepath.Join(moduleDir, filepath.FromSlash(dir)); isDir(candidate) {
+			routesDir = candidate
+		}
+	}
+
 	minify := options.Minify == nil || *options.Minify
 	sourcemap := options.Sourcemap == nil || *options.Sourcemap
 
@@ -182,6 +212,7 @@ func Resolve(options BuildOptions) (*Manifest, *Config, error) {
 		Bundle:       bundle,
 		Document:     document,
 		HTMLTemplate: filepath.Join(moduleDir, document),
+		RoutesDir:    routesDir,
 		Minify:       minify,
 		Sourcemap:    sourcemap,
 		Dev:          options.Dev,

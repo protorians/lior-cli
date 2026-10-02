@@ -1895,6 +1895,9 @@ $ cd modules/blog-manager && liora artifact dev --port 5178
 $ liora artifact typecheck modules/blog-manager
 $ liora artifact pack --out blog-1.0.0.LiorArtifactPackage
 $ liora artifact dev --socle ../../apps/liorian-socle   # socle + HMR, un seul terminal
+$ liora artifact dev crm billing                       # multi-modules : 1 serveur, 1 port,
+                                                       # chaque module sous /<slug>/ (reload taggué)
+$ liora artifact dev --all                             # tous les modules du workspace
 ```
 
 #### 5.19.5 `bind:socle` / `unbind:socle` — liaison à un socle hors de son dossier

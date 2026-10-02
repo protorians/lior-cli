@@ -16,6 +16,8 @@ import (
 	"strings"
 
 	esbuild "github.com/evanw/esbuild/pkg/api"
+
+	"github.com/protorians/lior-cli/internal/artifactdev/style"
 )
 
 // EsbuildOptions calcule les options canoniques du bundle de module. Le point
@@ -71,6 +73,14 @@ func Build(options BuildOptions, log func(string)) (*BuildResult, error) {
 		return nil, err
 	}
 
+	// Registre du routeur fichier (§8.5) : généré avant le wrapper, qui
+	// l'importe quand il existe. La table rendue sert aussi à la synchro du
+	// manifeste en mode `router.auto`.
+	routes, err := ensureRouteRegistry(cfg, log)
+	if err != nil {
+		return nil, err
+	}
+
 	wrapperPath, err := WriteBootstrapWrapper(cfg)
 	if err != nil {
 		return nil, err
@@ -81,6 +91,20 @@ func Build(options BuildOptions, log func(string)) (*BuildResult, error) {
 		return nil, fmt.Errorf("artifact: échec du bundle esbuild — %s", joinMessages(result.Errors))
 	}
 	CleanupBuildResidue(cfg, false)
+
+	// Pipeline de style : après le bundle esbuild (le moteur `native` n'a rien
+	// à exécuter — le CSS des imports existe déjà), avant le rendu du document
+	// hôte qui injecte le lien vers le CSS produit.
+	if err := runStyleEngine(cfg, log); err != nil {
+		return nil, err
+	}
+
+	// Synchro du manifeste en mode `router.auto` (§8.5) : table `routes` et
+	// complétion de `menu.items`. Uniquement au build one-shot — le dev-server
+	// ne touche jamais au manifeste (pas de rebuild en boucle).
+	if err := syncManifestRoutes(cfg, manifest, routes, log); err != nil {
+		return nil, err
+	}
 
 	templateData, err := loadArtifactConfigJSON(cfg.ModuleDir)
 	if err != nil {
@@ -172,17 +196,22 @@ func ResolveWorkspaceAliases(moduleDir string) map[string]string {
 // WriteBootstrapWrapper écrit le wrapper d'amorçage à côté de l'entrée et
 // renvoie son chemin. En mode watch, il est laissé en place : esbuild le
 // surveille avec le graphe de l'entrée et le rebuild ne le réécrit pas.
+// Quand le registre du routeur fichier existe (§8.5), il est passé au
+// bootstrap — `ctx.router` alimente `<ModuleRouter/>`.
 func WriteBootstrapWrapper(cfg *Config) (string, error) {
 	entryBase := strings.TrimSuffix(filepath.Base(cfg.Entry), filepath.Ext(cfg.Entry))
 	wrapperPath := filepath.Join(cfg.ModuleDir, WrapperName)
-	content := strings.Join([]string{
+	lines := []string{
 		`import {bootstrapModule} from "@liorian/sdk/infrastructure/module-runtime/module-bootstrap";`,
 		fmt.Sprintf(`import * as definition from "./%s";`, entryBase),
-		``,
-		`bootstrapModule(definition as any);`,
-		``,
-	}, "\n")
-	if err := os.WriteFile(wrapperPath, []byte(content), 0o644); err != nil {
+	}
+	bootstrap := `bootstrapModule(definition as any);`
+	if fileExists(filepath.Join(cfg.ModuleDir, RoutesRegistryName)) {
+		lines = append(lines, `import routes from "./.liorian/routes.registry";`)
+		bootstrap = `bootstrapModule(definition as any, {router: routes});`
+	}
+	lines = append(lines, ``, bootstrap, ``)
+	if err := os.WriteFile(wrapperPath, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
 		return "", err
 	}
 	return wrapperPath, nil
@@ -244,6 +273,60 @@ func ValidateArtifacts(cfg *Config) []string {
 // placeholderRE matche `{{ chemin.doté }}` dans le template du document hôte.
 var placeholderRE = regexp.MustCompile(`\{\{\s*([\w.$-]+)\s*\}\}`)
 
+// runStyleEngine exécute le moteur de style déclaré par le module
+// (`artifact.config.json`, bloc `style`) — `native` par défaut, qui n'exécute
+// rien. Fail-closed : une erreur du moteur est une erreur de build, et un
+// moteur outillé doit avoir produit le CSS attendu.
+func runStyleEngine(cfg *Config, log func(string)) error {
+	options, err := style.Load(cfg.ModuleDir)
+	if err != nil {
+		return err
+	}
+	engine, err := style.Resolve(options)
+	if err != nil {
+		return err
+	}
+	if err := engine.Build(style.Context{
+		ModuleDir:   cfg.ModuleDir,
+		ArtifactDir: cfg.ArtifactDir,
+		OutCSS:      BundleCSS,
+		Log:         log,
+	}, options); err != nil {
+		return err
+	}
+	if style.RequiresCSS(options) {
+		info, err := os.Stat(filepath.Join(cfg.ArtifactDir, BundleCSS))
+		if err != nil {
+			return fmt.Errorf("style: le moteur %s n'a pas produit %s — vérifie `style.entry`",
+				engine.Name(), BundleCSS)
+		}
+		if info.Size() == 0 {
+			return fmt.Errorf("style: le moteur %s a produit un %s vide — vérifie `style.entry` et la détection de contenu",
+				engine.Name(), BundleCSS)
+		}
+	}
+	return nil
+}
+
+// InjectStylesheetLink insère le lien vers le CSS du bundle dans le document
+// hôte quand ce CSS existe (imports CSS du bundle ou moteur de style) — le
+// template du module n'a jamais eu à le référencer lui-même. Idempotent : un
+// document qui référence déjà le CSS (template du développeur, injection
+// précédente) est rendu tel quel.
+func InjectStylesheetLink(cfg *Config, html string) string {
+	if !fileExists(filepath.Join(cfg.ArtifactDir, BundleCSS)) {
+		return html
+	}
+	if strings.Contains(html, BundleCSS) {
+		return html
+	}
+	link := `<link rel="stylesheet" href="./` + BundleCSS + `" />`
+	if strings.Contains(html, "</head>") {
+		return strings.Replace(html, "</head>", link+"\n</head>", 1)
+	}
+	return link + "\n" + html
+}
+
 // RenderHostDocument rend le document hôte depuis le template du module et
 // les données du manifeste (plus le contexte additionnel de la config). Un
 // objet est sérialisé en JSON ; une clé inconnue reste telle quelle, visible.
@@ -262,10 +345,11 @@ func RenderHostDocument(cfg *Config, manifest *Manifest, templateData map[string
 	for key, value := range templateData {
 		data[key] = value
 	}
-	return placeholderRE.ReplaceAllStringFunc(string(template), func(match string) string {
+	rendered := placeholderRE.ReplaceAllStringFunc(string(template), func(match string) string {
 		expression := placeholderRE.FindStringSubmatch(match)[1]
 		return lookupTemplate(data, expression, match)
-	}), nil
+	})
+	return InjectStylesheetLink(cfg, rendered), nil
 }
 
 // lookupTemplate résout un chemin doté dans les données de template ; clé

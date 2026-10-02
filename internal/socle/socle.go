@@ -34,7 +34,12 @@ const (
 	KeyLibraryModulesURL = "NEXT_PUBLIC_LIBRARY_MODULES_URL"
 	KeyDevModulesURL     = "NEXT_PUBLIC_DEV_MODULES_URL"
 	KeyDevModules        = "NEXT_PUBLIC_DEV_MODULES"
-	KeyLibraryPort       = "LIBRARY_PORT"
+	// KeyDevModulesMulti active la résolution multi-modules du transport :
+	// l'URL dev est alors préfixée par le slug de l'identifiant
+	// (`<DEV_MODULES_URL>/<slug>/index.html`) au lieu de la racine du
+	// dev-server mono-module. Posée par le dev-server multi-modules.
+	KeyDevModulesMulti = "NEXT_PUBLIC_DEV_MODULES_MULTI"
+	KeyLibraryPort     = "LIBRARY_PORT"
 )
 
 // DefaultLibraryPort est le port du serveur de bibliothèque dédié

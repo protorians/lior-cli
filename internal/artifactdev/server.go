@@ -175,7 +175,11 @@ func Start(options BuildOptions, log func(string)) (*DevServer, error) {
 	}
 
 	// Bundle esbuild : contexte persistant, rebuild initial, puis watch —
-	// esbuild surveille lui-même le graphe de l'entrée (wrapper inclus).
+	// esbuild surveille lui-même le graphe de l'entrée (wrapper inclus). Le
+	// registre du routeur fichier est généré avant le wrapper (§8.5).
+	if _, err := ensureRouteRegistry(cfg, log); err != nil {
+		return nil, err
+	}
 	wrapperPath, err := WriteBootstrapWrapper(cfg)
 	if err != nil {
 		return nil, err
@@ -191,6 +195,15 @@ func Start(options BuildOptions, log func(string)) (*DevServer, error) {
 	} else {
 		log(fmt.Sprintf("artifact: bundle %s (%.0f Ko)", filepath.Join(cfg.ArtifactDir, cfg.Bundle),
 			float64(bundleSize(cfg))/1024))
+		// Le CSS du bundle existe désormais : le pipeline de style s'exécute et
+		// le document hôte est re-rendu avec le lien vers le CSS (le rendu
+		// initial, antérieur au bundle, ne pouvait pas l'inclure).
+		if err := runStyleEngine(cfg, log); err != nil {
+			log(fmt.Sprintf("artifact: %v", err))
+		}
+		if err := renderAndWriteDocument(cfg, manifest, templateData); err != nil {
+			log(fmt.Sprintf("artifact: %v", err))
+		}
 	}
 
 	server := &DevServer{RequestedPort: cfg.Dev.Port}
@@ -212,12 +225,28 @@ func Start(options BuildOptions, log func(string)) (*DevServer, error) {
 		}
 		timer = time.AfterFunc(80*time.Millisecond, func() {
 			rebuildMu.Lock()
+			// Le registre de routes est mis au niveau avant le rebuild : un
+			// fichier de route ajouté ou supprimé doit y figurer (§8.5).
+			if _, err := ensureRouteRegistry(cfg, log); err != nil {
+				rebuildMu.Unlock()
+				log(fmt.Sprintf("artifact: échec du registre de routes — %v", err))
+				return
+			}
 			res := ctx.Rebuild()
-			rebuildMu.Unlock()
 			if len(res.Errors) > 0 {
+				rebuildMu.Unlock()
 				log("artifact: échec du rebuild — " + joinMessages(res.Errors))
 				return
 			}
+			// Le pipeline de style enchaîne après esbuild : le reload n'est
+			// diffusé que si les deux réussissent — jamais de CSS périmé servi
+			// en silence.
+			if err := runStyleEngine(cfg, log); err != nil {
+				rebuildMu.Unlock()
+				log(fmt.Sprintf("artifact: échec du style — %v", err))
+				return
+			}
+			rebuildMu.Unlock()
 			if updated, err := LoadManifest(cfg.ModuleDir); err == nil {
 				manifest = updated
 			}
@@ -420,57 +449,67 @@ func newHandler(cfg *Config, broadcast *broadcaster) http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-
 		if r.URL.Path == "/-/events" {
 			serveEvents(w, r, broadcast)
 			return
 		}
+		serveArtifact(w, r, cfg, injectReloadScript)
+	})
+}
 
-		relative := strings.TrimPrefix(r.URL.Path, "/")
-		if relative == "" {
-			relative = cfg.Document
-		}
-		filePath := filepath.Join(cfg.ArtifactDir, filepath.FromSlash(relative))
-		if !strings.HasPrefix(filePath, cfg.ArtifactDir+string(filepath.Separator)) && filePath != cfg.ArtifactDir {
-			w.WriteHeader(http.StatusForbidden)
+// serveArtifact sert le répertoire d'artefact d'un module : fichiers
+// statiques (confinement sous ArtifactDir), repli SPA sur le document hôte,
+// transformation des HTML servis (lien CSS, script de reload). Utilisé par le
+// dev-server mono-module (chemins racine) et multi-modules (chemins
+// préfixés par le slug — l'appelant a retiré le préfixe de r.URL.Path).
+func serveArtifact(w http.ResponseWriter, r *http.Request, cfg *Config, transformHTML func(string) string) {
+	relative := strings.TrimPrefix(r.URL.Path, "/")
+	if relative == "" {
+		relative = cfg.Document
+	}
+	filePath := filepath.Join(cfg.ArtifactDir, filepath.FromSlash(relative))
+	if !strings.HasPrefix(filePath, cfg.ArtifactDir+string(filepath.Separator)) && filePath != cfg.ArtifactDir {
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+	info, err := os.Stat(filePath)
+	if err != nil || info.IsDir() {
+		// Repli SPA : toute route inconnue sert le document hôte (§4.3).
+		filePath = filepath.Join(cfg.ArtifactDir, cfg.Document)
+		info, err = os.Stat(filePath)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		info, err := os.Stat(filePath)
-		if err != nil || info.IsDir() {
-			// Repli SPA : toute route inconnue sert le document hôte (§4.3).
-			filePath = filepath.Join(cfg.ArtifactDir, cfg.Document)
-			info, err = os.Stat(filePath)
-			if err != nil {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-		}
+	}
 
-		mime := mimeTypes[strings.ToLower(filepath.Ext(filePath))]
-		if mime == "" {
-			mime = "application/octet-stream"
-		}
-		w.Header().Set("Content-Type", mime)
-		if strings.HasPrefix(mime, "text/html") {
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			html := injectReloadScript(string(content))
-			w.Header().Set("Content-Length", strconv.Itoa(len(html)))
-			if r.Method == http.MethodHead {
-				return
-			}
-			_, _ = w.Write([]byte(html))
+	mime := mimeTypes[strings.ToLower(filepath.Ext(filePath))]
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	if strings.HasPrefix(mime, "text/html") {
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+		html := InjectStylesheetLink(cfg, string(content))
+		if transformHTML != nil {
+			html = transformHTML(html)
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(html)))
 		if r.Method == http.MethodHead {
 			return
 		}
-		http.ServeFile(w, r, filePath)
-	})
+		_, _ = w.Write([]byte(html))
+		return
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	if r.Method == http.MethodHead {
+		return
+	}
+	http.ServeFile(w, r, filePath)
 }
 
 // serveEvents maintient le flux SSE du reload.
@@ -503,13 +542,21 @@ func serveEvents(w http.ResponseWriter, r *http.Request, broadcast *broadcaster)
 	}
 }
 
-// injectReloadScript insère le script de rechargement avant la fermeture du
-// body (ou en queue quand le template n'a pas de </body>).
+// injectReloadScript insère le script de rechargement standard (dev-server
+// mono-module) avant la fermeture du body (ou en queue quand le template n'a
+// pas de </body>).
 func injectReloadScript(html string) string {
+	return injectScript(html, reloadScript)
+}
+
+// injectScript insère un script donné avant la fermeture du body (ou en queue
+// quand le template n'a pas de </body>). Le script différé par tenant
+// (reload:<slug>) passe par ici.
+func injectScript(html, script string) string {
 	if strings.Contains(html, "</body>") {
-		return strings.Replace(html, "</body>", reloadScript+"\n</body>", 1)
+		return strings.Replace(html, "</body>", script+"\n</body>", 1)
 	}
-	return html + reloadScript
+	return html + script
 }
 
 // renderAndWriteDocument rend le document hôte et l'écrit dans le répertoire
@@ -535,24 +582,30 @@ var moduleWatchSkip = map[string]bool{
 	"artifact":     true,
 }
 
-// watchModuleSources surveille l'arbre du module — par sondage léger, sans
+// watchModuleSources surveille l'arbre d'un module — par sondage léger, sans
 // dépendance — et appelle onChange à chaque modification détectée (sources,
-// template du document hôte, manifeste, artifact.config.json). Le sondage
-// relève taille + mtime de chaque fichier régulier ; une signature stable
-// entre deux passages n'appelle rien.
+// template du document hôte, manifeste, artifact.config.json).
 func watchModuleSources(cfg *Config, onChange func()) func() {
+	return watchModuleDirs([]string{cfg.ModuleDir}, func(string) { onChange() })
+}
+
+// watchModuleDirs surveille plusieurs arbres de modules et rapporte à onChange
+// le répertoire modifié — un changement dans crm ne doit pas reconstruire
+// billing. Le sondage relève taille + mtime de chaque fichier régulier ; une
+// signature stable entre deux passages n'appelle rien.
+func watchModuleDirs(dirs []string, onChange func(dir string)) func() {
 	type fileState struct {
 		size    int64
 		modNano int64
 	}
-	signature := func() map[string]fileState {
+	signature := func(root string) map[string]fileState {
 		state := map[string]fileState{}
-		_ = filepath.Walk(cfg.ModuleDir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
 			}
 			if info.IsDir() {
-				if moduleWatchSkip[info.Name()] && path != cfg.ModuleDir {
+				if moduleWatchSkip[info.Name()] && path != root {
 					return filepath.SkipDir
 				}
 				return nil
@@ -576,7 +629,10 @@ func watchModuleSources(cfg *Config, onChange func()) func() {
 		}
 		return true
 	}
-	previous := signature()
+	previous := make(map[string]map[string]fileState, len(dirs))
+	for _, dir := range dirs {
+		previous[dir] = signature(dir)
+	}
 	done := make(chan struct{})
 	go func() {
 		ticker := time.NewTicker(400 * time.Millisecond)
@@ -586,12 +642,14 @@ func watchModuleSources(cfg *Config, onChange func()) func() {
 			case <-done:
 				return
 			case <-ticker.C:
-				current := signature()
-				if same(current, previous) {
-					continue
+				for _, dir := range dirs {
+					current := signature(dir)
+					if same(current, previous[dir]) {
+						continue
+					}
+					previous[dir] = current
+					onChange(dir)
 				}
-				previous = current
-				onChange()
 			}
 		}
 	}()

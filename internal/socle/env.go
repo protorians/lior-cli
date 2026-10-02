@@ -132,8 +132,11 @@ func RemoveEnvLocalDevModules(socleDir, identifier string) (bool, error) {
 	// avec ce qui reste.
 	lines := splitEnvLines(string(data))
 	if len(kept) == 0 {
+		// Le flag du mode multi-modules disparaît avec la liste : un
+		// `.env.local` qui pointerait encore vers un dev-server arrêté ferait
+		// échouer le chargement de tout autre module en dev.
 		lines = filterEnvLines(lines, func(key string) bool {
-			return key == KeyDevModules || key == KeyDevModulesURL
+			return key == KeyDevModules || key == KeyDevModulesURL || key == KeyDevModulesMulti
 		})
 	} else {
 		lines = upsertEnvLine(lines, KeyDevModules, strings.Join(kept, ","))
