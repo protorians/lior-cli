@@ -52,12 +52,19 @@ type Manifest struct {
 	ManagerCompat Compatibility        `json:"managerCompatibility,omitempty"`
 	APICompat     Compatibility        `json:"apiCompatibility,omitempty"`
 	Permissions   []string             `json:"permissions"`
+	// Access lists the roles whose level is allowed to open the module
+	// (`docs/modules/module-manifest.md` §6.5). Absent or empty: no floor is
+	// required — only the role attributions of the access-control screen
+	// decide.
+	Access []string `json:"access,omitempty"`
 	// UserScope declares the user-data permissions a module needs (D15,
 	// spec module-isolated-runtime.md §6.10): the consent an end user must
 	// grant before the module mounts. Mandatory — `[]` (no user data) is
-	// the explicit way to declare a module that reads nothing. Same grammar
-	// as `permissions` (`Role:Verbe`), validated at pack time.
-	UserScope []string `json:"userScope,omitempty"`
+	// the explicit way to declare a module that reads nothing. `<Domain>:<Verbe>`
+	// grammar (`User:Get`), validated at pack time. Not to be confused with
+	// `permissions`, whose `<Role>:<Verbe>` grammar was removed: `permissions`
+	// now lists the bare PascalCase permission domains the module exposes.
+	UserScope UserScopeList `json:"userScope"`
 	// Legal declares the legal documents an end user must accept before the
 	// module mounts (D16, spec module-isolated-runtime.md §6.11): terms of use,
 	// privacy policy, and optionally a licence contract.
@@ -77,6 +84,23 @@ type Manifest struct {
 	OAuth        *ModuleOAuth         `json:"oauth,omitempty"`
 	APIScopes    []string             `json:"apiScopes,omitempty"`
 	Capabilities Capabilities         `json:"capabilities"`
+	// Themes lists the token palettes a `THEME` module ships
+	// (`docs/modules/module-manifest.md` §6.10): tokens only, never code —
+	// the keys are checked server-side against the `MODULE_THEME_TOKENS`
+	// whitelist.
+	Themes []ThemeDeclaration `json:"themes,omitempty"`
+	// Admin declares the administrator privileges a `SYSTEM` module asks for
+	// (§6.10): first-party + Tauri + role + scopes, fail-closed.
+	Admin *AdminDeclaration `json:"admin,omitempty"`
+	// Remote declares the origin and backends of a `WEB_APP_REMOTE` module
+	// (§6.10): the remote server must register and be verified (well-known /
+	// DNS) before moderation.
+	Remote *RemoteDeclaration `json:"remote,omitempty"`
+	// Settings lists the parameter-menu entries of a third-party
+	// `CONFIGURATION` module (§6.10): each entry resolves to a route of the
+	// module (`/m/<slug>/<path>`), no third-party code is imported. Not to be
+	// confused with `configSettings`, the persisted configuration fields.
+	Settings *SettingsDeclaration `json:"settings,omitempty"`
 	// Artifact declares the executable payload of the module (§4.4): the
 	// build output directory and the bundle/document file names relative to
 	// the module directory. Mandatory for isolated-runtime modules.
@@ -88,7 +112,7 @@ type Manifest struct {
 	DataModel            []DataModelResource  `json:"dataModel,omitempty"`
 	Declarative          *DeclarativeConfig   `json:"declarative,omitempty"`
 	Widgets              []string             `json:"widgets"`
-	Routines             []string             `json:"routines"`
+	Routines             []RoutineDeclaration `json:"routines"`
 	Providers            []string             `json:"providers,omitempty"`
 	ConfigSettings       []ConfigSetting      `json:"configSettings,omitempty"`
 	Menu                 Menu                 `json:"menu"`
@@ -105,6 +129,19 @@ type Publisher struct {
 	Email       string `json:"email,omitempty"`
 	Description string `json:"description,omitempty"`
 	Avatar      string `json:"avatar,omitempty"`
+}
+
+// UserScopeList is the mandatory `userScope` array (D15). A nil list marshals
+// as the explicit empty scope — `[]` is the required declaration "this module
+// reads no user data", never an omission.
+type UserScopeList []string
+
+// MarshalJSON emits `[]` for a nil list.
+func (u UserScopeList) MarshalJSON() ([]byte, error) {
+	if u == nil {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]string(u))
 }
 
 // Platforms declares which platforms the module supports.
@@ -160,6 +197,149 @@ type ModuleOAuth struct {
 	Scopes []string `json:"scopes"`
 }
 
+// RoutineDeclaration is one entry of `manifest.routines`
+// (`docs/modules/module-manifest.md` §6.10). Two forms coexist: the name of a
+// `Routine` singleton exported by a compiled module (`"myRoutine"`), and a
+// declarative descriptor executed by the socle through `ctx.api` for a
+// third-party `SERVICE` module (`{id, job: {kind: "api", ...}}`).
+type RoutineDeclaration struct {
+	// Name is the exported `Routine` singleton name — the string form. When
+	// set, every descriptor field is ignored (the two forms are exclusive).
+	Name string `json:"-"`
+	// ID is the stable identifier of a declarative routine.
+	ID string `json:"id,omitempty"`
+	// Label and Icon describe the routine in the interfaces that surface it.
+	Label string `json:"label,omitempty"`
+	Icon  string `json:"icon,omitempty"`
+	// Persist keeps the routine's state across runs (declarative default:
+	// true per spec `service-routine`).
+	Persist *bool `json:"persist,omitempty"`
+	// Trigger narrows when the routine fires: URLs or module identifiers it
+	// reacts to.
+	Trigger *RoutineTrigger `json:"trigger,omitempty"`
+	// Job is the periodic work of a declarative routine. `kind` is `"api"`
+	// for a third party (the only authorized kind) and `intervalMs` is
+	// bounded to 30 s–1 h.
+	Job *RoutineJob `json:"job,omitempty"`
+}
+
+// RoutineTrigger is the `trigger` block of a declarative routine.
+type RoutineTrigger struct {
+	// URL lists one or more event sources; the schema admits a single string
+	// or an array. The array is the canonical runtime form.
+	URL []string `json:"url,omitempty"`
+	// Modules lists the module identifiers the routine reacts to.
+	Modules []string `json:"modules,omitempty"`
+}
+
+// RoutineJob is the `job` block of a declarative routine.
+type RoutineJob struct {
+	// Kind is the job executor: `"api"` for a third-party module (the socle
+	// calls the module through `ctx.api`).
+	Kind string `json:"kind,omitempty"`
+	// Method is the HTTP verb of the api job (Get, Post…).
+	Method string `json:"method,omitempty"`
+	// Path is the module-relative route the socle calls.
+	Path string `json:"path,omitempty"`
+	// IntervalMs is the period of the job, bounded 30 000–3 600 000 ms.
+	IntervalMs *int64 `json:"intervalMs,omitempty"`
+}
+
+// UnmarshalJSON accepts both forms of a routine entry: a plain string (the
+// exported singleton name) or the declarative descriptor object.
+func (r *RoutineDeclaration) UnmarshalJSON(data []byte) error {
+	var name string
+	if err := json.Unmarshal(data, &name); err == nil {
+		*r = RoutineDeclaration{Name: name}
+		return nil
+	}
+	type alias RoutineDeclaration
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*r = RoutineDeclaration(a)
+	return nil
+}
+
+// MarshalJSON re-emits the string form for name-only routines and the object
+// form for declarative descriptors.
+func (r RoutineDeclaration) MarshalJSON() ([]byte, error) {
+	if r.Name != "" {
+		return json.Marshal(r.Name)
+	}
+	type alias RoutineDeclaration
+	return json.Marshal(alias(r))
+}
+
+// ThemeDeclaration is one entry of `manifest.themes`
+// (`docs/modules/module-manifest.md` §6.10): a token palette of a `THEME`
+// module. Tokens only — the whitelist is enforced server-side; `scheme`
+// absent means `light`, and the optional `dark` block carries the dark
+// variants.
+type ThemeDeclaration struct {
+	ID          string            `json:"id"`
+	Label       string            `json:"label,omitempty"`
+	Description string            `json:"description,omitempty"`
+	DataTheme   string            `json:"dataTheme,omitempty"`
+	Scheme      string            `json:"scheme,omitempty"`
+	Swatches    []string          `json:"swatches,omitempty"`
+	Tokens      map[string]string `json:"tokens,omitempty"`
+	Dark        *ThemeVariant     `json:"dark,omitempty"`
+}
+
+// ThemeVariant is the dark block of a theme declaration.
+type ThemeVariant struct {
+	Swatches []string          `json:"swatches,omitempty"`
+	Tokens   map[string]string `json:"tokens,omitempty"`
+}
+
+// AdminDeclaration is the `manifest.admin` section (`docs/modules/
+// module-manifest.md` §6.10): the administrator privileges a `SYSTEM` module
+// asks for. Granted at runtime only when the module is first-party, runs in
+// Tauri, the user role is listed and the scopes are granted — fail-closed.
+type AdminDeclaration struct {
+	// Roles lists the RBAC roles allowed (`Root`, `Admin`…).
+	Roles []string `json:"roles,omitempty"`
+	// Scopes lists the administrator scopes requested.
+	Scopes []string `json:"scopes,omitempty"`
+}
+
+// RemoteDeclaration is the `manifest.remote` section (`docs/modules/
+// module-manifest.md` §6.10): the origin and backends of a `WEB_APP_REMOTE`
+// module. The origin is a domain HTTPS origin (no literal IP); the remote
+// server registers and is verified (well-known / DNS) before moderation.
+type RemoteDeclaration struct {
+	// Origin is the HTTPS origin of the remote server.
+	Origin string `json:"origin"`
+	// Paths lists the remote routes the socle may mount.
+	Paths []string `json:"paths,omitempty"`
+	// Backends lists the authorized egress backends (HTTPS).
+	Backends []string `json:"backends,omitempty"`
+	// Scopes lists the requested scopes, a subset of `permissions`.
+	Scopes []string `json:"scopes,omitempty"`
+	// WellKnown is the verification endpoint declaration.
+	WellKnown string `json:"wellKnown,omitempty"`
+}
+
+// SettingsDeclaration is the `manifest.settings` section (`docs/modules/
+// module-manifest.md` §6.10): the parameter-menu entries of a third-party
+// `CONFIGURATION` module. Each entry resolves to `/m/<slug>/<path>`; no
+// third-party code is imported.
+type SettingsDeclaration struct {
+	Entries []SettingsEntry `json:"entries"`
+}
+
+// SettingsEntry is one parameter-menu entry of a `CONFIGURATION` module.
+type SettingsEntry struct {
+	// Label is the visible title of the entry (mandatory).
+	Label string `json:"label"`
+	// Description is the helper text of the entry.
+	Description string `json:"description,omitempty"`
+	// Path is the module-relative settings route.
+	Path string `json:"path,omitempty"`
+}
+
 // BackendDeclaration is one entry of the tier-1 egress declaration
 // (`manifest.backends[]`, spec module-isolated-runtime.md §6.2). The `key`
 // must match an entry of the operator master list (tier 2, `ModuleEgressBackend`)
@@ -170,8 +350,8 @@ type BackendDeclaration struct {
 	// URL is the origin + base path of the backend; https is mandatory
 	// (loopback http accepted for development only).
 	URL string `json:"url"`
-	// Scopes lists declarative permissions (`Role:Verbe`, same grammar as
-	// `permissions`).
+	// Scopes lists declarative permissions (`<Domain>:<Verbe>`, same grammar
+	// as `userScope`).
 	Scopes []string `json:"scopes,omitempty"`
 	// Description is the human-readable purpose shown on the consent screen
 	// (§6.10.5: the approval box lists the declared backends).
@@ -371,11 +551,115 @@ type DeclarativePage struct {
 	Blocks []DeclarativeBlock `json:"blocks,omitempty"`
 }
 
-// DeclarativeConfig is the `declarative` section of a `CONFIGURATION`
-// manifest: natively rendered pages plus dashboard `widgets`.
+// DeclarativeConfig is the `declarative` section of the manifest
+// (`docs/modules/module-manifest.md` §6.10, spec `module-installation.md`
+// §7.5): the natively rendered pages of a `CONFIGURATION` module plus the
+// dashboard `widgets`. The schema keeps `additionalProperties: true` on the
+// section, so unknown keys are preserved in Extra and re-emitted on Marshal.
 type DeclarativeConfig struct {
-	Pages   []DeclarativePage  `json:"pages,omitempty"`
-	Widgets []DeclarativeBlock `json:"widgets,omitempty"`
+	Pages   []DeclarativePage   `json:"pages,omitempty"`
+	Widgets []DeclarativeWidget `json:"widgets,omitempty"`
+
+	// Extra preserves unknown keys of the declarative section.
+	Extra map[string]json.RawMessage `json:"-"`
+}
+
+// UnmarshalJSON decodes the declarative section and preserves unknown keys.
+func (d *DeclarativeConfig) UnmarshalJSON(data []byte) error {
+	type alias DeclarativeConfig
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	known := map[string]bool{"pages": true, "widgets": true}
+	extra := map[string]json.RawMessage{}
+	for k, v := range raw {
+		if !known[k] {
+			extra[k] = v
+		}
+	}
+	*d = DeclarativeConfig(a)
+	if len(extra) > 0 {
+		d.Extra = extra
+	}
+	return nil
+}
+
+// MarshalJSON serializes the declarative section, re-emitting the preserved
+// extension keys after the known ones.
+func (d DeclarativeConfig) MarshalJSON() ([]byte, error) {
+	type alias DeclarativeConfig
+	base, err := json.Marshal(alias(d))
+	if err != nil {
+		return nil, err
+	}
+	if len(d.Extra) == 0 {
+		return base, nil
+	}
+	keys := make([]string, 0, len(d.Extra))
+	for k := range d.Extra {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b bytes.Buffer
+	trimmed := bytes.TrimSuffix(base, []byte("}"))
+	b.Write(trimmed)
+	for i, k := range keys {
+		if len(trimmed) > 1 || i > 0 {
+			b.WriteByte(',')
+		}
+		keyJSON, _ := json.Marshal(k)
+		b.Write(keyJSON)
+		b.WriteByte(':')
+		b.Write(d.Extra[k])
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
+}
+
+// DeclarativeWidget is one entry of `declarative.widgets` (§6.10): a
+// dashboard widget descriptor of a `WIDGET` module — the KPI-cards slot of a
+// `CONFIGURATION` module keeps its legacy `kind` hint (spec
+// module-installation.md §7.5), preserved for round-trip fidelity. An
+// `interactive` block switches the tile from native rendering to a sandboxed
+// artifact document executed per tile (feature interactive-widget-marketplace
+// §3): the bridge and `ctx.api` consent apply, no code is imported.
+type DeclarativeWidget struct {
+	ID string `json:"id"`
+	// Resource is the `dataModel` resource the aggregate reads from —
+	// required for a non-interactive widget.
+	Resource string `json:"resource,omitempty"`
+	// Aggregate is one of `count`, `sum`, `mean`.
+	Aggregate string `json:"aggregate,omitempty"`
+	Field     string `json:"field,omitempty"`
+	Label     string `json:"label,omitempty"`
+	// Title is what the tile displays — required for an interactive entry
+	// (blocked state, accessibility).
+	Title string `json:"title,omitempty"`
+	// Variant is the declarative fragment variant (`widget:*`, `chart:*`),
+	// required server-side for a non-interactive entry
+	// (check `widget.descriptor.valid`).
+	Variant string `json:"variant,omitempty"`
+	// Interactive switches the tile to sandboxed execution when present.
+	Interactive *InteractiveWidget `json:"interactive,omitempty"`
+	// Kind is the legacy block-type hint (`"kpi"`) of the CONFIGURATION
+	// KPI-cards slot; the canonical schema no longer carries it.
+	Kind string `json:"kind,omitempty"`
+}
+
+// InteractiveWidget is the `interactive` block of a declarative widget.
+type InteractiveWidget struct {
+	// Entry is the artifact host document relative to the bundle root
+	// (`widgets/<id>.html`), defended by the grammar: no `..`, no absolute
+	// path, 1–200 chars.
+	Entry string `json:"entry"`
+	// MinHeight is the tile height floor, 120–1200 px.
+	MinHeight *int64 `json:"minHeight,omitempty"`
 }
 
 // Menu holds menu entries declared by the module.
@@ -493,7 +777,8 @@ func (m Manifest) MarshalJSON() ([]byte, error) {
 //
 // The manifest follows the canonical contract (`docs/modules/module-manifest.md`,
 // `schemaVersion: 1`): `compatibility.{socle,api}` windows, `oauth.scopes`,
-// `capabilities` as Tauri permission ids, and `Role:Verbe` permissions.
+// `capabilities` as Tauri permission ids, `permissions` as bare PascalCase
+// permission domains and `userScope` as `<Domain>:<Verbe>` codes.
 func NewManifest(name, description string) Manifest {
 	upperKey := upperSnake(name)
 	return Manifest{
@@ -521,7 +806,12 @@ func NewManifest(name, description string) Manifest {
 			Socle: CompatibilityRange{Min: "0.17.1", Max: "0.17.x"},
 			API:   CompatibilityRange{Min: "0.27.0", Max: "0.27.x"},
 		},
-		Permissions: []string{"User:Get", "Editor:Post", "Editor:Put", "Admin:Delete"},
+		// `permissions` lists the bare PascalCase permission domains the
+		// module exposes (§6.5). A scaffold exposes none yet — the empty
+		// list is the explicit declaration, the domains follow the module's
+		// real API.
+		Permissions: []string{},
+		Access:      []string{},
 		// D15: userScope is mandatory — the scaffold starts with an empty
 		// (but declared) scope, so the consent screen has something to show
 		// and the pack validation passes.
@@ -540,7 +830,7 @@ func NewManifest(name, description string) Manifest {
 		OptionalRequirements: map[string]string{},
 		DataModel:            []DataModelResource{},
 		Widgets:              []string{},
-		Routines:             []string{},
+		Routines:             []RoutineDeclaration{},
 		Providers:            []string{},
 		ConfigSettings:       []ConfigSetting{},
 		Menu:                 Menu{Items: []MenuItem{}},
@@ -647,9 +937,10 @@ func ValidateIcon(icon string) error {
 }
 
 // ModuleTypes is the set of distribution/execution types accepted by the
-// canonical schema (`docs/modules/module-manifest.md` §6.2). `INTERNAL` and
-// `EXTERNAL` are legacy aliases (deprecated, still accepted): `INTERNAL`
-// denotes a socle-bundled module, `EXTERNAL` a remotely-served web app.
+// manifest reader (`docs/modules/module-manifest.md` §6.2). The canonical
+// enum is `CONFIGURATION`, `WEB_APP_REMOTE`, `WEB_APP_LOCAL`, `SYSTEM`,
+// `SERVICE`, `WIDGET`, `THEME`; the other values are legacy aliases
+// (deprecated, still accepted on read — see LegacyModuleTypes).
 var ModuleTypes = map[string]bool{
 	"CONFIGURATION":   true,
 	"EXTERNAL_URL":    true,
@@ -668,15 +959,22 @@ var ModuleTypes = map[string]bool{
 // LegacyModuleTypes lists the pre-canonical distribution types. They remain
 // accepted for existing projects but trigger a migration warning at audit
 // time; new modules should use the canonical `ModuleType` enum.
-var LegacyModuleTypes = map[string]bool{"INTERNAL": true, "EXTERNAL": true}
+var LegacyModuleTypes = map[string]bool{
+	"INTERNAL":        true,
+	"EXTERNAL":        true,
+	"EXTERNAL_URL":    true,
+	"WEB_APP_CACHED":  true,
+	"REMOTE_FRONTEND": true,
+}
 
 // IsLegacyModuleType reports whether t is a deprecated distribution type.
 func IsLegacyModuleType(moduleType string) bool {
 	return LegacyModuleTypes[strings.ToUpper(strings.TrimSpace(moduleType))]
 }
 
-// ModuleRoles is the catalogue of backend roles usable in `permissions`
-// (`<ROLE>:<VERBE>`, `docs/modules/module-manifest.md` §6.5). The roles are a
+// ModuleRoles is the catalogue of backend roles of the platform
+// (`docs/modules/module-manifest.md` §6.5): usable in `access` (the roles
+// whose level opens the module) and in `admin.roles`. The roles are a
 // **subset** of the scope grammar: a scope is any PascalCase domain of the
 // backend `PermissionsConfig` (`User`, `RestaurantDish`, `AccountingAccount`…),
 // the roles being the domains the platform names explicitly.
@@ -689,22 +987,38 @@ var ModuleRoles = []string{
 // ModuleVerbs maps Raiton controller verbs to permission verbs.
 var ModuleVerbs = []string{"Get", "Post", "Put", "Delete"}
 
-// permissionCodeRE matches a canonical scope code: `<PascalCaseDomain>:<VERBE>`
-// (D15, spec `module-isolated-runtime.md` §6.10.1). The domain is not a role
-// list but any backend `PermissionsConfig` domain — the grammar the runtime
-// itself enforces (`MODULE_SCOPE_RE`, `@liorian/api-resources/module-scope.util`,
+// permissionDomainRE matches a bare permission domain of `permissions`
+// (`docs/modules/module-manifest.md` §6.5): a PascalCase domain name without
+// prefix (`Post`, `PostCategory`). The server composes it with the module key
+// to write the namespaced RBAC role — `BLOGGING:Post`. The former
+// `<ROLE>:<VERBE>` grammar of `permissions` is removed from the schema.
+var permissionDomainRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
+
+// IsPermissionDomain reports whether s is a bare permission domain — the
+// canonical `permissions` grammar.
+func IsPermissionDomain(s string) bool {
+	return permissionDomainRE.MatchString(strings.TrimSpace(s))
+}
+
+// permissionCodeRE matches a scope code: `<PascalCaseDomain>:<VERBE>`
+// (D15, spec `module-isolated-runtime.md` §6.10.1). The grammar of
+// `userScope` and of the tier-1 `backends[].scopes` — `permissions` no longer
+// uses it (bare domains). The domain is not a role list but any backend
+// `PermissionsConfig` domain — the grammar the runtime itself enforces
+// (`MODULE_SCOPE_RE`, `@liorian/api-resources/module-scope.util`,
 // reused by `assertValidUserScope` at installation and by the module-consent
 // token checks). A CLI narrower than the runtime would refuse archives the
 // socle then accepts: the two must share one grammar.
 var permissionCodeRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*:(Get|Post|Put|Delete)$`)
 
 // IsPermissionCode reports whether s is a canonical `<DOMAIN>:<VERBE>` scope
-// code — same grammar for `permissions` and `userScope`.
+// code — the grammar of `userScope` and `backends[].scopes`.
 func IsPermissionCode(s string) bool {
 	return permissionCodeRE.MatchString(strings.TrimSpace(s))
 }
 
-// ValidatePermissionCode checks one permission entry of a manifest.
+// ValidatePermissionCode checks one `<Domain>:<Verbe>` scope entry
+// (`userScope`, `backends[].scopes`).
 func ValidatePermissionCode(code string) error {
 	if IsPermissionCode(code) {
 		return nil
@@ -767,15 +1081,155 @@ func isLoopbackURL(u string) bool {
 	return false
 }
 
-// ValidateUserScopeEntry checks one `userScope` entry: the same `Role:Verbe`
-// grammar as `permissions` (D15, §6.10.1). The pack validator rejects an
-// out-of-grammar scope — it is the only place where a module can declare
-// invalid qualifiers without the user seeing them.
+// ValidateUserScopeEntry checks one `userScope` entry: the `<Domain>:<Verbe>`
+// grammar (D15, §6.10.1). The pack validator rejects an out-of-grammar scope —
+// it is the only place where a module can declare invalid qualifiers without
+// the user seeing them.
 func ValidateUserScopeEntry(scope string) error {
 	if IsPermissionCode(scope) {
 		return nil
 	}
 	return errors.New(i18n.Tf("module.error.user_scope", scope))
+}
+
+// ValidateAccessEntry checks one `access` entry: a bare PascalCase role name
+// (`Admin`, `Root`…), the same shape as a permission domain (§6.5).
+func ValidateAccessEntry(role string) error {
+	if IsPermissionDomain(role) {
+		return nil
+	}
+	return errors.New(i18n.Tf("module.error.access", role))
+}
+
+// themeSchemeRE guards the optional `scheme` of a theme declaration.
+func validThemeScheme(scheme string) bool {
+	return scheme == "" || scheme == "light" || scheme == "dark"
+}
+
+// ValidateThemeDeclaration checks one `themes` entry (§6.10): an id, a token
+// map, an optional `light`/`dark` scheme and an optional dark variant.
+func ValidateThemeDeclaration(t ThemeDeclaration) error {
+	if strings.TrimSpace(t.ID) == "" {
+		return errors.New(i18n.T("module.error.theme_id"))
+	}
+	if t.Tokens == nil {
+		return errors.New(i18n.Tf("module.error.theme_tokens", t.ID))
+	}
+	if !validThemeScheme(t.Scheme) {
+		return errors.New(i18n.Tf("module.error.theme_scheme", t.ID, t.Scheme))
+	}
+	return nil
+}
+
+// ValidateAdminDeclaration checks one `admin` declaration (§6.10): role and
+// scope lists only — the first-party/Tauri gating is enforced server-side.
+func ValidateAdminDeclaration(a AdminDeclaration) error {
+	for _, role := range a.Roles {
+		if !IsPermissionDomain(role) {
+			return errors.New(i18n.Tf("module.error.admin_role", role))
+		}
+	}
+	return nil
+}
+
+// remoteIPRE matches a literal IPv4/IPv6 host, refused in `remote.origin` —
+// the origin must be a domain (§6.10).
+var remoteIPRE = regexp.MustCompile(`^\[?[0-9a-fA-F:.]+\]?$`)
+
+// ValidateRemoteDeclaration checks one `remote` declaration (§6.10): an HTTPS
+// domain origin, no literal IP.
+func ValidateRemoteDeclaration(r RemoteDeclaration) error {
+	origin := strings.TrimSpace(r.Origin)
+	if !strings.HasPrefix(origin, "https://") {
+		return errors.New(i18n.Tf("module.error.remote_origin", origin))
+	}
+	host := strings.TrimPrefix(origin, "https://")
+	if i := strings.IndexAny(host, "/?"); i >= 0 {
+		host = host[:i]
+	}
+	if host == "" || remoteIPRE.MatchString(host) {
+		return errors.New(i18n.Tf("module.error.remote_origin", origin))
+	}
+	return nil
+}
+
+// ValidateSettingsEntry checks one `settings.entries` entry (§6.10): a label
+// is mandatory, the path is optional (resolved under `/m/<slug>/`).
+func ValidateSettingsEntry(s SettingsEntry) error {
+	if strings.TrimSpace(s.Label) == "" {
+		return errors.New(i18n.T("module.error.settings_label"))
+	}
+	return nil
+}
+
+// routineIntervalMin/Max bound the period of a declarative routine job
+// (§6.10: 30 s–1 h).
+const (
+	routineIntervalMin int64 = 30000
+	routineIntervalMax int64 = 3600000
+)
+
+// ValidateRoutineDeclaration checks one `routines` entry (§6.10): the string
+// form (a compiled `Routine` singleton) is always valid; the declarative
+// descriptor requires an `id` and, when present, an `api` job with a path and
+// a bounded period.
+func ValidateRoutineDeclaration(r RoutineDeclaration) error {
+	if r.Name != "" {
+		return nil
+	}
+	if strings.TrimSpace(r.ID) == "" {
+		return errors.New(i18n.T("module.error.routine_id"))
+	}
+	if r.Job == nil {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(r.Job.Kind), "api") {
+		return errors.New(i18n.Tf("module.error.routine_job_kind", r.ID, r.Job.Kind))
+	}
+	if strings.TrimSpace(r.Job.Path) == "" {
+		return errors.New(i18n.Tf("module.error.routine_job_path", r.ID))
+	}
+	if r.Job.IntervalMs != nil && (*r.Job.IntervalMs < routineIntervalMin || *r.Job.IntervalMs > routineIntervalMax) {
+		return errors.New(i18n.Tf("module.error.routine_interval", *r.Job.IntervalMs))
+	}
+	return nil
+}
+
+// interactiveWidgetEntryRE matches an interactive-widget entry: a relative,
+// safe artifact document (`widgets/<id>.html`) — no `..`, no absolute path.
+var interactiveWidgetEntryRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_-]*\.html$`)
+
+// declarativeAggregates are the aggregation functions of a declarative widget.
+var declarativeAggregates = map[string]bool{"count": true, "sum": true, "mean": true}
+
+// ValidateDeclarativeWidget checks one `declarative.widgets` entry (§6.10):
+// an id, then either an interactive block (a safe `entry` document, an
+// optional minHeight 120–1200, a mandatory title) or a resource-backed
+// descriptor. An unknown aggregate is refused.
+func ValidateDeclarativeWidget(w DeclarativeWidget) error {
+	if strings.TrimSpace(w.ID) == "" {
+		return errors.New(i18n.T("module.error.widget_id"))
+	}
+	if w.Interactive != nil {
+		entry := strings.TrimSpace(w.Interactive.Entry)
+		if entry == "" || len(entry) > 200 || !interactiveWidgetEntryRE.MatchString(entry) {
+			return errors.New(i18n.Tf("module.error.widget_entry", w.ID, entry))
+		}
+		if w.Interactive.MinHeight != nil && (*w.Interactive.MinHeight < 120 || *w.Interactive.MinHeight > 1200) {
+			return errors.New(i18n.Tf("module.error.widget_min_height", w.ID, *w.Interactive.MinHeight))
+		}
+		if strings.TrimSpace(w.Title) == "" {
+			return errors.New(i18n.Tf("module.error.widget_title", w.ID))
+		}
+		return nil
+	}
+	if strings.TrimSpace(w.Resource) == "" {
+		return errors.New(i18n.Tf("module.error.widget_resource", w.ID))
+	}
+	if w.Aggregate != "" && !declarativeAggregates[w.Aggregate] {
+		return errors.New(i18n.Tf("module.error.widget_aggregate", w.ID, w.Aggregate))
+	}
+	return nil
 }
 
 // canonicalDomainRE matches the canonical module domain
@@ -859,11 +1313,11 @@ var ModuleCategories = map[string]bool{
 }
 
 // ValidateType checks an optional module distribution type against the
-// canonical `ModuleType` enum (`CONFIGURATION`, `EXTERNAL_URL`,
-// `WEB_APP_REMOTE`, `WEB_APP_CACHED`, `WEB_APP_LOCAL`, `REMOTE_FRONTEND`,
-// `SYSTEM`, `SERVICE`, `WIDGET`, `THEME`). The legacy `INTERNAL` / `EXTERNAL`
-// values are still accepted (migration warning at audit time). An empty type
-// is accepted (the creation default applies).
+// canonical `ModuleType` enum (`CONFIGURATION`, `WEB_APP_REMOTE`,
+// `WEB_APP_LOCAL`, `SYSTEM`, `SERVICE`, `WIDGET`, `THEME`). The legacy
+// aliases (`INTERNAL`, `EXTERNAL`, `EXTERNAL_URL`, `WEB_APP_CACHED`,
+// `REMOTE_FRONTEND`) are still accepted (migration warning at audit time). An
+// empty type is accepted (the creation default applies).
 func ValidateType(moduleType string) error {
 	if moduleType == "" || ModuleTypes[strings.ToUpper(strings.TrimSpace(moduleType))] {
 		return nil

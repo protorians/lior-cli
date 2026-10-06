@@ -1,0 +1,69 @@
+{
+  "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
+  "schemaVersion": 1,
+  "id": "system-console",
+  "domain": "system.liorian.system-console",
+  "key": "SYSTEM_CONSOLE",
+  "name": "System Console",
+  "description": "Module SYSTEM d'exemple : application d'administration first-party, Tauri uniquement, avec accès administrateur",
+  "version": "1.0.0",
+  "icon": "TerminalIcon",
+  "type": "SYSTEM",
+  "external": false,
+  "entry": "index.tsx",
+  "uri": "/system-console",
+  "platforms": {
+    "web": {
+      "supported": false,
+      "modes": []
+    },
+    "desktop": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["windows", "macos", "linux"]
+    },
+    "mobile": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["android"]
+    }
+  },
+  "compatibility": {
+    "socle": {
+      "min": "0.17.1",
+      "max": "0.17.x"
+    },
+    "api": {
+      "min": "0.27.0",
+      "max": "0.27.x"
+    }
+  },
+  "permissions": [],
+  "userScope": [],
+  "oauth": {
+    "scopes": ["openid", "profile", "email", "organizations"]
+  },
+  "capabilities": ["core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {
+    "organization": ">=1.0.0",
+    "identity": ">=1.0.0"
+  },
+  "optionalRequirements": {},
+  "admin": {
+    "roles": ["Root", "Admin"],
+    "scopes": ["system:audit", "system:maintenance"]
+  },
+  "widgets": [],
+  "routines": [],
+  "menu": {
+    "items": [
+      {
+        "label": "Console système",
+        "icon": "TerminalIcon",
+        "url": "/system-console"
+      }
+    ]
+  }
+}

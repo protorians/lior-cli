@@ -2,21 +2,10 @@
 import * as React from "react"
 import {WandSparklesIcon} from "lucide-react"
 import {ModuleWidget} from "@liorian/sdk/presentation/module-widget"
-import {useQuery} from "@tanstack/react-query"
-import {HelloWorldApiService} from "../../application/service/hello-world-api-service"
-import {useAuth} from "@liorian/sdk/infrastructure/hooks/use-auth"
+import {useHelloWorldAnalytics} from "../../application/hooks/use-hello-world-analytics";
 
 export function HelloWorldWidget() {
-    const {currentOrganization} = useAuth()
-
-    const {data: analytics, isLoading} = useQuery<any>({
-        queryKey: ['hello-world', 'widget'],
-        enabled: !!currentOrganization?.id,
-        queryFn: async () => {
-            const response = await HelloWorldApiService.getAnalytics()
-            return response.data?.data ?? response.data
-        },
-    })
+    const {data: analytics, isLoading} = useHelloWorldAnalytics();
 
     return (
         <ModuleWidget

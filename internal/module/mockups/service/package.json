@@ -1,0 +1,26 @@
+{
+  "name": "@liorian/module-acme-sync",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Module SERVICE d'exemple : routine d'arrière-plan injectée dans la liste des routines",
+  "type": "module",
+  "main": "index.tsx",
+  "module": "index.tsx",
+  "types": "./index.tsx",
+  "exports": {
+    ".": "./index.tsx",
+    "./*": "./*"
+  },
+  "dependencies": {
+    "@liorian/sdk": "workspace:*",
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.3"
+  }
+}

@@ -25,7 +25,7 @@ export function HelloWorldView() {
                             </Activity.Header>
 
                             <div className="flex flex-col gap-4 min-h-[40dvh]">
-                                <h1>Welcome to Liora Socle</h1>
+                                <HelloWorldDataGrid/>
                             </div>
                         </Activity.Content>
                     </Activity.Container>

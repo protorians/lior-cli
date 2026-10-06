@@ -40,7 +40,7 @@ func signArchive(data []byte) (sigB64, pubB64 string, err error) {
 // the manifest at the archive root, the sources under src/ and the built
 // payload under artifact/. badManifest points the entry to a missing file so
 // validation fails. The manifest follows the canonical contract
-// (compatibility, oauth, capabilities, Role:Verbe permissions, D15 userScope).
+// (compatibility, oauth, capabilities, bare permission domains, D15 userScope).
 func baseEntries(name, page string, badManifest bool) map[string]string {
 	manifest := map[string]any{
 		"schemaVersion": 1,
@@ -67,7 +67,7 @@ func baseEntries(name, page string, badManifest bool) map[string]string {
 			"socle": map[string]any{"min": "0.17.1", "max": "0.17.x"},
 			"api":   map[string]any{"min": "0.27.0", "max": "0.27.x"},
 		},
-		"permissions":          []string{"User:Get"},
+		"permissions":          []string{"Post"},
 		"oauth":                map[string]any{"scopes": []string{"openid"}},
 		"optionalRequirements": map[string]string{},
 		"requirements":         map[string]any{},

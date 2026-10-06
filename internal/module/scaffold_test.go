@@ -2,11 +2,13 @@ package module
 
 import (
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -422,51 +424,116 @@ func TestCreateFromEmbeddedMockupShipsAConformingTsConfig(t *testing.T) {
 // un module créé n'a pas de `src/core`, et son `tsconfig.json` ne déclare pas
 // cet alias — le typecheck échouait sur chaque vue scaffoldee. Les autres
 // spécificateurs sont des paquets déclarés par le `package.json` du mockup.
+// Chaque mockup de type (spec `module-types` §2) est parcouru.
 func TestEmbeddedMockupImportsOnlyResolvableSpecifiers(t *testing.T) {
-	err := fs.WalkDir(embeddedTemplates, embeddedModulePrefix, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
+	prefixes := make([]string, 0, len(embeddedTypeMockups))
+	seen := map[string]bool{}
+	for _, prefix := range embeddedTypeMockups {
+		if !seen[prefix] {
+			seen[prefix] = true
+			prefixes = append(prefixes, prefix)
 		}
-		if !isTextFile(path) {
+	}
+	sort.Strings(prefixes)
+	for _, prefix := range prefixes {
+		err := fs.WalkDir(embeddedTemplates, prefix, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			if !isTextFile(path) {
+				return nil
+			}
+			data, err := embeddedTemplates.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, match := range importSpecifiersRE.FindAllStringSubmatch(string(data), -1) {
+				if spec := match[1]; strings.HasPrefix(spec, "@/") {
+					t.Errorf("%s importe %q : alias interne au socle, hors de portée d'un module", path, spec)
+				}
+			}
 			return nil
-		}
-		data, err := embeddedTemplates.ReadFile(path)
+		})
 		if err != nil {
-			return err
+			t.Fatalf("parcours du mockup embarqué %s: %v", prefix, err)
 		}
-		for _, match := range importSpecifiersRE.FindAllStringSubmatch(string(data), -1) {
-			if spec := match[1]; strings.HasPrefix(spec, "@/") {
-				t.Errorf("%s importe %q : alias interne au socle, hors de portée d'un module", path, spec)
+	}
+}
+
+// Chaque mockup embarqué porte son identifiant d'exemple dans le manifeste :
+// le renommage lit cet `id` pour cartographier ses épellations (kebab,
+// Pascal, camel, UPPER_SNAKE…) sur le nouveau module — n'importe quel mockup
+// peut donc être écrit avec n'importe quel nom d'exemple. Chaque manifeste
+// doit aussi déclarer le type auquel son mockup est dédié.
+func TestEmbeddedTypeMockupsCarryTheirSampleIDAndType(t *testing.T) {
+	for moduleType, prefix := range embeddedTypeMockups {
+		raw, err := embeddedTemplates.ReadFile(prefix + "/" + config.ManifestFileName)
+		if err != nil {
+			t.Fatalf("mockup %s sans manifest.json: %v", prefix, err)
+		}
+		var manifest struct {
+			ID   string `json:"id"`
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			t.Fatalf("manifest.json de %s illisible: %v", prefix, err)
+		}
+		if err := ValidateName(manifest.ID); err != nil {
+			t.Errorf("mockup %s : identifiant d'exemple invalide %q: %v", prefix, manifest.ID, err)
+		}
+		if manifest.Type != moduleType {
+			t.Errorf("mockup %s : type %q, want %q", prefix, manifest.Type, moduleType)
+		}
+		// Le contrat de scaffold exige une déclaration et un tsconfig
+		// autonomes (IsModuleMockup, D6-2).
+		for _, file := range []string{config.LegacyDeclarationFileName, "tsconfig.json", "package.json"} {
+			if _, err := embeddedTemplates.ReadFile(prefix + "/" + file); err != nil {
+				t.Errorf("mockup %s sans %s: %v", prefix, file, err)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("parcours du mockup embarqué: %v", err)
 	}
 }
 
 // La façade d'API d'un module est statique (`ApiService` est abstraite à
 // instance) : un scaffold qui l'étendait ne compilait pas
-// (« does not implement inherited abstract member assertAllowed »).
+// (« does not implement inherited abstract member assertAllowed »). Chaque
+// service d'API embarqué dans les mockups de types est vérifié.
 func TestEmbeddedMockupApiServiceUsesTheStaticModuleFacade(t *testing.T) {
-	source, err := embeddedTemplates.ReadFile(embeddedModulePrefix + "/application/service/hello-world-api-service.ts")
-	if err != nil {
-		t.Fatalf("service du mockup introuvable: %v", err)
-	}
-	body := string(source)
-	if !strings.Contains(body, `from "@liorian/sdk/infrastructure/module-runtime/module-api.service"`) {
-		t.Errorf("le service du mockup doit étendre `ModuleApiService`:\n%s", body)
-	}
-	if strings.Contains(body, "extends ApiService {") {
-		t.Error("le service du mockup ne doit pas étendre `ApiService` (abstraite à instance)")
+	for _, prefix := range embeddedTypeMockups {
+		err := fs.WalkDir(embeddedTemplates, prefix+"/application", func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			if !strings.HasSuffix(path, ".ts") {
+				return nil
+			}
+			data, err := embeddedTemplates.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			body := string(data)
+			if !strings.Contains(body, "class ") {
+				return nil
+			}
+			if !strings.Contains(body, `from "@liorian/sdk/infrastructure/module-runtime/module-api.service"`) {
+				t.Errorf("le service du mockup %s (%s) doit étendre `ModuleApiService`:\n%s", prefix, path, body)
+			}
+			if strings.Contains(body, "extends ApiService {") {
+				t.Errorf("le service du mockup %s (%s) ne doit pas étendre `ApiService` (abstraite à instance)", prefix, path)
+			}
+			return nil
+		})
+		// Le mockup n'embarque pas de couche application : rien à vérifier.
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("parcours de %s/application: %v", prefix, err)
+		}
 	}
 }
 
 // `ModuleDeclarationInterface` exige `external` : sans lui, le module créé ne
 // compile pas et la régression n'apparaît qu'au premier pack.
 func TestEmbeddedMockupDeclarationDeclaresExternal(t *testing.T) {
-	source, err := embeddedTemplates.ReadFile(embeddedModulePrefix + "/" + config.LegacyDeclarationFileName)
+	source, err := embeddedTemplates.ReadFile(defaultEmbeddedMockup + "/" + config.LegacyDeclarationFileName)
 	if err != nil {
 		t.Fatalf("déclaration du mockup introuvable: %v", err)
 	}
@@ -594,6 +661,282 @@ func TestCreateFromMockupEmptyDescriptionStaysEmpty(t *testing.T) {
 	if manifest.Description != "" {
 		t.Errorf("description = %q, attendu vide (pour merge par un link)", manifest.Description)
 	}
+}
+
+// Chaque type canonique scaffolde le mockup qui porte sa surface d'injection
+// (spec `module-types` §2) : fichiers signatures, déclaration et manifeste.
+// Les types sans surface applicative ne reçoivent aucune page socle.
+func TestCreateScaffoldsTheMockupOfTheType(t *testing.T) {
+	cases := []struct {
+		moduleType  string
+		files       []string // fichiers renommés attendus dans le module
+		declaration []string // fragments attendus dans index.tsx
+		manifest    []string // fragments attendus dans manifest.json
+		page        bool     // page socle scaffoldée ?
+	}{
+		{
+			moduleType: "WEB_APP_LOCAL",
+			files: []string{
+				"application/service/blog-manager-api-service.ts",
+				"presentation/views/blog-manager.view.tsx",
+				"presentation/widgets/blog-manager.widget.tsx",
+				"presentation/providers/blog-manager-header.provider.tsx",
+			},
+			declaration: []string{"type: 'WEB_APP_LOCAL'", "blogManagerModule"},
+			manifest:    []string{`"type": "WEB_APP_LOCAL"`},
+			page:        true,
+		},
+		{
+			moduleType: "CONFIGURATION",
+			files: []string{
+				"settings.tsx",
+				"presentation/settings/blog-manager-form.tsx",
+				"application/service/blog-manager-api-service.ts",
+			},
+			declaration: []string{"type: 'CONFIGURATION'", "blogManagerModule"},
+			manifest: []string{
+				`"type": "CONFIGURATION"`,
+				`"declarative"`,
+				`"dataModel"`,
+				`"configSettings"`,
+			},
+		},
+		{
+			moduleType: "SERVICE",
+			files: []string{
+				"routines.tsx",
+				"application/service/blog-manager-api-service.ts",
+				"domain/blog-manager.interface.ts",
+			},
+			declaration: []string{"type: 'SERVICE'"},
+			manifest:    []string{`"type": "SERVICE"`},
+		},
+		{
+			moduleType: "WIDGET",
+			files: []string{
+				"presentation/widgets/blog-manager-kpi.widget.tsx",
+				"presentation/widgets/blog-manager-activity.widget.tsx",
+			},
+			declaration: []string{"type: 'WIDGET'", "'blog-manager.kpi'", "'blog-manager.activity'"},
+			manifest: []string{
+				`"type": "WIDGET"`,
+				`"widgets": ["blog-manager.kpi", "blog-manager.activity"]`,
+			},
+		},
+		{
+			moduleType:  "THEME",
+			files:       []string{"styles/blog-manager-ocean.css"},
+			declaration: []string{"type: 'THEME'"},
+			manifest: []string{
+				`"type": "THEME"`,
+				`"themes": [`,
+				`"dataTheme": "blog-manager-ocean"`,
+				`"tokens"`,
+				`"dark"`,
+			},
+		},
+		{
+			moduleType:  "WEB_APP_REMOTE",
+			declaration: []string{"type: 'WEB_APP_REMOTE'"},
+			manifest: []string{
+				`"type": "WEB_APP_REMOTE"`,
+				`"remote": {`,
+				`"origin": "https://app.acme.example"`,
+				`"wellKnown"`,
+			},
+		},
+		{
+			moduleType: "SYSTEM",
+			files: []string{
+				"presentation/views/blog-manager.view.tsx",
+				"application/service/blog-manager-api-service.ts",
+			},
+			declaration: []string{"type: 'SYSTEM'", "blogManagerModule"},
+			manifest: []string{
+				`"type": "SYSTEM"`,
+				`"admin": {`,
+				`"roles": ["Root", "Admin"]`,
+				`"supported": false`,
+			},
+			page: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.moduleType, func(t *testing.T) {
+			root := t.TempDir()
+			creator := &Creator{Root: root}
+			res, err := creator.Create(ModuleSpec{
+				Domain: CanonicalDomainPrefix(tc.moduleType) + ".example.blog-manager",
+				ID:     "blog-manager",
+				Type:   tc.moduleType,
+			})
+			if err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			moduleDir := filepath.Join(root, config.ExternalModulesDir, CanonicalDomainPrefix(tc.moduleType)+".example.blog-manager")
+			for _, rel := range tc.files {
+				if !pkg.FileExists(filepath.Join(moduleDir, filepath.FromSlash(rel))) {
+					t.Errorf("fichier du mockup %s manquant: %s", tc.moduleType, rel)
+				}
+			}
+			assertFileContains(t, filepath.Join(moduleDir, "index.tsx"), tc.declaration...)
+			assertFileContains(t, filepath.Join(moduleDir, "manifest.json"), tc.manifest...)
+
+			if tc.page && res.Page == "" {
+				t.Errorf("type %s : une page socle doit être scaffoldée", tc.moduleType)
+			}
+			if !tc.page && res.Page != "" {
+				t.Errorf("type %s : aucune page socle ne doit être scaffoldée (reçu %s)", tc.moduleType, res.Page)
+			}
+		})
+	}
+}
+
+// Le mockup dédié au type est choisi par le type effectif : les alias legacy
+// non canoniques retombent sur le mockup de référence hello-world
+// (WEB_APP_LOCAL), et EmbeddedMockupName expose le mockup sélectionné.
+func TestEmbeddedMockupSelectionFollowsTheType(t *testing.T) {
+	if got := EmbeddedMockupName("WEB_APP_LOCAL"); got != "hello-world" {
+		t.Errorf("EmbeddedMockupName(WEB_APP_LOCAL) = %q, want hello-world", got)
+	}
+	if got := EmbeddedMockupName("SERVICE"); got != "service" {
+		t.Errorf("EmbeddedMockupName(SERVICE) = %q, want service", got)
+	}
+	// Alias legacy : repli sur le mockup de référence.
+	if got := EmbeddedMockupName("REMOTE_FRONTEND"); got != "hello-world" {
+		t.Errorf("EmbeddedMockupName(REMOTE_FRONTEND) = %q, want hello-world", got)
+	}
+	if got := EmbeddedMockupName(""); got != "hello-world" {
+		t.Errorf("EmbeddedMockupName(\"\") = %q, want hello-world", got)
+	}
+
+	// Le type effectif décide, pas la valeur brute : un type vide scaffoldé
+	// porte le type par défaut WEB_APP_LOCAL.
+	root := t.TempDir()
+	if _, err := (&Creator{Root: root}).Create(ModuleSpec{Domain: "mod.example.blog-manager", ID: "blog-manager"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "mod.example.blog-manager")
+	if !pkg.FileExists(filepath.Join(moduleDir, "presentation", "views", "blog-manager.view.tsx")) {
+		t.Error("le mockup hello-world doit être scaffoldé quand le type est vide")
+	}
+}
+
+// ModuleTypeSupportsPage restreint la page socle aux types qui possèdent une
+// surface applicative : les types d'injection (CONFIGURATION, SERVICE,
+// WIDGET, THEME) et WEB_APP_REMOTE — hébergé sur l'origine distante — n'en ont
+// pas.
+func TestModuleTypeSupportsPage(t *testing.T) {
+	for _, withPage := range []string{"WEB_APP_LOCAL", "SYSTEM", "WEB_APP_CACHED", "INTERNAL", ""} {
+		if !ModuleTypeSupportsPage(withPage) {
+			t.Errorf("ModuleTypeSupportsPage(%q) = false, want true", withPage)
+		}
+	}
+	for _, withoutPage := range []string{"CONFIGURATION", "SERVICE", "WIDGET", "THEME", "WEB_APP_REMOTE"} {
+		if ModuleTypeSupportsPage(withoutPage) {
+			t.Errorf("ModuleTypeSupportsPage(%q) = true, want false", withoutPage)
+		}
+	}
+}
+
+// Le renommage lit l'identifiant d'exemple du mockup (`id` du manifeste) et
+// cartographie toutes ses épellations sur le nouveau module : un mockup
+// personnalisé peut donc être écrit avec n'importe quel nom d'exemple, pas
+// seulement hello-world.
+func TestCreateRenamesAnyMockupSampleID(t *testing.T) {
+	base := t.TempDir()
+	mockupDir := filepath.Join(base, "mockup")
+	pageMockup := filepath.Join(base, "page.tsx")
+
+	mustWrite := func(rel, data string) {
+		t.Helper()
+		p := filepath.Join(mockupDir, filepath.FromSlash(rel))
+		if err := pkg.WriteString(p, data); err != nil {
+			t.Fatalf("WriteString(%s): %v", p, err)
+		}
+	}
+	mustWrite("manifest.json", `{
+  "schemaVersion": 1,
+  "id": "acme-notes",
+  "domain": "mod.liorian.acme-notes",
+  "key": "ACME_NOTES",
+  "name": "Acme Notes",
+  "version": "1.0.0",
+  "entry": "index.tsx",
+  "uri": "/acme-notes"
+}
+`)
+	mustWrite("index.tsx", `import {ModuleDeclarationInterface} from "@liorian/sdk/domain/entities/module.interface";
+import {AcmeNotesWidget} from "./presentation/widgets/acme-notes.widget";
+
+const acmeNotesModule: ModuleDeclarationInterface = {
+    identifier: 'mod.liorian.acme-notes',
+    key: 'ACME_NOTES',
+    name: 'Acme Notes',
+    description: '',
+    uri: '/acme-notes',
+    widgets: {
+        notes: AcmeNotesWidget
+    },
+}
+
+export default acmeNotesModule
+`)
+	mustWrite("presentation/widgets/acme-notes.widget.tsx", `"use client"
+export function AcmeNotesWidget() {
+    const key = ['acme-notes', 'widget'];
+    return null;
+}
+`)
+	mustWrite("application/service/acme-notes-api-service.ts", `import {AcmeNotesInterface} from "../../domain/acme-notes.interface";
+
+export class AcmeNotesApiService {
+    static async getAll() {
+        return await this.get('/acme-notes/');
+    }
+}
+`)
+	mustWrite("domain/acme-notes.interface.ts", `export interface AcmeNotesInterface {
+    id: string;
+}
+`)
+	if err := pkg.WriteString(pageMockup, `import {AcmeNotesView} from "@/library/modules/acme-notes/presentation/views/acme-notes.view";
+
+export default function AcmeNotesPage() {
+    return <AcmeNotesView/>;
+}
+`); err != nil {
+		t.Fatalf("WriteString(page): %v", err)
+	}
+
+	root := t.TempDir()
+	creator := &Creator{Root: root, MockupDir: mockupDir, PageMockup: pageMockup}
+	if _, err := creator.Create(ModuleSpec{Domain: "com.example.blog-manager", ID: "blog-manager"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "com.example.blog-manager")
+	for _, rel := range []string{
+		"presentation/widgets/blog-manager.widget.tsx",
+		"application/service/blog-manager-api-service.ts",
+		"domain/blog-manager.interface.ts",
+	} {
+		if !pkg.FileExists(filepath.Join(moduleDir, filepath.FromSlash(rel))) {
+			t.Errorf("fichier renommé manquant: %s", rel)
+		}
+	}
+	assertFileContains(t, filepath.Join(moduleDir, "index.tsx"),
+		"blogManagerModule",
+		"identifier: 'com.example.blog-manager'",
+		"key: 'BLOG_MANAGER'",
+		"name: 'Blog Manager'",
+		`from "./presentation/widgets/blog-manager.widget"`,
+	)
+	assertFileContains(t, filepath.Join(moduleDir, "manifest.json"),
+		`"key": "BLOG_MANAGER"`,
+	)
 }
 
 func assertFileContains(t *testing.T, path string, fragments ...string) {

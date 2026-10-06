@@ -38,7 +38,8 @@
       "max": "0.27.x"
     }
   },
-  "permissions": ["User:Get", "Editor:Post", "Editor:Put", "Admin:Delete"],
+  "permissions": [],
+  "userScope": [],
   "oauth": {
     "scopes": ["openid", "profile", "email", "organizations"]
   },
@@ -53,6 +54,16 @@
   "widgets": ["analytics"],
   "routines": ["helloWorldAnalyticsRoutine"],
   "providers": ["layout"],
+  "configSettings": [
+    {
+      "key": "greeting",
+      "label": "Salutation personnalisée",
+      "description": "Texte affiché par le widget du module",
+      "type": "TEXT",
+      "placeholder": "Bonjour le monde !",
+      "defaultValue": "Bonjour"
+    }
+  ],
   "menu": {
     "items": [
       {

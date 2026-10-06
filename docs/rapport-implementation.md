@@ -476,6 +476,51 @@ ont une implémentation (parfois partielle). Le reste des FR (001→024) est cou
   `ErrorBar` garde un blanc sur fond coloré (contraste, pas une couleur de
   palette).
 
+### 4.5 Itération du 2026-10-06 — alignement sur le schéma canonique des modules (workspace)
+
+Source de vérité : `packages/sdk/schemas/module.schema.json` + `docs/modules/module-manifest.md`
+(livrables module-types E-MT-1..10 du workspace, 2026-10-03).
+
+- **Grammaire des `permissions` (§6.5)** — la forme `<Rôle>:<Verbe>` est **supprimée** du schéma :
+  `permissions` n'expose plus que des **domaines nus PascalCase** (`Post`, `PostCategory` — le
+  serveur compose `KEY:Domaine` lui-même, RBAC namespacé). `IsPermissionDomain` s'ajoute à
+  `IsPermissionCode` ; la seconde ne vise plus que `userScope` et `backends[].scopes`, qui
+  conservent la grammaire `<Domaine>:<Verbe>`. `NewManifest` et le mockup embarqué passent à
+  `permissions: []` + `userScope: []` (déclaration explicite « aucune permission attribuable » /
+  « aucune donnée utilisateur »).
+- **`userScope` réellement obligatoire** — passage en `UserScopeList` (marshal `nil` → `[]`) :
+  la liste vide ne peut plus être perdue à la réécriture du manifeste (`omitempty` la
+  supprimait, le schéma l'exige).
+- **Nouvelles sections du schéma** modélisées et validées (WARNING à l'audit quand déclarées) :
+  `access` (rôles nus ouvrant le module), `themes` (palettes de tokens d'un module `THEME` :
+  id + carte de tokens, `scheme` light/dark, variante `dark`), `admin` (privilèges SYSTEM :
+  rôles + scopes ; WARNING si déclaré hors `SYSTEM`), `remote` (origine HTTPS de domaine d'un
+  `WEB_APP_REMOTE`, IP littérale refusée ; WARNING hors type), `settings.entries` (menu de
+  paramétrage d'un `CONFIGURATION` tiers, label requis ; WARNING hors type), `routines` en
+  **deux formes** (nom de singleton ou descripteur déclaratif `{id, label?, persist?, trigger?,
+  job: {kind: "api", path, intervalMs 30 s–1 h}}`), `declarative.widgets` sous la forme
+  canonique `{id, resource?, aggregate?, field?, label?, title?, variant?, interactive?}` —
+  bloc `interactive` : `entry` sûr (`widgets/<id>.html`, pas de `..`/absolu, ≤ 200 car.),
+  `minHeight` 120–1200, `title` requis ; hors bloc : `resource` requis, `aggregate`
+  count/sum/mean. La section `declarative` préserve ses clés inconnues (round-trip), et
+  l'indice legacy `kind` des widgets `CONFIGURATION` est conservé.
+- **Capacités** — règle d'audit de la grammaire des identifiants Tauri (`core:default`,
+  `notification:default`, …) ; les drapeaux booléens legacy (`needsNetwork`…) restent lus
+  (normalisés) mais signalés.
+- **Types legacy élargis** — `EXTERNAL_URL`, `WEB_APP_CACHED`, `REMOTE_FRONTEND` rejoignent
+  `INTERNAL`/`EXTERNAL` comme alias dépréciés (WARNING, enum canonique à 7 valeurs) ; `repair`
+  migre `EXTERNAL_URL`/`REMOTE_FRONTEND` → `WEB_APP_REMOTE`, `WEB_APP_CACHED` → `WEB_APP_LOCAL`.
+- **`repair` permissions** — la migration s'inverse : `<Rôle>:<Verbe>` se réduit à son domaine,
+  `<ressource>.<action>` au PascalCase de la ressource (`user.read` → `User`) ; les codes non
+  résolubles restent explicités à l'éditeur (jamais supprimés).
+- **i18n** — `module.error.permission`/`backend_scope`/`user_scope` reformulés
+  (`<Domaine>:<Verbe>`), dix-sept clés ajoutées pour les nouvelles validations ; mockup :
+  `type: 'WEB_APP_LOCAL'` dans la déclaration (fin de l'alias legacy `INTERNAL`).
+- **Docs** — `liora.md` (en-tête, exemple de manifeste scaffoldé, tableau des règles §5.10) et
+  README alignés sur la grammaire ; `docs/plan-mise-a-niveau.md` conservé comme journal
+  historique des itérations G-02/G-07.
+
+
 ---
 
 ## 5. Roadmap — alignement spec (§13) et prochaines itérations suggérées

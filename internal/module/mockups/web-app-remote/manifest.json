@@ -1,0 +1,69 @@
+{
+  "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
+  "schemaVersion": 1,
+  "id": "acme-remote",
+  "domain": "mod.liorian.acme-remote",
+  "key": "ACME_REMOTE",
+  "name": "Acme Remote",
+  "description": "Module WEB_APP_REMOTE d'exemple : application hébergée à distance, chargée en iframe sandboxée depuis l'origine enregistrée",
+  "version": "1.0.0",
+  "icon": "GlobeIcon",
+  "type": "WEB_APP_REMOTE",
+  "external": false,
+  "entry": "index.tsx",
+  "uri": "/acme-remote",
+  "platforms": {
+    "web": {
+      "supported": true,
+      "modes": ["web"]
+    },
+    "desktop": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["windows", "macos", "linux"]
+    },
+    "mobile": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["android"]
+    }
+  },
+  "compatibility": {
+    "socle": {
+      "min": "0.17.1",
+      "max": "0.17.x"
+    },
+    "api": {
+      "min": "0.27.0",
+      "max": "0.27.x"
+    }
+  },
+  "permissions": [],
+  "userScope": ["Contact:Get"],
+  "oauth": {
+    "scopes": ["openid", "profile", "email", "organizations"]
+  },
+  "capabilities": ["core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {},
+  "optionalRequirements": {},
+  "remote": {
+    "origin": "https://app.acme.example",
+    "paths": ["/modules/acme-remote/*"],
+    "backends": ["https://api.acme.example"],
+    "scopes": ["Contact:Get"],
+    "wellKnown": "/.well-known/liorian-module.json"
+  },
+  "widgets": [],
+  "routines": [],
+  "menu": {
+    "items": [
+      {
+        "label": "Acme Remote",
+        "icon": "GlobeIcon",
+        "url": "/acme-remote"
+      }
+    ]
+  }
+}

@@ -5,6 +5,99 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.36.0] - 2026-10-06
+
+### Added
+- **Mockup dédié par type de module (spec `module-types` §2)** — `liora create module` demande
+  d'abord le type puis scaffold le mockup de référence qui porte sa surface d'injection :
+  `configuration` (contrat `settings.tsx`, pages déclaratives et `dataModel`), `service`
+  (contrat `routines.tsx`, routine persistante par défaut avec `trigger` documenté), `widget`
+  (composants de dashboard clés en `<module>.<widget>`), `theme` (palettes de tokens
+  `themes[]` whitelistées + palette CSS first-party), `web-app-remote` (section `remote` du
+  manifeste, protocole d'enregistrement documenté), `hello-world` (application
+  `WEB_APP_LOCAL` complète) et `system` (console d'administration Tauri, section `admin`,
+  `platforms.web` non supporté). Le README généré documente l'objectif du type et ses
+  contrats first-party vs tiers.
+
+### Changed
+- **Page socle conditionnée au type** — les types d'injection (`CONFIGURATION`, `SERVICE`,
+  `WIDGET`, `THEME`) et `WEB_APP_REMOTE` (hébergé sur l'origine distante) ne scaffoldent plus
+  de page `src/app/<url>/page.tsx` : leur `uri` reste l'adresse de runtime résolue par le
+  socle ; la question « URL de la page » n'est plus posée au wizard pour ces types.
+- **Menu des types canoniques uniquement** — le wizard ne propose plus que les 7 valeurs de
+  l'enum canonique avec leur surface d'injection (les alias legacy
+  `EXTERNAL_URL`/`WEB_APP_CACHED`/`REMOTE_FRONTEND` restent acceptés via `--type` mais ne
+  sont plus offerts) ; le mockup sélectionné est signalé dans le récapitulatif de création.
+- **Renommage généralisé des mockups** — le scaffold lit l'identifiant d'exemple du mockup
+  (`id` de son `manifest.json`) et cartographie toutes ses épellations sur le nouveau module :
+  un mockup personnalisé (`--mockup` / `LIORIAN_MODULE_MOCKUP`) peut donc porter n'importe
+  quel nom d'exemple, pas seulement hello-world.
+- **Mockup hello-world enrichi** — la vue principale rend la DataGrid (elle était importée
+  mais jamais montée), la logique d'analytique est extraite dans une hook
+  `application/hooks/` partagée par le widget, le manifeste et la déclaration exposent un
+  exemple de `configSettings`, et la routine documente l'option `trigger`
+  (spec `service-routine` §3.1).
+
+## [v0.35.0] - 2026-10-06
+
+### Changed
+- **Grammaire des `permissions` (§6.5)** — le schéma canonique supprime la forme
+  `<Rôle>:<Verbe>` : `permissions` n'expose plus que des **domaines nus PascalCase**
+  (`Post`, `PostCategory`), que le serveur compose avec la clé du module pour écrire le rôle
+  namespacé du RBAC (`BLOGGING:Post`). La CLI lit les deux formes ; les couples legacy et les
+  codes pointus (`dashboard.read`) déclenchent un WARNING d'audit et sont migrés par
+  `liora repair` (couple → domaine, code pointu → PascalCase de la ressource, codes non
+  résolubles explicités à l'éditeur). `userScope` et `backends[].scopes` conservent la
+  grammaire `<Domaine>:<Verbe>`.
+- **`userScope` réellement obligatoire (D15)** — la liste vide est désormais écrite
+  explicitement (`"userScope": []`) et ne peut plus être perdue à la réécriture d'un
+  manifeste ; `liora create module` et le mockup embarqué scaffoldent `permissions: []` +
+  `userScope: []`.
+- **Types legacy élargis** — `EXTERNAL_URL`, `WEB_APP_CACHED` et `REMOTE_FRONTEND` rejoignent
+  `INTERNAL`/`EXTERNAL` comme alias dépréciés de l'enum canonique à 7 valeurs
+  (`CONFIGURATION`, `WEB_APP_REMOTE`, `WEB_APP_LOCAL`, `SYSTEM`, `SERVICE`, `WIDGET`,
+  `THEME`) : WARNING à l'audit, migration automatique par `repair`
+  (`EXTERNAL_URL`/`REMOTE_FRONTEND` → `WEB_APP_REMOTE`, `WEB_APP_CACHED` → `WEB_APP_LOCAL`).
+- **Capacités** — nouvelle règle d'audit de la grammaire des identifiants Tauri
+  (`core:default`, `notification:default`, `core:<plugin>:<permission>`) ; les drapeaux
+  booléens legacy restent lus mais sont signalés.
+- **Mockup hello-world** — la déclaration `index.tsx` passe de `type: 'INTERNAL'` (alias
+  legacy) à `type: 'WEB_APP_LOCAL'`.
+
+### Added
+- **Sections déclaratives du schéma canonique (§6.10)** — modélisées, préservées au
+  round-trip et auditées (WARNING quand présentes) :
+  - `access` — rôles nus dont le niveau ouvre le module ;
+  - `themes` — palettes de tokens d'un module `THEME` (id + carte de tokens requis, `scheme`
+    `light`/`dark`, variante `dark`) ; whitelist de tokens et contrastes contrôlés côté
+    serveur ;
+  - `admin` — privilèges d'un module `SYSTEM` (rôles + scopes ; WARNING si déclaré sur un
+    autre type) ;
+  - `remote` — origine HTTPS de domaine d'un module `WEB_APP_REMOTE` (IP littérale refusée ;
+    WARNING hors type) ;
+  - `settings.entries` — menu de paramétrage d'un module `CONFIGURATION` tiers (label
+    requis ; WARNING hors type) ;
+  - `routines` en **deux formes** — nom d'un singleton `Routine` compilé ou descripteur
+    déclaratif `{id, label?, persist?, trigger?, job: {kind: "api", path, intervalMs}}`
+    d'un module tiers `SERVICE` (période bornée 30 s–1 h) ;
+  - `declarative.widgets` sous la forme canonique `{id, resource?, aggregate?, field?,
+    label?, title?, variant?, interactive?}` — bloc `interactive` : `entry` sûr
+    (`widgets/<id>.html`, pas de `..` ni d'absolu, ≤ 200 caractères), `minHeight`
+    120–1200 px, `title` requis ; hors bloc : `resource` requis, `aggregate`
+    `count`/`sum`/`mean`. La section `declarative` préserve ses clés inconnues et l'indice
+    legacy `kind` des widgets `CONFIGURATION`.
+- **i18n** — dix-sept clés de validation (`module.error.theme_*`, `admin_role`,
+  `remote_origin`, `settings_label`, `widget_*`, `routine_*`, `access`) en `fr-FR` et
+  `en-US` ; messages `permission`/`backend_scope`/`user_scope` reformulés autour de
+  `<Domaine>:<Verbe>`.
+
+### Docs
+- **`docs/specs/liora.md`** — en-tête, exemple de manifeste scaffoldé et tableau des règles
+  d'audit (§5.10) alignés sur la grammaire des domaines nus et les nouvelles sections.
+- **README** — la ligne `create module` décrit le mockup avec `permissions` en domaines nus.
+- **`docs/rapport-implementation.md`** — itération du 2026-10-06 (schéma canonique des
+  modules, livrables module-types E-MT-1..10 du workspace).
+
 ## [v0.34.0] - 2026-10-02
 
 ### Added

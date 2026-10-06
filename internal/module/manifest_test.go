@@ -236,7 +236,7 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 
 	m := NewManifest("billing", "")
 	m.Widgets = []string{"analytics"}
-	m.Routines = []string{"billingAnalyticsRoutine"}
+	m.Routines = []RoutineDeclaration{{Name: "billingAnalyticsRoutine"}}
 	m.Providers = []string{"layout"}
 	m.Menu.Items = []MenuItem{
 		{Label: "Factures", Icon: "FileIcon", URL: "/billing/invoices"},
@@ -252,7 +252,7 @@ func TestManifestDeclarationsRoundTrip(t *testing.T) {
 	if len(loaded.Widgets) != 1 || loaded.Widgets[0] != "analytics" {
 		t.Errorf("Widgets non conformes: %+v", loaded.Widgets)
 	}
-	if len(loaded.Routines) != 1 || loaded.Routines[0] != "billingAnalyticsRoutine" {
+	if len(loaded.Routines) != 1 || loaded.Routines[0].Name != "billingAnalyticsRoutine" {
 		t.Errorf("Routines non conformes: %+v", loaded.Routines)
 	}
 	if len(loaded.Providers) != 1 || loaded.Providers[0] != "layout" {
@@ -599,5 +599,225 @@ func TestValidateTypeCanonical(t *testing.T) {
 	}
 	if !IsLegacyModuleType("EXTERNAL") || IsLegacyModuleType("WEB_APP_LOCAL") {
 		t.Error("legacy type detection is wrong")
+	}
+}
+
+func TestPermissionDomains(t *testing.T) {
+	// The canonical `permissions` grammar (§6.5): bare PascalCase permission
+	// domains, the server composing `KEY:Domain` itself.
+	for _, ok := range []string{"Post", "PostCategory", "User", "CalendarEvent", "A"} {
+		if !IsPermissionDomain(ok) {
+			t.Errorf("IsPermissionDomain(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "Post:Read", "user.read", "Post Category", "1Post", "Post-Category"} {
+		if IsPermissionDomain(bad) {
+			t.Errorf("IsPermissionDomain(%q) = true, want false", bad)
+		}
+	}
+}
+
+func TestNewManifestPermissionsAreBareDomains(t *testing.T) {
+	m := NewManifest("blog-manager", "")
+	if !allPermissionDomains(m.Permissions) {
+		t.Errorf("Permissions = %v, want bare permission domains (empty is valid)", m.Permissions)
+	}
+}
+
+func TestRoutineDeclarationsBothForms(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/manifest.json"
+
+	interval := int64(60000)
+	m := NewManifest("billing", "")
+	m.Routines = []RoutineDeclaration{
+		{Name: "billingAnalyticsRoutine"},
+		{ID: "sync", Label: "Synchronisation", Job: &RoutineJob{
+			Kind: "api", Method: "POST", Path: "/internal/sync", IntervalMs: &interval,
+		}},
+	}
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+	if len(loaded.Routines) != 2 {
+		t.Fatalf("Routines = %+v, want 2 entries", loaded.Routines)
+	}
+	if loaded.Routines[0].Name != "billingAnalyticsRoutine" || loaded.Routines[0].ID != "" {
+		t.Errorf("string form lost: %+v", loaded.Routines[0])
+	}
+	r := loaded.Routines[1]
+	if r.Name != "" || r.ID != "sync" || r.Label != "Synchronisation" || r.Job == nil ||
+		r.Job.Kind != "api" || r.Job.Method != "POST" || r.Job.Path != "/internal/sync" ||
+		r.Job.IntervalMs == nil || *r.Job.IntervalMs != 60000 {
+		t.Errorf("declarative descriptor lost: %+v", r)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"billingAnalyticsRoutine"`) {
+		t.Errorf("the string form must round-trip as a plain JSON string:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), `"kind": "api"`) {
+		t.Errorf("the descriptor form must round-trip as a JSON object:\n%s", raw)
+	}
+}
+
+func TestUserScopeEmptyRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/manifest.json"
+	m := NewManifest("billing", "")
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), `"userScope": []`) {
+		t.Errorf("D15: the empty userScope must be written explicitly:\n%s", raw)
+	}
+	loaded, err := LoadManifest(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.UserScope == nil || len(loaded.UserScope) != 0 {
+		t.Errorf("UserScope = %#v, want an explicit empty list", loaded.UserScope)
+	}
+}
+
+func TestNewSectionsValidation(t *testing.T) {
+	interval := int64(60000)
+
+	if err := ValidateThemeDeclaration(ThemeDeclaration{ID: "acme-ocean", Tokens: map[string]string{"background": "0 0% 100%"}}); err != nil {
+		t.Errorf("valid theme refused: %v", err)
+	}
+	for _, bad := range []ThemeDeclaration{
+		{ID: "", Tokens: map[string]string{}},
+		{ID: "no-tokens"},
+		{ID: "bad-scheme", Tokens: map[string]string{}, Scheme: "blue"},
+	} {
+		if err := ValidateThemeDeclaration(bad); err == nil {
+			t.Errorf("theme %+v must be refused", bad)
+		}
+	}
+
+	if err := ValidateAdminDeclaration(AdminDeclaration{Roles: []string{"Root", "Admin"}, Scopes: []string{"*"}}); err != nil {
+		t.Errorf("valid admin refused: %v", err)
+	}
+	if err := ValidateAdminDeclaration(AdminDeclaration{Roles: []string{"1Root"}}); err == nil {
+		t.Error("an admin role must be an identifier (a leading digit is refused)")
+	}
+
+	if err := ValidateRemoteDeclaration(RemoteDeclaration{Origin: "https://app.acme.com"}); err != nil {
+		t.Errorf("valid remote refused: %v", err)
+	}
+	for _, origin := range []string{"http://app.acme.com", "https://192.168.1.10", ""} {
+		if err := ValidateRemoteDeclaration(RemoteDeclaration{Origin: origin}); err == nil {
+			t.Errorf("remote origin %q must be refused", origin)
+		}
+	}
+
+	if err := ValidateSettingsEntry(SettingsEntry{Label: "Connexion", Path: "settings/api"}); err != nil {
+		t.Errorf("valid settings entry refused: %v", err)
+	}
+	if err := ValidateSettingsEntry(SettingsEntry{Path: "settings/api"}); err == nil {
+		t.Error("a settings entry without label must be refused")
+	}
+
+	minHeight := int64(240)
+	if err := ValidateDeclarativeWidget(DeclarativeWidget{ID: "kpi", Resource: "sales", Aggregate: "sum"}); err != nil {
+		t.Errorf("valid native widget refused: %v", err)
+	}
+	if err := ValidateDeclarativeWidget(DeclarativeWidget{
+		ID: "grid", Title: "Grille",
+		Interactive: &InteractiveWidget{Entry: "widgets/grid.html", MinHeight: &minHeight},
+	}); err != nil {
+		t.Errorf("valid interactive widget refused: %v", err)
+	}
+	for _, bad := range []DeclarativeWidget{
+		{Resource: "sales"},
+		{ID: "no-resource"},
+		{ID: "no-title", Interactive: &InteractiveWidget{Entry: "widgets/grid.html"}},
+		{ID: "bad-entry", Title: "Grille", Interactive: &InteractiveWidget{Entry: "../evil.html"}},
+		{ID: "bad-ext", Title: "Grille", Interactive: &InteractiveWidget{Entry: "widgets/grid.css"}},
+		{ID: "low", Title: "Grille", Interactive: &InteractiveWidget{Entry: "w.html", MinHeight: &([]int64{100}[0])}},
+		{ID: "bad-aggregate", Resource: "sales", Aggregate: "avg"},
+	} {
+		if err := ValidateDeclarativeWidget(bad); err == nil {
+			t.Errorf("widget %+v must be refused", bad)
+		}
+	}
+
+	if err := ValidateRoutineDeclaration(RoutineDeclaration{Name: "myRoutine"}); err != nil {
+		t.Errorf("string routine refused: %v", err)
+	}
+	if err := ValidateRoutineDeclaration(RoutineDeclaration{ID: "sync", Job: &RoutineJob{Kind: "api", Path: "/sync", IntervalMs: &interval}}); err != nil {
+		t.Errorf("valid descriptor refused: %v", err)
+	}
+	for _, bad := range []RoutineDeclaration{
+		{Job: &RoutineJob{Kind: "api", Path: "/sync"}},
+		{ID: "cron", Job: &RoutineJob{Kind: "cron", Path: "/sync"}},
+		{ID: "no-path", Job: &RoutineJob{Kind: "api"}},
+		{ID: "short", Job: &RoutineJob{Kind: "api", Path: "/sync", IntervalMs: &([]int64{500}[0])}},
+		{ID: "long", Job: &RoutineJob{Kind: "api", Path: "/sync", IntervalMs: &([]int64{4000000}[0])}},
+	} {
+		if err := ValidateRoutineDeclaration(bad); err == nil {
+			t.Errorf("routine %+v must be refused", bad)
+		}
+	}
+}
+
+func TestNewSectionsRoundTripNoLoss(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/manifest.json"
+
+	m := NewManifest("kit", "")
+	m.Type = "WEB_APP_LOCAL"
+	m.Themes = []ThemeDeclaration{{
+		ID: "ocean", Label: "Océan", Scheme: "light",
+		Tokens: map[string]string{"background": "0 0% 100%"},
+		Dark:   &ThemeVariant{Tokens: map[string]string{"background": "222 47% 11%"}},
+	}}
+	m.Admin = &AdminDeclaration{Roles: []string{"Root"}, Scopes: []string{"system:impersonate"}}
+	m.Remote = &RemoteDeclaration{Origin: "https://app.acme.com", Paths: []string{"/dashboard"}, WellKnown: "/.well-known/liorian"}
+	m.Settings = &SettingsDeclaration{Entries: []SettingsEntry{{Label: "Connexion", Description: "Clé d'API", Path: "settings/api"}}}
+	m.Declarative = &DeclarativeConfig{
+		Widgets: []DeclarativeWidget{{
+			ID: "grid", Title: "Grille", Variant: "widget:table",
+			Interactive: &InteractiveWidget{Entry: "widgets/grid.html"},
+		}},
+		Extra: map[string]json.RawMessage{"customKey": json.RawMessage(`{"kept": true}`)},
+	}
+	if err := m.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := LoadManifest(path)
+	if err != nil {
+		t.Fatalf("LoadManifest: %v", err)
+	}
+
+	if len(loaded.Themes) != 1 || loaded.Themes[0].ID != "ocean" ||
+		loaded.Themes[0].Tokens["background"] != "0 0% 100%" ||
+		loaded.Themes[0].Dark == nil || loaded.Themes[0].Dark.Tokens["background"] != "222 47% 11%" {
+		t.Errorf("themes lost: %+v", loaded.Themes)
+	}
+	if loaded.Admin == nil || len(loaded.Admin.Roles) != 1 || loaded.Admin.Roles[0] != "Root" {
+		t.Errorf("admin lost: %+v", loaded.Admin)
+	}
+	if loaded.Remote == nil || loaded.Remote.Origin != "https://app.acme.com" || loaded.Remote.WellKnown != "/.well-known/liorian" {
+		t.Errorf("remote lost: %+v", loaded.Remote)
+	}
+	if loaded.Settings == nil || len(loaded.Settings.Entries) != 1 || loaded.Settings.Entries[0].Label != "Connexion" {
+		t.Errorf("settings lost: %+v", loaded.Settings)
+	}
+	d := loaded.Declarative
+	if d == nil || len(d.Widgets) != 1 || d.Widgets[0].Interactive == nil ||
+		d.Widgets[0].Interactive.Entry != "widgets/grid.html" || d.Widgets[0].Variant != "widget:table" {
+		t.Errorf("declarative widgets lost: %+v", d)
+	}
+	if d.Extra == nil {
+		t.Errorf("the unknown keys of the declarative section must be preserved: %+v", d)
 	}
 }

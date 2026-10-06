@@ -1,0 +1,138 @@
+{
+  "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
+  "schemaVersion": 1,
+  "id": "acme-theme",
+  "domain": "theme.liorian.acme-theme",
+  "key": "ACME_THEME",
+  "name": "Acme Theme",
+  "description": "Module THEME d'exemple : palettes de tokens injectées dans la liste des thèmes",
+  "version": "1.0.0",
+  "icon": "PaletteIcon",
+  "type": "THEME",
+  "external": false,
+  "entry": "index.tsx",
+  "uri": "/acme-theme",
+  "platforms": {
+    "web": {
+      "supported": true,
+      "modes": ["web"]
+    },
+    "desktop": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["windows", "macos", "linux"]
+    },
+    "mobile": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["android"]
+    }
+  },
+  "compatibility": {
+    "socle": {
+      "min": "0.17.1",
+      "max": "0.17.x"
+    },
+    "api": {
+      "min": "0.27.0",
+      "max": "0.27.x"
+    }
+  },
+  "permissions": [],
+  "userScope": [],
+  "oauth": {
+    "scopes": ["openid", "profile", "email", "organizations"]
+  },
+  "capabilities": ["core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {},
+  "optionalRequirements": {},
+  "themes": [
+    {
+      "id": "acme-theme-ocean",
+      "label": "Océan",
+      "description": "Palette bleue Acme Theme, claire et sombre",
+      "dataTheme": "acme-theme-ocean",
+      "swatches": ["#f8fafc", "#0ea5e9", "#0c4a6e"],
+      "tokens": {
+        "background": "210 40% 98%",
+        "foreground": "222.2 47.4% 11.2%",
+        "card": "0 0% 100%",
+        "card-foreground": "222.2 47.4% 11.2%",
+        "popover": "0 0% 100%",
+        "popover-foreground": "222.2 47.4% 11.2%",
+        "primary": "199 89% 48%",
+        "primary-foreground": "210 40% 98%",
+        "secondary": "214 32% 91%",
+        "secondary-foreground": "222.2 47.4% 11.2%",
+        "muted": "210 40% 96%",
+        "muted-foreground": "215.4 16.3% 46.9%",
+        "accent": "199 89% 48%",
+        "accent-foreground": "210 40% 98%",
+        "destructive": "0 84.2% 60.2%",
+        "destructive-foreground": "210 40% 98%",
+        "border": "214.3 31.8% 91.4%",
+        "input": "214.3 31.8% 91.4%",
+        "ring": "199 89% 48%",
+        "chart-1": "199 89% 48%",
+        "chart-2": "217 91% 60%",
+        "chart-3": "199 89% 66%",
+        "chart-4": "215 28% 65%",
+        "chart-5": "222 47% 25%",
+        "sidebar": "210 40% 96%",
+        "sidebar-foreground": "222.2 47.4% 11.2%",
+        "sidebar-primary": "199 89% 48%",
+        "sidebar-primary-foreground": "210 40% 98%",
+        "sidebar-accent": "214 32% 91%",
+        "sidebar-accent-foreground": "222.2 47.4% 11.2%",
+        "sidebar-border": "214.3 31.8% 91.4%",
+        "sidebar-ring": "199 89% 48%",
+        "radius": "0.75rem"
+      },
+      "dark": {
+        "swatches": ["#020617", "#0ea5e9", "#7dd3fc"],
+        "tokens": {
+          "background": "222.2 84% 4.9%",
+          "foreground": "210 40% 98%",
+          "card": "222.2 47% 11.2%",
+          "card-foreground": "210 40% 98%",
+          "popover": "222.2 47% 11.2%",
+          "popover-foreground": "210 40% 98%",
+          "primary": "199 89% 48%",
+          "primary-foreground": "222.2 47.4% 11.2%",
+          "secondary": "217 33% 17%",
+          "secondary-foreground": "210 40% 98%",
+          "muted": "217 33% 17%",
+          "muted-foreground": "215 20% 65%",
+          "accent": "199 89% 48%",
+          "accent-foreground": "222.2 47.4% 11.2%",
+          "destructive": "0 72% 51%",
+          "destructive-foreground": "210 40% 98%",
+          "border": "217 33% 17%",
+          "input": "217 33% 17%",
+          "ring": "199 89% 48%",
+          "chart-1": "199 89% 48%",
+          "chart-2": "217 91% 60%",
+          "chart-3": "199 89% 66%",
+          "chart-4": "215 28% 65%",
+          "chart-5": "210 40% 98%",
+          "sidebar": "222.2 47% 11.2%",
+          "sidebar-foreground": "210 40% 98%",
+          "sidebar-primary": "199 89% 48%",
+          "sidebar-primary-foreground": "222.2 47.4% 11.2%",
+          "sidebar-accent": "217 33% 17%",
+          "sidebar-accent-foreground": "210 40% 98%",
+          "sidebar-border": "217 33% 17%",
+          "sidebar-ring": "199 89% 48%",
+          "radius": "0.75rem"
+        }
+      }
+    }
+  ],
+  "widgets": [],
+  "routines": [],
+  "menu": {
+    "items": []
+  }
+}

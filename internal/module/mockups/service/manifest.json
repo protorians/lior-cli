@@ -1,0 +1,58 @@
+{
+  "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
+  "schemaVersion": 1,
+  "id": "acme-sync",
+  "domain": "service.liorian.acme-sync",
+  "key": "ACME_SYNC",
+  "name": "Acme Sync",
+  "description": "Module SERVICE d'exemple : routine d'arrière-plan injectée dans la liste des routines",
+  "version": "1.0.0",
+  "icon": "RefreshCwIcon",
+  "type": "SERVICE",
+  "external": false,
+  "entry": "index.tsx",
+  "uri": "/acme-sync",
+  "platforms": {
+    "web": {
+      "supported": true,
+      "modes": ["web"]
+    },
+    "desktop": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["windows", "macos", "linux"]
+    },
+    "mobile": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["android"]
+    }
+  },
+  "compatibility": {
+    "socle": {
+      "min": "0.17.1",
+      "max": "0.17.x"
+    },
+    "api": {
+      "min": "0.27.0",
+      "max": "0.27.x"
+    }
+  },
+  "permissions": [],
+  "userScope": [],
+  "oauth": {
+    "scopes": ["openid", "profile", "email", "organizations"]
+  },
+  "capabilities": ["core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {
+    "organization": ">=1.0.0"
+  },
+  "optionalRequirements": {},
+  "widgets": [],
+  "routines": [],
+  "menu": {
+    "items": []
+  }
+}

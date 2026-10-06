@@ -419,3 +419,141 @@ func TestLinkedModulesStateFileIgnoresTokenFormat(t *testing.T) {
 		t.Errorf("aucun module ne doit être lié après unlink, obtenu: %v", linked)
 	}
 }
+
+// The new declarative sections of the canonical schema (§6.10) are audited:
+// valid entries stay silent, invalid ones warn, and a section declared on a
+// module type it does not apply to is reported as dead weight.
+func TestValidateModuleNewSections(t *testing.T) {
+	raw := `{
+  "schemaVersion": 1,
+  "id": "kit",
+  "domain": "mod.liorian.kit",
+  "key": "KIT",
+  "name": "Kit",
+  "description": "kit module",
+  "version": "1.0.0",
+  "icon": "PuzzleIcon",
+  "type": "WEB_APP_LOCAL",
+  "entry": "index.tsx",
+  "uri": "/kit",
+  "token": "3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
+  "platforms": {
+    "web": {"supported": true, "modes": ["web"]},
+    "desktop": {"supported": false},
+    "mobile": {"supported": false}
+  },
+  "compatibility": {"socle": {"min": "0.17.1", "max": "0.17.x"}, "api": {"min": "0.27.0", "max": "0.27.x"}},
+  "permissions": ["Post", "PostCategory"],
+  "access": ["Admin"],
+  "userScope": ["Post:Get"],
+  "oauth": {"scopes": ["openid", "email"]},
+  "capabilities": ["core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {},
+  "optionalRequirements": {},
+  "themes": [{"id": "ocean", "tokens": {"background": "0 0% 100%"}}],
+  "admin": {"roles": ["Root"]},
+  "remote": {"origin": "https://app.acme.com"},
+  "settings": {"entries": [{"label": "Connexion", "path": "settings/api"}]},
+  "routines": ["kitRoutine", {"id": "sync", "job": {"kind": "api", "method": "POST", "path": "/sync", "intervalMs": 60000}}],
+  "declarative": {
+    "widgets": [
+      {"id": "kpi", "resource": "sales", "aggregate": "sum"},
+      {"id": "grid", "title": "Grille", "interactive": {"entry": "widgets/grid.html", "minHeight": 240}}
+    ]
+  }
+}`
+	root := t.TempDir()
+	moduleDir := filepath.Join(root, config.ExternalModulesDir, "mod.liorian.kit")
+	if err := pkg.WriteString(filepath.Join(moduleDir, "manifest.json"), raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := pkg.WriteString(filepath.Join(moduleDir, "index.tsx"), "export default { identifier: 'x', widgets: {} };\n"); err != nil {
+		t.Fatal(err)
+	}
+
+	v := &Validator{Root: root}
+	res, err := v.ValidateModule("mod.liorian.kit")
+	if err != nil {
+		t.Fatalf("ValidateModule: %v", err)
+	}
+	okRules := map[string]bool{}
+	warnedRules := map[string]bool{}
+	for _, f := range res.Findings {
+		switch f.Severity {
+		case LevelOK:
+			okRules[f.Rule] = true
+		case LevelWarning:
+			warnedRules[f.Rule] = true
+		}
+	}
+	for _, rule := range []string{"permissions", "access", "themes", "routines", "declarative.widgets", "capabilities"} {
+		if !okRules[rule] {
+			t.Errorf("rule %q must pass on a compliant section: %+v", rule, res.Findings)
+		}
+	}
+	for _, rule := range []string{"admin type", "remote type", "settings type"} {
+		if !warnedRules[rule] {
+			t.Errorf("rule %q must warn on a mismatched module type: %+v", rule, res.Findings)
+		}
+	}
+
+	// The same sections, broken: each one must warn.
+	broken := `{
+  "schemaVersion": 1,
+  "id": "kit",
+  "domain": "mod.liorian.kit",
+  "key": "KIT",
+  "name": "Kit",
+  "description": "kit module",
+  "version": "1.0.0",
+  "icon": "PuzzleIcon",
+  "type": "WEB_APP_LOCAL",
+  "entry": "index.tsx",
+  "uri": "/kit",
+  "token": "3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
+  "platforms": {
+    "web": {"supported": true, "modes": ["web"]},
+    "desktop": {"supported": false},
+    "mobile": {"supported": false}
+  },
+  "compatibility": {"socle": {"min": "0.17.1", "max": "0.17.x"}, "api": {"min": "0.27.0", "max": "0.27.x"}},
+  "permissions": ["Editor:Post", "user.read"],
+  "access": ["1Admin"],
+  "userScope": ["Post:Get"],
+  "oauth": {"scopes": ["openid"]},
+  "capabilities": ["needsNetwork", "core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {},
+  "optionalRequirements": {},
+  "themes": [{"id": "ocean"}],
+  "admin": {"roles": ["1Root"]},
+  "remote": {"origin": "http://app.acme.com"},
+  "settings": {"entries": [{"path": "settings/api"}]},
+  "routines": [{"id": "sync", "job": {"kind": "cron", "path": "/sync", "intervalMs": 500}}],
+  "declarative": {"widgets": [{"id": "kpi", "aggregate": "avg"}]}
+}`
+	if err := pkg.WriteString(filepath.Join(moduleDir, "manifest.json"), broken); err != nil {
+		t.Fatal(err)
+	}
+	res, err = v.ValidateModule("mod.liorian.kit")
+	if err != nil {
+		t.Fatalf("ValidateModule: %v", err)
+	}
+	warnedRules = map[string]bool{}
+	for _, f := range res.Findings {
+		if f.Severity == LevelWarning {
+			warnedRules[f.Rule] = true
+		}
+	}
+	for _, rule := range []string{
+		"permissions", "access", "themes", "admin", "remote", "settings",
+		"routines", "declarative.widgets", "capabilities",
+	} {
+		if !warnedRules[rule] {
+			t.Errorf("broken rule %q must warn: %+v", rule, res.Findings)
+		}
+	}
+}

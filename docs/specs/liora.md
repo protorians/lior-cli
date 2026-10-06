@@ -25,7 +25,8 @@
 > `docs/specs/modules/module-installation/module.spec.md`, statut `EXÉCUTÉ` 0.49.0–0.50.0) :
 > la CLI en est le premier maillon côté éditeur — artefact `.LiorArtifactPackage` (ADR-003), signature Ed25519
 > obligatoire de la charge utile canonique (ADR-010, §7.1), manifeste canonique (`compatibility`,
-> `oauth`, `capabilities`, permissions `Role:Verbe`), types d'exécution (`CONFIGURATION`,
+> `oauth`, `capabilities`, `permissions` en domaines nus PascalCase, `userScope`
+> `<Domaine>:<Verbe>`), types d'exécution (`CONFIGURATION`,
 > `WEB_APP_LOCAL`, … — ADR-004/ADR-011) et vérification fail-closed (SEC-001, §7.2).
 
 ---
@@ -690,7 +691,7 @@ export default function <PascalId>Page() {
 - Le slug d'organisation est une **définition normalisée** (kebab-case via `store.CatalogSlug`) ;
   c'est la valeur que le store renvoie après enregistrement qui fait foi, pas la saisie brute
 - Le renommage est complet : fichiers **et** identifiants (imports, `identifier`, `key`, `uri`)
-- Le manifeste est conforme au schéma canonique (24 champs requis, `schemaVersion: 1`) ;
+- Le manifeste est conforme au schéma canonique (21 champs requis, `schemaVersion: 1`, dont `userScope` obligatoire et `permissions` en domaines nus) ;
   `entry` pointe vers `index.tsx` et `domain` correspond au dossier du module
 - Les champs `requirements` / `optionalRequirements` ne sont présents que dans `manifest.json`
   (jamais dans `index.tsx`) ; les dépendances npm vivent dans le `package.json` du module
@@ -1260,6 +1261,8 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **manifest.json** | Champ `domain` sous forme **canonique** `<prefixe(type)>.<slug-éditeur>.<identifiant>` (`canonicalDomainRE`, `IsCanonicalDomain`) — avertissement distinct du reverse-DNS générique, car une forme non canonique reste acceptée par l'identité existante | WARNING |
 | **manifest.json** | Le `domain` correspond au dossier du module (`library/modules/<domain>`) | WARNING |
 | **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
+| **manifest.json** | `permissions` n'expose que des **domaines nus PascalCase** (§6.5 : le serveur compose `KEY:Domaine` lui-même) — les couples `<Rôle>:<Verbe>` et les codes pointus `<id>.<action>` sont legacy et migrent en WARNING | WARNING |
+| **manifest.json** | Sections déclaratives du schéma conformes quand elles sont présentes : `access` (rôles nus), `themes` (id + carte de tokens, scheme `light`/`dark`), `admin` (rôles/scope), `remote` (origine HTTPS de domaine), `settings.entries` (label), `routines` (nom de singleton ou descripteur `{id, job: {kind: "api", path, intervalMs 30 s–1 h}}`), `declarative.widgets` (`resource` requis hors bloc `interactive` ; `title` + `entry` sûr + `minHeight` 120–1200 sinon) et `capabilities` (identifiants Tauri `core:*`) ; `admin`/`remote`/`settings` déclarés sur un autre type que `SYSTEM`/`WEB_APP_REMOTE`/`CONFIGURATION` = WARNING | WARNING |
 | **manifest.json** | `optionalRequirements` est présent (objet, `{}` admis) | WARNING |
 | **manifest.json** | `platforms` est présent et `modes` est déclaré pour chaque plateforme `supported: true` | WARNING |
 | **manifest.json** | `managerCompatibility` / `apiCompatibility` présents, plage `max` complète (`0.17.x`, pas `0.17.0`) | WARNING |
@@ -1276,7 +1279,7 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 
 > Les champs contrôlés (`id`, `name`, `version`, `token`, `entry`, `domain`, `permissions`) font
 > partie du contrat canonique du manifeste (`docs/modules/module-manifest.md`). La conformité
-> **complète** au schéma (`module-manifest.schema.json`, 24 champs requis, plateformes,
+> **complète** au schéma (`module-manifest.schema.json`, 21 champs requis, plateformes,
 > compatibilité, capacités, prérequis, dépendances…) est validée en CI par le SDK, pas par
 > l'audit CLI (qui reste une heuristique locale).
 

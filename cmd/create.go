@@ -16,25 +16,30 @@ import (
 var createCmd = &cobra.Command{
 	Use:   "create module [name]",
 	Short: "Create a new module",
-	Long: `Creates a new module in library/modules/{domain}/ from the embedded
-hello-world mockup, renamed with the given identifier (manifest.json,
-index.tsx, package.json, application/, domain/, infrastructure/,
-presentation/).
+	Long: `Creates a new module in library/modules/{domain}/ from the embedded reference
+mockup dedicated to the chosen type (spec module-types §2: settings entries for
+CONFIGURATION, routines.tsx for SERVICE, dashboard widgets for WIDGET, token
+palettes for THEME, a remote declaration for WEB_APP_REMOTE, the full local
+application for WEB_APP_LOCAL, the Tauri administration console for SYSTEM),
+renamed with the given identifier (manifest.json, index.tsx, package.json,
+application/, domain/, infrastructure/, presentation/).
 
 The interactive wizard builds the module identity in three steps. First the
 session is mandatory: the organization behind ` + "`liora connect`" + ` owns the slug
 that anchors the identity, and an organization without a slug is forced to
-define one through the CLI. Then the module type is asked among the supported
-distribution kinds — it decides the canonical prefix of the reverse domain.
-Finally the reverse domain is offered pre-filled
+define one through the CLI. Then the module type is asked among the canonical
+kinds — it decides both the mockup scaffolded (each type owns a reference
+mockup shaped for its injection surface) and the canonical prefix of the
+reverse domain. Finally the reverse domain is offered pre-filled
 ` + "`<prefix(type)>.<organization-slug>.`" + ` — the developer only completes the
 <module-id>, and the whole identity is kept for the rest of the process.
 
 The kebab-case identifier is deduced from the last label of the domain
 (mod.liorian.accounting -> accounting). The optional page url drives both the
 scaffolded src/app/{url}/ page and the manifest.json uri of the deployed
-module (default: the identifier). --publisher overrides the session slug for
-CI runs and scripted replays.
+module (default: the identifier) — it is only asked for the types owning an
+application surface (ModuleTypeSupportsPage). --publisher overrides the
+session slug for CI runs and scripted replays.
 
 The module's unique UUID token is generated automatically.
 
@@ -190,8 +195,16 @@ func runCreate(cmd *cobra.Command, args []string) error {
 	panel := s.Success.Render(i18n.Tf("create.success.dir", relToRoot(root, result.Dir))) + "\n" +
 		s.Success.Render(i18n.Tf("create.success.token", result.Token)) + "\n" +
 		s.Success.Render(i18n.T("create.success.manifest")) + "\n" +
-		s.Success.Render(i18n.T("create.success.entry")) + "\n" +
-		s.Success.Render(i18n.T("create.success.requirements"))
+		s.Success.Render(i18n.T("create.success.entry"))
+	// The embedded mockup is the one shaped for the type chosen at step 1 of
+	// the wizard (spec `module-types` §2) — report it so the developer knows
+	// which reference structure was scaffolded. A custom --mockup overrides
+	// the selection and is reported instead.
+	if createMockup == "" {
+		panel += "\n" + s.Success.Render(i18n.Tf("create.success.type_mockup",
+			module.EmbeddedMockupName(spec.Type), spec.Type))
+	}
+	panel += "\n" + s.Success.Render(i18n.T("create.success.requirements"))
 	if result.Page != "" {
 		panel += "\n" + s.Success.Render(i18n.Tf("create.success.page", relToRoot(root, result.Page)))
 	}
@@ -217,9 +230,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
 //  1. `liora connect` — the session is mandatory: it carries the organization
 //     whose slug anchors the module identity, and an organization without a
 //     slug is forced to define one through the CLI before anything is created;
-//  2. the module type, asked among the supported distribution kinds — it
-//     decides the canonical prefix of the reverse domain (config, system,
-//     service, widget, theme, sinon mod);
+//  2. the module type, asked among the canonical kinds — it decides both the
+//     embedded reference mockup the scaffold copies (each type owns a mockup
+//     shaped for its injection surface, spec `module-types` §2) and the
+//     canonical prefix of the reverse domain (config, system, service,
+//     widget, theme, sinon mod);
 //  3. the reverse domain, pre-filled `<prefix(type)>.<organization-slug>.` —
 //     the developer only completes the `<module-id>`, and the whole identity
 //     (prefix, slug, identifier) is kept for the rest of the process.
@@ -314,7 +329,12 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 			}
 			spec.Icon = icon
 		}
-		if spec.URL == "" {
+		// The page URL only exists for the types owning an application
+		// surface (spec `module-types` §2): the injection-only kinds
+		// (CONFIGURATION, SERVICE, WIDGET, THEME) and WEB_APP_REMOTE — whose
+		// app is hosted on the registered remote origin — have no socle page
+		// to name.
+		if spec.URL == "" && module.ModuleTypeSupportsPage(spec.Type) {
 			u, err := tui.AskText(i18n.T("create.prompt.url"), moduleURLPlaceholder(spec.Domain))
 			if err != nil {
 				return err
@@ -367,28 +387,29 @@ func collectCreateSpec(spec *module.ModuleSpec) error {
 }
 
 // createTypeChoice is one entry of the interactive type menu: the label shows
-// the canonical prefix the type puts in the reverse domain, the value is the
-// canonical `ModuleType` enum.
+// the canonical prefix the type puts in the reverse domain and the injection
+// surface the type owns, the value is the canonical `ModuleType` enum.
 type createTypeChoice struct {
 	label string
 	value string
 }
 
-// createTypeChoices lists the supported module types, in the order a developer
-// meets them: the web-application forms first (all sharing the `mod` prefix),
-// then the platform kinds owning their own prefix. The legacy `INTERNAL` /
-// `EXTERNAL` aliases are deprecated and never offered.
+// createTypeChoicesList lists the supported module types, in the order a
+// developer meets them: the web-application forms first (all sharing the `mod`
+// prefix), then the specialized kinds owning their own prefix, and `SYSTEM`
+// last — first-party and Tauri only. Each entry drives the embedded reference
+// mockup the scaffold copies (spec `module-types` §2), so the choice is asked
+// before anything else. The legacy aliases (`INTERNAL`, `EXTERNAL`,
+// `EXTERNAL_URL`, `WEB_APP_CACHED`, `REMOTE_FRONTEND`) are deprecated and
+// never offered: they remain accepted through `--type` for existing projects.
 var createTypeChoicesList = []createTypeChoice{
-	{"WEB_APP_LOCAL (mod.*)", "WEB_APP_LOCAL"},
-	{"WEB_APP_REMOTE (mod.*)", "WEB_APP_REMOTE"},
-	{"WEB_APP_CACHED (mod.*)", "WEB_APP_CACHED"},
-	{"EXTERNAL_URL (mod.*)", "EXTERNAL_URL"},
-	{"REMOTE_FRONTEND (mod.*)", "REMOTE_FRONTEND"},
-	{"CONFIGURATION (config.*)", "CONFIGURATION"},
-	{"SYSTEM (system.*)", "SYSTEM"},
-	{"SERVICE (service.*)", "SERVICE"},
-	{"WIDGET (widget.*)", "WIDGET"},
-	{"THEME (theme.*)", "THEME"},
+	{"WEB_APP_LOCAL (mod.*) — application web autonome (iframe locale)", "WEB_APP_LOCAL"},
+	{"WEB_APP_REMOTE (mod.*) — application distante enregistrée (iframe)", "WEB_APP_REMOTE"},
+	{"CONFIGURATION (config.*) — réglages du compte connecté et de /settings", "CONFIGURATION"},
+	{"SERVICE (service.*) — routines d'arrière-plan (HeaderRoutines)", "SERVICE"},
+	{"WIDGET (widget.*) — widgets du tableau de bord", "WIDGET"},
+	{"THEME (theme.*) — palettes de tokens (/settings/themes)", "THEME"},
+	{"SYSTEM (system.*) — first-party Tauri avec accès administrateur", "SYSTEM"},
 }
 
 // createTypeChoices returns the labels shown by the interactive type menu.

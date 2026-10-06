@@ -1,0 +1,111 @@
+{
+  "$schema": "../../node_modules/@liorian/sdk/schemas/module.schema.json",
+  "schemaVersion": 1,
+  "id": "acme-settings",
+  "domain": "config.liorian.acme-settings",
+  "key": "ACME_SETTINGS",
+  "name": "Acme Settings",
+  "description": "Module CONFIGURATION d'exemple : entrées de réglages injectées dans le dropdown du compte connecté et le hub /settings",
+  "version": "1.0.0",
+  "icon": "SettingsIcon",
+  "type": "CONFIGURATION",
+  "external": false,
+  "entry": "index.tsx",
+  "uri": "/acme-settings",
+  "platforms": {
+    "web": {
+      "supported": true,
+      "modes": ["web"]
+    },
+    "desktop": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["windows", "macos", "linux"]
+    },
+    "mobile": {
+      "supported": true,
+      "modes": ["local-webview"],
+      "os": ["android"]
+    }
+  },
+  "compatibility": {
+    "socle": {
+      "min": "0.17.1",
+      "max": "0.17.x"
+    },
+    "api": {
+      "min": "0.27.0",
+      "max": "0.27.x"
+    }
+  },
+  "permissions": [],
+  "userScope": [],
+  "oauth": {
+    "scopes": ["openid", "profile", "email", "organizations"]
+  },
+  "capabilities": ["core:default"],
+  "isEnabled": true,
+  "isDefault": false,
+  "requirements": {
+    "organization": ">=1.0.0",
+    "identity": ">=1.0.0"
+  },
+  "optionalRequirements": {},
+  "configSettings": [
+    {
+      "key": "defaultView",
+      "label": "Vue par défaut",
+      "description": "Écran ouvert à l'entrée « Paramètres » du module",
+      "type": "SELECT",
+      "defaultValue": "overview",
+      "options": [
+        {"label": "Aperçu", "value": "overview"},
+        {"label": "Préférences", "value": "preferences"}
+      ]
+    }
+  ],
+  "dataModel": [
+    {
+      "resource": "acme-settings-preference",
+      "label": "Préférence Acme Settings",
+      "fields": [
+        {"key": "label", "type": "string", "label": "Libellé", "required": true},
+        {"key": "value", "type": "string", "label": "Valeur", "required": true},
+        {"key": "enabled", "type": "boolean", "label": "Activée"}
+      ]
+    }
+  ],
+  "declarative": {
+    "pages": [
+      {
+        "id": "overview",
+        "path": "overview",
+        "title": "Aperçu des préférences",
+        "blocks": [
+          {
+            "id": "preferences",
+            "kind": "datagrid",
+            "resource": "acme-settings-preference",
+            "title": "Préférences",
+            "columns": [
+              {"field": "label", "label": "Libellé", "sortable": true},
+              {"field": "value", "label": "Valeur"},
+              {"field": "enabled", "label": "Activée", "type": "boolean"}
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "widgets": [],
+  "routines": [],
+  "menu": {
+    "items": [
+      {
+        "label": "Paramètres Acme Settings",
+        "icon": "SettingsIcon",
+        "url": "/acme-settings"
+      }
+    ]
+  }
+}

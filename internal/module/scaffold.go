@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/protorians/lior-cli/internal/config"
@@ -22,10 +23,67 @@ var embeddedTemplates embed.FS
 
 // Paths of the embedded reference mockups.
 const (
-	embeddedModulePrefix = "mockups/hello-world"
-	embeddedPageFile     = "mockups/page.tsx"
-	embeddedViewFile     = "mockups/view.tsx"
+	embeddedPageFile = "mockups/page.tsx"
+	embeddedViewFile = "mockups/view.tsx"
+	// embeddedPageSampleID is the sample module identifier the page mockup is
+	// written with (the page template is shared by every module type, so it
+	// keeps the reference hello-world naming and is renamed onto the new
+	// module like any other mockup file).
+	embeddedPageSampleID = "hello-world"
 )
+
+// embeddedTypeMockups maps every canonical module type onto the embedded
+// reference mockup scaffolded for that type (spec `module-types` §2): each
+// type owns a mockup shaped for its injection surface — settings entries for
+// CONFIGURATION, routines.tsx for SERVICE, widget components for WIDGET,
+// token palettes for THEME, a remote declaration for WEB_APP_REMOTE, the full
+// local application for WEB_APP_LOCAL and the Tauri-only admin application for
+// SYSTEM. The legacy aliases and an empty type fall back to the reference
+// hello-world mockup (the WEB_APP_LOCAL shape).
+var embeddedTypeMockups = map[string]string{
+	"CONFIGURATION":  "mockups/configuration",
+	"SERVICE":        "mockups/service",
+	"WIDGET":         "mockups/widget",
+	"THEME":          "mockups/theme",
+	"WEB_APP_REMOTE": "mockups/web-app-remote",
+	"WEB_APP_LOCAL":  "mockups/hello-world",
+	"SYSTEM":         "mockups/system",
+}
+
+// defaultEmbeddedMockup is the mockup used when the type owns no dedicated
+// one: the reference hello-world application (WEB_APP_LOCAL shape).
+const defaultEmbeddedMockup = "mockups/hello-world"
+
+// embeddedMockupPrefix returns the embedded mockup prefix scaffolded for a
+// module type.
+func embeddedMockupPrefix(moduleType string) string {
+	if prefix, ok := embeddedTypeMockups[strings.ToUpper(strings.TrimSpace(moduleType))]; ok {
+		return prefix
+	}
+	return defaultEmbeddedMockup
+}
+
+// EmbeddedMockupName returns the name of the embedded mockup scaffolded for a
+// module type ("hello-world" for WEB_APP_LOCAL) — what the success panel of
+// `liora create module` reports.
+func EmbeddedMockupName(moduleType string) string {
+	return filepath.Base(embeddedMockupPrefix(moduleType))
+}
+
+// ModuleTypeSupportsPage reports whether a module type owns a visible
+// application surface and therefore gets a `src/app/<url>/page.tsx` route
+// scaffolded. The injection-only types (CONFIGURATION, SERVICE, WIDGET,
+// THEME) and WEB_APP_REMOTE — whose app is hosted on the registered remote
+// origin, never in the socle — have no socle page: their `uri` stays the
+// runtime address the socle resolves (`/m/<slug>/…` for installed modules,
+// `settings.entries` for a CONFIGURATION).
+func ModuleTypeSupportsPage(moduleType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(moduleType)) {
+	case "CONFIGURATION", "SERVICE", "WIDGET", "THEME", "WEB_APP_REMOTE":
+		return false
+	}
+	return true
+}
 
 // Environment variables overriding the embedded reference mockups.
 const (
@@ -72,32 +130,34 @@ func IsModuleMockup(dir string) bool {
 }
 
 // scaffoldFromMockup copies a reference module directory into `moduleDir` and
-// rewrites every component/identifier carrying the mockup module name with the
-// module spec (identifier for the naming).
+// rewrites every component/identifier carrying the mockup sample module name
+// with the module spec (identifier for the naming).
 func scaffoldFromMockup(mockup, moduleDir string, spec ModuleSpec) error {
 	if err := pkg.CopyDir(mockup, moduleDir); err != nil {
 		return fmt.Errorf("failed to copy module mockup: %w", err)
 	}
 
-	if err := renameAndRewriteTree(moduleDir, moduleReplacements(spec.ID)); err != nil {
+	repls := mockupReplacements(mockupSampleID(filepath.Join(mockup, config.ManifestFileName)), spec.ID)
+	if err := renameAndRewriteTree(moduleDir, repls); err != nil {
 		return err
 	}
 	return finishScaffold(moduleDir, spec)
 }
 
-// scaffoldEmbeddedModule writes the embedded reference mockup into `moduleDir`,
-// renaming components and identifiers with the module spec and forcing the new
-// module identity onto the metadata files.
+// scaffoldEmbeddedModule writes the embedded reference mockup of the module
+// type into `moduleDir`, renaming components and identifiers with the module
+// spec and forcing the new module identity onto the metadata files.
 func scaffoldEmbeddedModule(moduleDir string, spec ModuleSpec) error {
-	repls := moduleReplacements(spec.ID)
-	if err := fs.WalkDir(embeddedTemplates, embeddedModulePrefix, func(path string, d fs.DirEntry, err error) error {
+	prefix := embeddedMockupPrefix(spec.EffectiveType())
+	repls := mockupReplacements(embeddedSampleID(prefix), spec.ID)
+	if err := fs.WalkDir(embeddedTemplates, prefix, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel(embeddedModulePrefix, path)
+		rel, err := filepath.Rel(prefix, path)
 		if err != nil {
 			return err
 		}
@@ -143,18 +203,83 @@ type moduleRepl struct {
 	new string
 }
 
-// moduleReplacements maps every spelling of the mockup module name used in the
-// hello-world reference module onto its counterpart for `id` (the kebab-case
-// module identifier).
-func moduleReplacements(id string) []moduleRepl {
-	return []moduleRepl{
-		{old: "Hello World", new: displayName(id)},
-		{old: "HelloWorld", new: pascalName(id)},
-		{old: "helloWorld", new: camelName(id)},
-		{old: "hello-world", new: id},
-		{old: "HELLO_WORLD", new: upperSnake(id)},
-		{old: "helloworld", new: lowerName(id)},
+// sampleSpellings returns every spelling a mockup uses for one sample module
+// identifier: Title Case, PascalCase, camelCase, kebab-case, UPPER_SNAKE and
+// the bare concatenation ("hello-world" → "Hello World", "HelloWorld",
+// "helloWorld", "hello-world", "HELLO_WORLD", "helloworld").
+func sampleSpellings(id string) []string {
+	return []string{
+		displayName(id),
+		pascalName(id),
+		camelName(id),
+		id,
+		upperSnake(id),
+		lowerName(id),
 	}
+}
+
+// mockupSampleID extracts the sample module identifier a mockup is written
+// with — the `id` of its manifest.json. Every mockup (embedded or custom)
+// carries one: the rename machinery maps its spellings onto the new module
+// identifier, so a mockup may be written with any sample name. An unreadable
+// manifest falls back to the reference "hello-world" (the original mockup).
+func mockupSampleID(manifestPath string) string {
+	return sampleIDFromManifest(func() ([]byte, error) {
+		return os.ReadFile(manifestPath)
+	})
+}
+
+// embeddedSampleID extracts the sample module identifier of an embedded
+// mockup prefix.
+func embeddedSampleID(prefix string) string {
+	return sampleIDFromManifest(func() ([]byte, error) {
+		return embeddedTemplates.ReadFile(prefix + "/" + config.ManifestFileName)
+	})
+}
+
+// sampleIDFromManifest decodes a manifest.json payload and returns its `id`.
+func sampleIDFromManifest(read func() ([]byte, error)) string {
+	data, err := read()
+	if err != nil {
+		return "hello-world"
+	}
+	var manifest struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil || manifest.ID == "" {
+		return "hello-world"
+	}
+	return manifest.ID
+}
+
+// mockupReplacements maps every spelling of the sample module name a mockup
+// was written with onto its counterpart for `id` (the kebab-case module
+// identifier). The longest, most specific spellings go first so a
+// case-sensitive token is never partially rewritten by a shorter one.
+func mockupReplacements(sampleID, id string) []moduleRepl {
+	sources := sampleSpellings(sampleID)
+	targets := sampleSpellings(id)
+	// A single-word sample produces identical spellings for several kinds
+	// ("acme" is at once its kebab, camel and lower form). Keep one target per
+	// source spelling, preferring the kinds a module visibly carries: file
+	// names and identifiers (kebab), component names (Pascal) and manifest
+	// keys (UPPER_SNAKE). Display names are re-patched afterwards by
+	// finishScaffold from the spec.
+	var priority = [6]int{3, 1, 4, 2, 0, 5}
+	repls := make([]moduleRepl, 0, len(sources))
+	seen := map[string]bool{}
+	for _, kind := range priority {
+		if sources[kind] == targets[kind] || seen[sources[kind]] {
+			continue
+		}
+		seen[sources[kind]] = true
+		repls = append(repls, moduleRepl{old: sources[kind], new: targets[kind]})
+	}
+	// Longest first: "Hello World" (Title) must be rewritten before "Hello"
+	// could split it, and a camelCase token must never match inside the lower
+	// concatenation once the latter was already replaced.
+	sort.Slice(repls, func(i, j int) bool { return len(repls[i].old) > len(repls[j].old) })
+	return repls
 }
 
 // applyReplacements applies substitution rules to a string.
@@ -398,9 +523,11 @@ func scaffoldEmbeddedPage(root, moduleDir string, spec ModuleSpec) string {
 
 // rewritePageBody renames the mockup components in a page body and rewrites the
 // module import path to the module domain
-// (`@/library/modules/<domain>/...`).
+// (`@/library/modules/<domain>/...`). The shared page mockup keeps the
+// reference hello-world sample naming — the page template is common to every
+// module type — and is renamed onto the module spec like any other mockup.
 func rewritePageBody(body string, spec ModuleSpec) string {
-	body = applyReplacements(body, moduleReplacements(spec.ID))
+	body = applyReplacements(body, mockupReplacements(embeddedPageSampleID, spec.ID))
 	return strings.ReplaceAll(body, config.ExternalModulesDir+"/"+spec.ID+"/", config.ExternalModulesDir+"/"+spec.Domain+"/")
 }
 
@@ -428,20 +555,133 @@ func declaredURI(indexPath string) string {
 }
 
 // mockupReadmeTemplate documents a module scaffolded from the reference mockup.
+// The structure section and the type contracts adapt to the module type
+// (spec `module-types` §2) — the mockup each type scaffolds from is the one
+// shaped for its injection surface.
 func mockupReadmeTemplate(spec ModuleSpec) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("# %s\n\n", spec.AppName))
 	if desc := spec.Description; desc != "" {
 		b.WriteString(desc + "\n\n")
 	}
-	b.WriteString(fmt.Sprintf("Liora module `%s` (`%s`).\n\n", spec.Domain, spec.ID))
+	b.WriteString(fmt.Sprintf("Liora module `%s` (`%s`) — type **%s**.\n\n", spec.Domain, spec.ID, spec.EffectiveType()))
+	b.WriteString(moduleTypeReadmeSection(spec.EffectiveType()))
 	b.WriteString("## Structure\n\n")
 	b.WriteString("- `manifest.json` — module metadata\n")
 	b.WriteString("- `index.tsx` — module declaration (identifier, widgets, service, routines, uri)\n")
 	b.WriteString("- `package.json` — module dependencies\n")
-	b.WriteString("- `application/` — service layer\n")
-	b.WriteString("- `domain/` — interfaces and enums\n")
-	b.WriteString("- `infrastructure/` — routines\n")
-	b.WriteString("- `presentation/` — views, widgets, components, providers\n")
+	b.WriteString("- `tsconfig.json` — standalone TypeScript configuration\n")
+	for _, line := range mockupReadmeStructure(spec.EffectiveType()) {
+		b.WriteString(line + "\n")
+	}
 	return b.String()
+}
+
+// moduleTypeReadmeSection documents the goal of a module type and its
+// development contracts (first-party vs third-party), from spec
+// `module-types` §2 and its feature specs.
+func moduleTypeReadmeSection(moduleType string) string {
+	switch strings.ToUpper(strings.TrimSpace(moduleType)) {
+	case "CONFIGURATION":
+		return "" +
+			"Module **déclaratif de configuration/paramétrage** : ses entrées de réglages " +
+			"s'injectent dans le dropdown du compte connecté et dans le hub `/settings` dès que " +
+			"les vérifications du registre passent (V-1 → V-7).\n\n" +
+			"- **First-party** : le fichier `settings.tsx` exporte un tableau d'entrées " +
+			"`{label, description?, component}` rendu nativement par le socle.\n" +
+			"- **Tiers** : aucune ligne de code — le manifeste déclare `settings.entries` " +
+			"(routes `/m/<slug>/<path>`) et `configSettings` ; `entry: index.json`.\n\n"
+	case "SERVICE":
+		return "" +
+			"Module **de service d'arrière-plan** : ses routines s'ajoutent à la liste des " +
+			"routines (`HeaderRoutines`). Persistante par défaut, une routine devient non " +
+			"persistante dès qu'elle déclare une condition de déclenchement (`trigger`).\n\n" +
+			"- **First-party** : le fichier `routines.tsx` exporte un tableau de singletons " +
+			"`Routine` (`persist: true` par défaut, `trigger: {url, modules}` pour restreindre).\n" +
+			"- **Tiers** : descripteurs `routines[]` du manifeste (`job.kind: \"api\"`, " +
+			"`intervalMs` borné 30 s–1 h), exécutés par le socle via `ctx.api`.\n\n"
+	case "WIDGET":
+		return "" +
+			"Module **fournisseur de widgets** du tableau de bord : ses widgets s'ajoutent à la " +
+			"liste des widgets quand les vérifications passent.\n\n" +
+			"- **First-party** : composants React déclarés dans `index.tsx` " +
+			"(`widgets: {\"<id>.kpi\": Composant}`).\n" +
+			"- **Tiers** : descripteurs `declarative.widgets[]` du manifeste, rendus " +
+			"nativement par le socle (aucun code tiers importé).\n\n"
+	case "THEME":
+		return "" +
+			"Module **fournisseur de thème** : ses palettes de tokens s'ajoutent à la liste des " +
+			"thèmes (`/settings/themes`). Un thème est uniquement un jeu de tokens — jamais de " +
+			"code ; `scheme` absent vaut `light`, le bloc `dark` est optionnel.\n\n" +
+			"- **Manifeste** : `themes[]` (`id`, `label`, `dataTheme`, `swatches`, `tokens`, " +
+			"`dark?`) — les clés de `tokens` sont validées contre la whitelist " +
+			"`MODULE_THEME_TOKENS`.\n" +
+			"- **First-party** : peut en plus fournir une palette CSS compilée (`styles/`).\n\n"
+	case "WEB_APP_REMOTE":
+		return "" +
+			"Application web **hébergée à distance**, chargée en iframe sandboxée depuis " +
+			"l'origine enregistrée. Aucune page n'est scaffoldée dans le socle : l'application " +
+			"vit sur le serveur distant.\n\n" +
+			"- **Manifeste** : section `remote` (`origin`, `paths`, `backends`, `scopes`, " +
+			"`wellKnown`).\n" +
+			"- **Publication** : le serveur distant doit s'enregistrer, être vérifié " +
+			"(well-known / DNS), validé (CSP, egress) puis approuvé par la modération — " +
+			"aucune auto-approbation.\n" +
+			"- **Runtime** : données uniquement via `ctx.api` (jeton de module), egress " +
+			"limité aux backends déclarés, jamais `allow-same-origin`.\n\n"
+	case "SYSTEM":
+		return "" +
+			"Module **first-party `WEB_APP_LOCAL` avec accès administrateur**, disponible " +
+			"uniquement sous Tauri (`platforms.web.supported: false` — sur web l'état est " +
+			"`platform_unsupported`). Masqué aux développeurs tiers.\n\n" +
+			"- **Manifeste** : section `admin` (`roles`, `scopes`) — les privilèges ne sont " +
+			"accordés que si le module est first-party, le runtime est Tauri, le rôle de " +
+			"l'utilisateur est listé et les scopes sont accordés (fail-closed).\n\n"
+	default:
+		return "" +
+			"Application web **autonome** (`WEB_APP_LOCAL`) : vue principale, composants, " +
+			"widget, provider de layout, routine et service d'API. Publiable au Store sous " +
+			"forme d'artefact signé, exécutée en iframe isolée une fois installée.\n\n"
+	}
+}
+
+// mockupReadmeStructure lists the directories the scaffolded module carries,
+// per module type.
+func mockupReadmeStructure(moduleType string) []string {
+	common := []string{"- `application/` — service layer", "- `domain/` — interfaces and enums"}
+	switch strings.ToUpper(strings.TrimSpace(moduleType)) {
+	case "CONFIGURATION":
+		return []string{
+			"- `settings.tsx` — paramètres spécifiques du module (contrat first-party)",
+			"- `application/` — service layer",
+			"- `presentation/settings/` — composants de paramètres",
+		}
+	case "SERVICE":
+		return []string{
+			"- `routines.tsx` — routines du module (contrat first-party SERVICE)",
+			"- `application/` — service layer",
+			"- `domain/` — interfaces",
+		}
+	case "WIDGET":
+		return []string{
+			"- `application/` — service layer",
+			"- `domain/` — interfaces",
+			"- `presentation/widgets/` — widgets du tableau de bord",
+		}
+	case "THEME":
+		return []string{
+			"- `styles/` — palettes CSS compilées (first-party, optionnel)",
+		}
+	case "WEB_APP_REMOTE":
+		return []string{
+			"- `manifest.json` — déclare la section `remote` (origine, backends, scopes)",
+		}
+	case "SYSTEM":
+		return append(common, "- `presentation/` — views and components (accès administrateur, Tauri only)")
+	default:
+		return append(common,
+			"- `infrastructure/` — routines",
+			"- `presentation/` — views, widgets, components, providers",
+		)
+	}
 }

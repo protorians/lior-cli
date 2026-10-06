@@ -531,7 +531,7 @@ func (r *Repairer) applyFinding(m *module.Manifest, moduleDir, name string, f mo
 			return act, newInstruction("manifest.json", "dataModel",
 				"the CONFIGURATION module declares no dataModel",
 				"Open library/modules/"+name+"/manifest.json.",
-				"Declare the CRUD resources in \"dataModel\" (resource, fields and their Role:Verbe permissions).",
+				"Declare the CRUD resources in \"dataModel\" (resource, fields and their <Domain>:<Verb> permissions).",
 				"Or set \"entry\" to \"index.tsx\" and pick a code type instead of CONFIGURATION.",
 				"Re-run 'liora repair "+name+"' to verify."), false
 		case "category":
@@ -578,11 +578,13 @@ func (r *Repairer) applyConfigurationEntry(m *module.Manifest, moduleDir, name s
 		"Re-run 'liora repair "+name+"' to verify."), false
 }
 
-// applyPermissions repairs the `permissions` rule, which the audit raises under
-// two distinct shapes that share one rule name: a malformed (non-array) value,
-// and an array holding legacy non-canonical codes. Dispatching on the manifest
-// state rather than on the finding keeps the two apart — a valid array is never
-// emptied, only migrated where the canonical code is unambiguous.
+// applyPermissions repairs the `permissions` rule, which the audit raises
+// under several shapes that share one rule name: a malformed (non-array)
+// value, and an array holding legacy codes. The canonical grammar is the bare
+// PascalCase permission domains (§6.5 — the server composes `KEY:Domain`
+// itself): the former `<Role>:<Verbe>` couples reduce to their domain, the
+// legacy dotted `<resource>.<action>` codes to the PascalCase resource, and
+// anything unresolvable is handed back to the developer.
 func (r *Repairer) applyPermissions(m *module.Manifest, name string, act Action, f module.Finding, mf manifestFile) (Action, *Instruction, bool) {
 	if !mf.isArray("permissions") {
 		m.Permissions = []string{}
@@ -616,15 +618,15 @@ func (r *Repairer) applyPermissions(m *module.Manifest, name string, act Action,
 
 	m.Permissions = dedupeStrings(canonical)
 	if len(ambiguous) == 0 {
-		act.Detail = fmt.Sprintf("migrated %d permission(s) to canonical Role:Verbe codes", migrated)
+		act.Detail = fmt.Sprintf("migrated %d permission(s) to bare permission domains", migrated)
 		return act, nil, true
 	}
-	act.Detail = fmt.Sprintf("migrated %d permission(s) to canonical Role:Verbe codes", migrated)
+	act.Detail = fmt.Sprintf("migrated %d permission(s) to bare permission domains", migrated)
 	return act, newInstruction("manifest.json", "permissions",
-		"some permission codes are not canonical Role:Verbe codes",
+		"some permission entries are not bare permission domains",
 		"Open library/modules/"+name+"/manifest.json.",
-		"Translate the remaining legacy codes to <Role>:<Verbe> ("+strings.Join(module.ModuleRoles, ", ")+" × Get, Post, Put, Delete).",
-		"They were left untouched: a legacy verb like \"write\" maps to several canonical verbs."), true
+		"Translate the remaining legacy codes to the module's real permission domains, bare PascalCase names (§6.5: the server composes \"KEY:Domain\" itself).",
+		"They were left untouched: the real domains of the module cannot be inferred from a legacy code."), true
 }
 
 // applyPlatforms completes the platform declaration without ever narrowing it:
@@ -779,27 +781,16 @@ func canonicalDomainFrom(domain string) (string, bool) {
 	return canonical, true
 }
 
-// legacyPermissionVerbs maps the legacy dotted `<id>.<action>` verbs to their
-// canonical `Role:Verbe` counterpart. Only the unambiguous pairs are listed: a
-// legacy `write` maps to three different canonical verbs, so it is reported to
-// the developer instead of being guessed.
-var legacyPermissionVerbs = map[string]string{
-	"read":   "Get",
-	"get":    "Get",
-	"create": "Post",
-	"add":    "Post",
-	"update": "Put",
-	"edit":   "Put",
-	"delete": "Delete",
-	"remove": "Delete",
-}
-
 // legacyModuleTypes maps the deprecated distribution types to their canonical
 // ModuleType equivalent (see the Manifest doc: INTERNAL is a socle-bundled
-// module, EXTERNAL a remotely-served web app).
+// module, EXTERNAL / EXTERNAL_URL / REMOTE_FRONTEND remotely-served web apps,
+// WEB_APP_CACHED a locally-served one).
 var legacyModuleTypes = map[string]string{
-	"INTERNAL": "SYSTEM",
-	"EXTERNAL": "WEB_APP_REMOTE",
+	"INTERNAL":        "SYSTEM",
+	"EXTERNAL":        "WEB_APP_REMOTE",
+	"EXTERNAL_URL":    "WEB_APP_REMOTE",
+	"REMOTE_FRONTEND": "WEB_APP_REMOTE",
+	"WEB_APP_CACHED":  "WEB_APP_LOCAL",
 }
 
 // canonicalModuleTypes lists the canonical distribution types, for the
@@ -815,38 +806,52 @@ func canonicalModuleTypes() []string {
 	return types
 }
 
-// migratePermissionCode maps one manifest permission to its canonical
-// `Role:Verbe` code, reporting false when the mapping would be a guess.
+// migratePermissionCode maps one manifest permission to its canonical bare
+// domain (§6.5), reporting false when the mapping would be a guess. The
+// former `<Role>:<Verbe>` couples reduce to their domain (the verbs never fed
+// the namespaced RBAC — the server composes `KEY:Domain` itself); the legacy
+// dotted `<resource>.<action>` codes reduce to the PascalCase resource.
 func migratePermissionCode(code string) (string, bool) {
 	code = strings.TrimSpace(code)
-	if module.IsPermissionCode(code) {
+	if module.IsPermissionDomain(code) {
 		return code, true
 	}
-	role, action, ok := strings.Cut(code, ".")
+	if module.IsPermissionCode(code) {
+		domain, _, _ := strings.Cut(code, ":")
+		if resolved := permissionDomainName(domain); resolved != "" {
+			return resolved, true
+		}
+		return "", false
+	}
+	resource, _, ok := strings.Cut(code, ".")
 	if !ok {
 		return "", false
 	}
-	verb, ok := legacyPermissionVerbs[strings.ToLower(strings.TrimSpace(action))]
-	if !ok {
-		return "", false
+	if resolved := permissionDomainName(resource); resolved != "" {
+		return resolved, true
 	}
-	canonRole := canonicalRole(role)
-	if canonRole == "" {
-		return "", false
-	}
-	return canonRole + ":" + verb, true
+	return "", false
 }
 
-// canonicalRole resolves a legacy role token against the ModuleRoles
-// catalogue, tolerating case and separator differences (user_read → User).
-func canonicalRole(role string) string {
-	key := kebab(role)
-	for _, r := range module.ModuleRoles {
-		if strings.EqualFold(r, key) {
-			return r
+// permissionDomainName pascalizes a legacy resource token into its bare
+// permission domain (`user` → `User`, `post-category` → `PostCategory`).
+func permissionDomainName(token string) string {
+	return pascalIdentifier(strings.TrimSpace(token))
+}
+
+// pascalIdentifier converts a kebab/snake/dotted token to PascalCase.
+func pascalIdentifier(token string) string {
+	parts := strings.FieldsFunc(token, func(r rune) bool {
+		return r == '-' || r == '_' || r == '.' || r == ' '
+	})
+	out := ""
+	for _, p := range parts {
+		if p == "" {
+			continue
 		}
+		out += strings.ToUpper(p[:1]) + p[1:]
 	}
-	return ""
+	return out
 }
 
 // dedupeStrings returns the values in order, without duplicates.

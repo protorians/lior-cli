@@ -34,9 +34,13 @@ type ModuleSpec struct {
 	URL string
 	// Type is the distribution type (canonical `ModuleType` enum); empty
 	// defaults to WEB_APP_LOCAL (a code-scaffolded module is served locally
-	// by the organization core — spec ADR-001). `CONFIGURATION` (no code,
-	// `entry: index.json`) is recommended for data-only modules (ADR-011)
-	// and can be requested explicitly.
+	// by the organization core — spec ADR-001). The type decides which
+	// embedded reference mockup the scaffold copies (each canonical type owns
+	// a mockup shaped for its injection surface — spec `module-types` §2) and
+	// whether a socle page `src/app/<url>/page.tsx` is scaffolded at all
+	// (ModuleTypeSupportsPage). `CONFIGURATION` (no code, `entry: index.json`)
+	// is recommended for data-only modules (ADR-011) and can be requested
+	// explicitly.
 	Type string
 	// Category is the store category (one of the ModuleCategory values); empty
 	// defaults to SYSTEM.
@@ -273,11 +277,13 @@ func (c *Creator) ResolveDependencies(moduleDir string) (string, error) {
 }
 
 // Create generates a module from the provided spec inside
-// `library/modules/<domain>` by copying the reference mockup (custom or
-// embedded) and renaming its components and information with the spec
-// (identifier for components, domain for the directory and the declaration
-// identifier). A matching `src/app/<url>/page.tsx` is scaffolded from the page
-// mockup.
+// `library/modules/<domain>` by copying the reference mockup of its type
+// (custom mockup first, then the embedded mockup dedicated to the type —
+// each canonical `ModuleType` owns one) and renaming its components and
+// information with the spec (identifier for components, domain for the
+// directory and the declaration identifier). A matching
+// `src/app/<url>/page.tsx` is scaffolded from the page mockup for the types
+// that own an application surface.
 func (c *Creator) Create(spec ModuleSpec) (*CreateResult, error) {
 	spec.Domain = strings.TrimSpace(spec.Domain)
 	spec.ID = strings.TrimSpace(spec.ID)
@@ -321,7 +327,7 @@ func (c *Creator) Create(spec ModuleSpec) (*CreateResult, error) {
 	}
 
 	page := ""
-	if !c.NoPage {
+	if !c.NoPage && ModuleTypeSupportsPage(spec.Type) {
 		if src := c.pageMockupSource(); src != "" {
 			page = scaffoldPage(c.Root, moduleDir, spec, src)
 		} else {

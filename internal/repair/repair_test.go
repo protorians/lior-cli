@@ -391,7 +391,7 @@ func TestRepairMigratesPermissionsWithoutLosingCodes(t *testing.T) {
   "entry": "index.tsx",
   "type": "WEB_APP_LOCAL",
   "token": "3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b",
-  "permissions": ["user.read", "admin.delete", "editor.write"],
+  "permissions": ["user.read", "admin.delete", "Editor:Post", "User:Get:Extra"],
   "capabilities": ["core:default"]
 }`)
 	if err := os.WriteFile(filepath.Join(filepath.Dir(path), config.LegacyDeclarationFileName), []byte("export default {};\n"), 0o644); err != nil {
@@ -407,7 +407,7 @@ func TestRepairMigratesPermissionsWithoutLosingCodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"User:Get", "Admin:Delete", "editor.write"}
+	want := []string{"User", "Admin", "Editor", "User:Get:Extra"}
 	if len(m.Permissions) != len(want) {
 		t.Fatalf("Permissions = %v, want %v", m.Permissions, want)
 	}
@@ -587,7 +587,7 @@ func TestRepairConfigurationModule(t *testing.T) {
 	if ins == nil {
 		t.Fatalf("une instruction 'dataModel' est attendue: %+v", result.Modules[0].Instructions)
 	}
-	if !strings.Contains(strings.Join(ins.Steps, " "), "Role:Verbe") {
+	if !strings.Contains(strings.Join(ins.Steps, " "), "<Domain>:<Verb>") {
 		t.Errorf("l'instruction dataModel doit guider la déclaration: %+v", ins.Steps)
 	}
 	if n := countInstructions(result.Modules[0], "dataModel"); n != 1 {

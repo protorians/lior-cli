@@ -187,10 +187,57 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	// boolean object is normalized on load).
 	addLevel(res, "manifest.json", "capabilities", rawHasKey(manifestPath, "capabilities"),
 		"capabilities present", LevelWarning)
-	// permissions: canonical `Role:Verbe` codes; legacy dotted scopes trigger
-	// a migration warning (the installation review requires canonical codes).
-	addLevel(res, "manifest.json", "permissions", permissionsCanonical(manifest.Permissions),
-		"permissions use canonical Role:Verbe codes", LevelWarning)
+	// permissions: canonical bare permission domains (`Post`, `PostCategory`
+	// — §6.5, the server composes `KEY:Domain` itself). The former
+	// `<Role>:<Verbe>` couples never fed the namespaced RBAC and the schema
+	// removed them — they trigger a migration warning.
+	switch {
+	case allPermissionDomains(manifest.Permissions):
+		addLevel(res, "manifest.json", "permissions", true,
+			"permissions use bare permission domains", LevelWarning)
+	case allPermissionCodes(manifest.Permissions):
+		addLevel(res, "manifest.json", "permissions", false,
+			"permissions must use bare permission domains (legacy <Role>:<Verbe> couples — migrate to the module's real domains)", LevelWarning)
+	default:
+		addLevel(res, "manifest.json", "permissions", false,
+			"permissions must use bare permission domains (malformed entries)", LevelWarning)
+	}
+	// access (§6.5): optional role floor — bare PascalCase role names.
+	addLevel(res, "manifest.json", "access", accessEntriesValid(manifest.Access),
+		"access entries are PascalCase role names", LevelWarning)
+	// themes (§6.10): token palettes of a THEME module — tokens only, the
+	// whitelist (MODULE_THEME_TOKENS) and the contrast checks are enforced
+	// server-side.
+	addLevel(res, "manifest.json", "themes", themesValid(manifest.Themes),
+		"themes entries declare an id and a token map", LevelWarning)
+	// admin (§6.10): SYSTEM-module privileges. The first-party/Tauri/role
+	// gating is server-side (fail-closed); a declaration on another type is
+	// dead weight the socle ignores.
+	if manifest.Admin != nil {
+		addLevel(res, "manifest.json", "admin", ValidateAdminDeclaration(*manifest.Admin) == nil,
+			"admin declares PascalCase roles and scopes", LevelWarning)
+		addLevel(res, "manifest.json", "admin type",
+			strings.EqualFold(strings.TrimSpace(manifest.Type), "SYSTEM"),
+			"admin applies to SYSTEM modules", LevelWarning)
+	}
+	// remote (§6.10): the origin of a WEB_APP_REMOTE module — an HTTPS domain
+	// origin (no literal IP), verified server-side before moderation.
+	if manifest.Remote != nil {
+		addLevel(res, "manifest.json", "remote", ValidateRemoteDeclaration(*manifest.Remote) == nil,
+			"remote declares an HTTPS domain origin", LevelWarning)
+		addLevel(res, "manifest.json", "remote type",
+			strings.EqualFold(strings.TrimSpace(manifest.Type), "WEB_APP_REMOTE"),
+			"remote applies to WEB_APP_REMOTE modules", LevelWarning)
+	}
+	// settings (§6.10): the parameter-menu entries of a CONFIGURATION module;
+	// each entry resolves under /m/<slug>/.
+	if manifest.Settings != nil {
+		addLevel(res, "manifest.json", "settings", settingsEntriesValid(manifest.Settings.Entries),
+			"settings entries carry a label", LevelWarning)
+		addLevel(res, "manifest.json", "settings type",
+			strings.EqualFold(strings.TrimSpace(manifest.Type), "CONFIGURATION"),
+			"settings applies to CONFIGURATION modules", LevelWarning)
+	}
 	// distribution type: canonical enum; legacy INTERNAL/EXTERNAL accepted
 	// with a migration warning.
 	addLevel(res, "manifest.json", "type",
@@ -245,6 +292,37 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	// publication and lock the first user out of the module.
 	add(res, "manifest.json", "legal", ValidateLegalDocuments(manifest.Legal) == nil,
 		"legal declarations compliant (key, kind, version, content; TERMS and PRIVACY together)")
+	// routines (§6.10): a compiled module names its `Routine` singletons; a
+	// third-party SERVICE module declares descriptors executed by the socle
+	// through ctx.api (job.kind "api", period bounded 30 s–1 h).
+	routinesOK := true
+	for _, r := range manifest.Routines {
+		if ValidateRoutineDeclaration(r) != nil {
+			routinesOK = false
+			break
+		}
+	}
+	addLevel(res, "manifest.json", "routines", routinesOK,
+		"routines entries are singleton names or compliant declarative descriptors", LevelWarning)
+	// declarative (§6.10): the dashboard widgets of a WIDGET module (or the
+	// KPI-cards slot of a CONFIGURATION module). An interactive entry runs a
+	// sandboxed artifact document — safe entry grammar, bounded minHeight and
+	// a mandatory title; a native entry reads a dataModel resource.
+	if manifest.Declarative != nil {
+		widgetsOK := true
+		for _, w := range manifest.Declarative.Widgets {
+			if ValidateDeclarativeWidget(w) != nil {
+				widgetsOK = false
+				break
+			}
+		}
+		addLevel(res, "manifest.json", "declarative.widgets", widgetsOK,
+			"declarative widgets declare a resource or a compliant interactive block", LevelWarning)
+	}
+	// capabilities (§6.6): Tauri permission ids (`core:default`); the legacy
+	// boolean-object flags (needsNetwork…) surface as non-conforming ids.
+	addLevel(res, "manifest.json", "capabilities", capabilityIDsValid(manifest.Capabilities),
+		"capabilities use Tauri permission ids", LevelWarning)
 
 	// CONFIGURATION modules carry their UI in the manifest itself
 	// (`entry: index.json` + `dataModel`/`declarative`): no React entry needed.
@@ -641,12 +719,72 @@ func oauthScopesValid(scopes []string) bool {
 	return true
 }
 
-// permissionsCanonical reports whether every permission entry uses the
-// canonical `Role:Verbe` form. An empty list is accepted here (publish-time
-// review covers the security semantics); only malformed entries warn.
-func permissionsCanonical(permissions []string) bool {
+// allPermissionDomains reports whether every entry of `permissions` is a bare
+// PascalCase permission domain — the canonical grammar (§6.5). An empty list
+// is valid: it declares a module that exposes no attributable permission.
+func allPermissionDomains(permissions []string) bool {
+	for _, p := range permissions {
+		if !IsPermissionDomain(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// allPermissionCodes reports whether every entry of `permissions` uses the
+// former `<Role>:<Verbe>` grammar — the legacy form the schema removed.
+func allPermissionCodes(permissions []string) bool {
 	for _, p := range permissions {
 		if !IsPermissionCode(p) {
+			return false
+		}
+	}
+	return len(permissions) > 0
+}
+
+// accessEntriesValid reports whether every `access` entry is a PascalCase
+// role name.
+func accessEntriesValid(access []string) bool {
+	for _, role := range access {
+		if !IsPermissionDomain(role) {
+			return false
+		}
+	}
+	return true
+}
+
+// themesValid reports whether every `themes` entry carries an id and a token
+// map (§6.10).
+func themesValid(themes []ThemeDeclaration) bool {
+	for _, t := range themes {
+		if ValidateThemeDeclaration(t) != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// settingsEntriesValid reports whether every `settings.entries` entry carries
+// a label (§6.10).
+func settingsEntriesValid(entries []SettingsEntry) bool {
+	for _, e := range entries {
+		if ValidateSettingsEntry(e) != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// capabilityIDRE matches a Tauri capability/permission identifier
+// (`core:default`, `notification:default`, `core:window:allow-start-dragging`).
+var capabilityIDRE = regexp.MustCompile(`^[a-z][a-z0-9_]*:[a-z0-9_.:-]+$`)
+
+// capabilityIDsValid reports whether every `capabilities` entry is a Tauri
+// permission identifier (§6.6). The legacy boolean-object flags — normalized
+// on load to plain names (`needsNetwork`) — do not conform.
+func capabilityIDsValid(capabilities Capabilities) bool {
+	for _, c := range capabilities {
+		if !capabilityIDRE.MatchString(strings.TrimSpace(c)) {
 			return false
 		}
 	}

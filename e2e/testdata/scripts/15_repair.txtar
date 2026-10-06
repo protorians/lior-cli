@@ -41,17 +41,19 @@ stdout 'renamed the module directory to "com.example.blog-manager"'
 exists library/modules/com.example.blog-manager/manifest.json
 ! exists library/modules/mod.liorian.blog-manager/manifest.json
 
-# TC-041 — a legacy permission list is migrated to canonical Role:Verbe codes
+# TC-041 — a legacy permission list is migrated to bare permission domains
 # without losing the codes the mapping cannot resolve.
 mkdir -p library/modules/mod.liorian.perms
 exec sh -c 'printf "export default { identifier: \"mod.liorian.perms\", widgets: {} };\n" > library/modules/mod.liorian.perms/index.tsx'
-exec sh -c 'printf "{\n  \"id\": \"perms\",\n  \"domain\": \"mod.liorian.perms\",\n  \"name\": \"Perms\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [\"user.read\", \"admin.delete\", \"editor.write\"],\n  \"capabilities\": [\"core:default\"]\n}\n" > library/modules/mod.liorian.perms/manifest.json'
+exec sh -c 'printf "{\n  \"id\": \"perms\",\n  \"domain\": \"mod.liorian.perms\",\n  \"name\": \"Perms\",\n  \"version\": \"1.0.0\",\n  \"entry\": \"index.tsx\",\n  \"type\": \"WEB_APP_LOCAL\",\n  \"token\": \"3f1a2b4c-5d6e-7f80-9a1b-2c3d4e5f6a7b\",\n  \"permissions\": [\"user.read\", \"admin.delete\", \"Editor:Post\", \"User:Get:Extra\"],\n  \"capabilities\": [\"core:default\"]\n}\n" > library/modules/mod.liorian.perms/manifest.json'
 exec $LIORIAN --no-color repair mod.liorian.perms --warnings --no-install
-# The resolvable codes are migrated...
-grep '"User:Get"' library/modules/mod.liorian.perms/manifest.json
-grep '"Admin:Delete"' library/modules/mod.liorian.perms/manifest.json
+# The resolvable codes are migrated (dotted resources and <Role>:<Verbe>
+# couples reduce to their bare PascalCase domain)...
+grep '"User"' library/modules/mod.liorian.perms/manifest.json
+grep '"Admin"' library/modules/mod.liorian.perms/manifest.json
+grep '"Editor"' library/modules/mod.liorian.perms/manifest.json
 # ...and the ambiguous one is kept, never dropped.
-grep '"editor.write"' library/modules/mod.liorian.perms/manifest.json
+grep '"User:Get:Extra"' library/modules/mod.liorian.perms/manifest.json
 stdout 'left untouched'
 
 # TC-042 — the platform declaration is completed, never narrowed: a module
@@ -96,7 +98,7 @@ stdout 'the CONFIGURATION module declares no dataModel'
 
 # TC-046 — a finding is reported once, not once per pass.
 exec sh -c '$LIORIAN --no-color repair mod.liorian.perms --warnings --no-install --output json > report.json'
-grep -count=1 'not canonical Role:Verbe' report.json
+grep -count=1 'not bare permission domains' report.json
 
 # TC-047 — a repair never injects the zero value of an absent field: an empty
 # publisher block would raise a warning no repair can clear.

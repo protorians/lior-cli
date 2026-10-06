@@ -159,6 +159,39 @@ func TestCreateCommandFlagsRegistered(t *testing.T) {
 	}
 }
 
+// TestCreateTypeMenuListsCanonicalTypesOnly verifies that the interactive type
+// menu offers exactly the seven canonical `ModuleType` values (spec
+// `module-types` §2) — the type drives both the embedded reference mockup the
+// scaffold copies and the reverse-domain prefix. The deprecated legacy aliases
+// (INTERNAL, EXTERNAL, EXTERNAL_URL, WEB_APP_CACHED, REMOTE_FRONTEND) are
+// never offered, and every label maps back to its value.
+func TestCreateTypeMenuListsCanonicalTypesOnly(t *testing.T) {
+	canonical := []string{
+		"CONFIGURATION", "WEB_APP_REMOTE", "WEB_APP_LOCAL", "SYSTEM",
+		"SERVICE", "WIDGET", "THEME",
+	}
+	offered := map[string]bool{}
+	for _, choice := range createTypeChoicesList {
+		offered[choice.value] = true
+		if createTypeValue(choice.label) != choice.value {
+			t.Errorf("le libellé %q doit se reconvertir en %q", choice.label, choice.value)
+		}
+	}
+	for _, kind := range canonical {
+		if !offered[kind] {
+			t.Errorf("le menu interactif doit proposer le type canonique %s", kind)
+		}
+	}
+	for _, legacy := range []string{"INTERNAL", "EXTERNAL", "EXTERNAL_URL", "WEB_APP_CACHED", "REMOTE_FRONTEND"} {
+		if offered[legacy] {
+			t.Errorf("l'alias legacy %s ne doit plus être proposé dans le menu", legacy)
+		}
+	}
+	if len(createTypeChoicesList) != len(canonical) {
+		t.Errorf("le menu doit porter exactement les %d types canoniques, en propose %d", len(canonical), len(createTypeChoicesList))
+	}
+}
+
 // TestRunCreateSkipInstallFlagSkipsInstallStep verifies that the
 // `--skip-install` flag (spec §5.2 step 6) disables the dependency
 // installation step even when LIORIAN_CLI_SKIP_INSTALL is unset: with an

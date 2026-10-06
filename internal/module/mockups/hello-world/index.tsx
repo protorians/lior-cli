@@ -21,10 +21,20 @@ const helloWorldModule: ModuleDeclarationInterface = {
     routines: [
         helloWorldAnalyticsRoutine
     ],
+    configSettings: [
+        {
+            key: 'greeting',
+            label: 'Salutation personnalisée',
+            description: 'Texte affiché par le widget du module',
+            type: 'TEXT',
+            placeholder: 'Bonjour le monde !',
+            defaultValue: 'Bonjour',
+        },
+    ],
     uri: '/hello-world',
     isEnabled: true,
     isDefault: false,
-    type: 'INTERNAL',
+    type: 'WEB_APP_LOCAL',
     external: false,
     category: 'SYSTEM',
     menu: {

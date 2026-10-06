@@ -1178,7 +1178,7 @@ func buildModuleArchive(name, page, version string) []byte {
 			"socle": map[string]any{"min": "0.17.1", "max": "0.17.x"},
 			"api":   map[string]any{"min": "0.27.0", "max": "0.27.x"},
 		},
-		"permissions":          []string{"User:Get"},
+		"permissions":          []string{"Post"},
 		"oauth":                map[string]any{"scopes": []string{"openid"}},
 		"optionalRequirements": map[string]string{},
 		"requirements":         map[string]any{},

@@ -7,7 +7,12 @@ export class HelloWorldAnalyticsRoutine extends Routine<HelloWorldAnalyticsInter
     constructor() {
         super('hello-world.analytics', {
             icon: 'WandSparkles',
-            name: 'Service Analytique Hello World en temps réel'
+            name: 'Service Analytique Hello World en temps réel',
+            // Sans `trigger`, la routine est persistante : elle survit aux
+            // changements de module. Pour la rendre non persistante — active
+            // uniquement sur certaines routes ou à l'ouverture d'un module
+            // (contrat `SERVICE`, spec service-routine §3.1) :
+            // trigger: {url: ['/hello-world'], modules: ['mod.liorian.crm']},
         });
     }
 
