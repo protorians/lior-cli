@@ -82,18 +82,22 @@ type Result struct {
 	LibraryURL  string
 	DevLinkPath string
 	Scheme      string
-	Warnings    []string
+	// ModuleDevPath est le registre des modules en dev du socle
+	// (`<socle>/.liorian/module.dev.json`) où le module a été inscrit.
+	ModuleDevPath string
+	Warnings      []string
 }
 
 // UnbindResult résume le retrait d'une liaison.
 type UnbindResult struct {
-	SocleDir       string
-	ModuleDir      string
-	Identifier     string
-	RemovedDir     string
-	EnvPath        string
-	EnvUpdated     bool
-	DevLinkRemoved bool
+	SocleDir         string
+	ModuleDir        string
+	Identifier       string
+	RemovedDir       string
+	EnvPath          string
+	EnvUpdated       bool
+	DevLinkRemoved   bool
+	ModuleDevRemoved bool
 }
 
 type bindMarker struct {
@@ -223,6 +227,21 @@ func Bind(options Options) (*Result, error) {
 		return nil, err
 	}
 
+	// Registre des modules en développement du socle : `liora socle dev`
+	// (et `bun run dev` du socle) héberge le module dans son serveur
+	// central — la liaison doit y figurer, chemin absolu à l'appui. Un
+	// registre corrompu n'interrompt pas la liaison : l'avertissement suffit.
+	moduleDevPath := socle.ModuleDevPath(socleDir)
+	if _, err := socle.UpsertModuleDev(socleDir, socle.ModuleDevEntry{
+		Identifier: identifier,
+		Dir:        moduleDir,
+		BoundAt:    time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		warnings = append(warnings, fmt.Sprintf(
+			"registre des modules en dev illisible (%v) — corriger %s avant `liora socle dev`",
+			err, moduleDevPath))
+	}
+
 	log(fmt.Sprintf("artifact: %s@%s lié au socle (%s)", identifier, version, mode))
 	log(fmt.Sprintf("artifact: bibliothèque — %s", versionDir))
 	log(fmt.Sprintf("artifact: dev-server — %s (%s)", devURL, envPath))
@@ -230,23 +249,25 @@ func Bind(options Options) (*Result, error) {
 		log(fmt.Sprintf("artifact: bibliothèque — %s", profile.LibraryURL))
 	}
 	log(fmt.Sprintf("artifact: lien de développement — %s", devLinkPath))
+	log(fmt.Sprintf("artifact: modules en dev — %s", moduleDevPath))
 	for _, warning := range warnings {
-		log("artifact: " + warning)
+		log("artifact: ⚠ " + warning)
 	}
 
 	return &Result{
-		SocleDir:    socleDir,
-		ModuleDir:   moduleDir,
-		Identifier:  identifier,
-		Version:     version,
-		Mode:        mode,
-		VersionDir:  versionDir,
-		EnvPath:     envPath,
-		DevURL:      devURL,
-		LibraryURL:  profile.LibraryURL,
-		DevLinkPath: devLinkPath,
-		Scheme:      profile.Scheme,
-		Warnings:    warnings,
+		SocleDir:      socleDir,
+		ModuleDir:     moduleDir,
+		Identifier:    identifier,
+		Version:       version,
+		Mode:          mode,
+		VersionDir:    versionDir,
+		EnvPath:       envPath,
+		DevURL:        devURL,
+		LibraryURL:    profile.LibraryURL,
+		DevLinkPath:   devLinkPath,
+		Scheme:        profile.Scheme,
+		ModuleDevPath: moduleDevPath,
+		Warnings:      warnings,
 	}, nil
 }
 
@@ -291,13 +312,18 @@ func Unbind(options Options) (*UnbindResult, error) {
 		_ = os.Remove(filepath.Dir(devLinkPath))
 	}
 
+	// Le registre des modules en dev du socle ne doit pas désigner une
+	// liaison retirée : `liora socle dev` ignorerait un dossier orphelin.
+	moduleDevRemoved, moduleDevErr := socle.RemoveModuleDev(socleDir, moduleDir, identifier)
+
 	result := &UnbindResult{
-		SocleDir:       socleDir,
-		ModuleDir:      moduleDir,
-		Identifier:     identifier,
-		EnvPath:        envPath,
-		EnvUpdated:     envUpdated,
-		DevLinkRemoved: devLinkRemoved,
+		SocleDir:         socleDir,
+		ModuleDir:        moduleDir,
+		Identifier:       identifier,
+		EnvPath:          envPath,
+		EnvUpdated:       envUpdated,
+		DevLinkRemoved:   devLinkRemoved,
+		ModuleDevRemoved: moduleDevRemoved,
 	}
 
 	bindings := boundBindings(moduleRoot, moduleDir)
@@ -349,6 +375,12 @@ func Unbind(options Options) (*UnbindResult, error) {
 	}
 	if devLinkRemoved {
 		log(fmt.Sprintf("artifact: lien de développement retiré (%s)", filepath.Join(moduleDir, devlink.File)))
+	}
+	if moduleDevRemoved {
+		log(fmt.Sprintf("artifact: %s retiré de %s", identifier, socle.ModuleDevPath(socleDir)))
+	} else if moduleDevErr != nil {
+		log(fmt.Sprintf("artifact: ⚠ registre des modules en dev inaccessible (%v) — %s",
+			moduleDevErr, socle.ModuleDevPath(socleDir)))
 	}
 	return result, nil
 }

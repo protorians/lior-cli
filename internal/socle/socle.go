@@ -167,7 +167,7 @@ func ReadProfile(dir string) Profile {
 		merged[key] = value
 	}
 
-	devScript := strings.Join(nonEmpty(scripts["dev:socle"], scripts["dev"]), " && ")
+	devScript := resolveDevScript(scripts)
 	libraryScript := scripts["dev:library"]
 	profile := Profile{
 		Dir:             dir,
@@ -210,6 +210,44 @@ func ReadDevLink(moduleDir string) (DevLink, bool) {
 		return DevLink{}, false
 	}
 	return link, true
+}
+
+// resolveDevScript choisit le script qui décrit le lancement de l'application
+// du socle : `dev:app` d'abord (le contenu historique de `dev`, déplacé quand
+// `dev` est devenu `liora socle dev`), puis `dev:socle`, puis `dev`. Un
+// script qui délègue à `liora socle` est écarté : décrire le serveur central
+// par le script qu'il exécute lui-même masquerait `next dev` (le socle
+// semblerait sans serveur de dev) et ferait boucler le profil.
+func resolveDevScript(scripts map[string]string) string {
+	if script := runnableDevScript(scripts["dev:app"]); script != "" {
+		return script
+	}
+	return strings.Join(nonEmpty(
+		runnableDevScript(scripts["dev:socle"]),
+		runnableDevScript(scripts["dev"])), " && ")
+}
+
+// runnableDevScript écarte un script absent ou qui délègue à la CLI.
+func runnableDevScript(script string) string {
+	script = strings.TrimSpace(script)
+	if script == "" || strings.Contains(script, "liora socle") {
+		return ""
+	}
+	return script
+}
+
+// AppScriptName nomme le script npm qui lance l'application du socle —
+// `liora socle dev` l'exécute pour héberger le front à côté du serveur
+// central. Ordre : `dev:app`, puis `dev:socle`, puis `dev` ; un script qui
+// délègue à `liora socle` est écarté (boucle). Vide si aucun n'est
+// exécutable : le socle est alors serveur central seul.
+func AppScriptName(scripts map[string]string) string {
+	for _, name := range []string{"dev:app", "dev:socle", "dev"} {
+		if runnableDevScript(scripts[name]) != "" {
+			return name
+		}
+	}
+	return ""
 }
 
 // resolveScheme déduit le schéma du socle : l'hôte d'application déclaré

@@ -114,6 +114,7 @@ func init() {
 		authCmd,
 		disconnectCmd,
 		artifactCmd,
+		socleCmd,
 		packCmd,
 		signCmd,
 		publishCmd,

@@ -110,21 +110,43 @@ var artifactBuildCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		result, err := artifactdev.Build(artifactdev.BuildOptions{ModuleDir: moduleDir}, func(message string) {
-			fmt.Println(message)
+		var logs []string
+		result, err := tui.RunWithSpinner(i18n.T("artifact.build.spinner"), func() (*artifactdev.BuildResult, error) {
+			return artifactdev.Build(artifactdev.BuildOptions{ModuleDir: moduleDir}, func(message string) {
+				logs = append(logs, styleArtifactLine(message))
+			})
 		})
 		if err != nil {
+			printArtifactLogs(logs)
+			if _, ok := err.(*pkg.Error); ok {
+				return err
+			}
 			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 		}
 		s := tui.NewStyles()
+		fmt.Println()
 		fmt.Println(s.SummaryCard(
 			s.Success.Render(i18n.T("artifact.build.done")),
 			s.KeyValue(i18n.T("label.bundle"), s.Info.Render(result.BundlePath)+
 				fmt.Sprintf(" (%.0f Ko)", float64(result.BundleBytes)/1024)),
 			s.KeyValue(i18n.T("label.document"), s.Info.Render(result.DocumentPath)),
 		))
+		printArtifactLogs(logs)
+		fmt.Println()
 		return nil
 	},
+}
+
+// printArtifactLogs rend un bloc de journal quand des lignes ont été
+// collectées — le panneau de résultat reste la première chose lue, le
+// détail vient après, encadré.
+func printArtifactLogs(logs []string) {
+	if len(logs) == 0 {
+		return
+	}
+	s := tui.NewStyles()
+	fmt.Println()
+	fmt.Println(s.LogsBlock(i18n.T("artifact.logs"), logs))
 }
 
 var artifactDevCmd = &cobra.Command{
@@ -155,13 +177,27 @@ var artifactDevCmd = &cobra.Command{
 			dev.HTTPS = &artifactHTTPSFlagFalse
 		}
 
+		// Délégation au serveur central du socle : les modules ciblés sont
+		// hébergés par `liora socle dev`, un seul serveur pour tous les
+		// modules liés — `artifact dev` ne démarre pas le sien. Sans liaison
+		// ni registre, le serveur autonome reste le repli.
+		if central := centralSocleDir(dirs, artifactSocle); central != "" {
+			printCentralDelegation(central)
+			return runCentralDev(centralDevOptions{
+				SocleDir:  central,
+				Dev:       dev,
+				StartApp:  strings.TrimSpace(artifactSocle) != "",
+				ExtraDirs: dirs,
+			})
+		}
+
 		// Orchestration un-terminal : `liora artifact dev --socle ../socle`
-		// démarre aussi le socle (next dev + serveur de bibliothèque) et le
-		// stoppe avec le dev-server. La boucle de développement tient alors
-		// dans un seul terminal, HMR compris.
+		// démarre aussi l'application du socle (next dev + serveur de
+		// bibliothèque) et l'arrête avec le dev-server. La boucle de
+		// développement tient alors dans un seul terminal, HMR compris.
 		var socleProcess *exec.Cmd
 		if strings.TrimSpace(artifactSocle) != "" {
-			socleProcess, err = startSocleDev(artifactSocle)
+			socleProcess, _, err = startSocleApp(artifactSocle)
 			if err != nil {
 				return err
 			}
@@ -172,7 +208,7 @@ var artifactDevCmd = &cobra.Command{
 		}
 
 		s := tui.NewStyles()
-		log := func(message string) { fmt.Println(message) }
+		log := func(message string) { fmt.Println(styleArtifactLine(message)) }
 
 		// Plusieurs modules : un seul serveur, un seul port, chaque module
 		// servi sous son slug (`/<slug>/`) — le socle résout le module par le
@@ -185,9 +221,11 @@ var artifactDevCmd = &cobra.Command{
 			for _, hosted := range server.Modules {
 				fmt.Println(s.Info.Render(i18n.T("artifact.dev.hint") + " " + server.URL + "/" + hosted.Slug + "/"))
 			}
+			fmt.Println(s.Muted.Render(i18n.T("artifact.dev.running")))
 			fmt.Println()
 			waitForInterrupt()
 			server.Stop()
+			fmt.Println(s.Info.Render(i18n.T("artifact.dev.stop")))
 			return nil
 		}
 
@@ -197,10 +235,12 @@ var artifactDevCmd = &cobra.Command{
 		}
 
 		fmt.Println(s.Info.Render(i18n.T("artifact.dev.hint") + " " + server.URL + "/m"))
+		fmt.Println(s.Muted.Render(i18n.T("artifact.dev.running")))
 		fmt.Println()
 
 		waitForInterrupt()
 		server.Stop()
+		fmt.Println(s.Info.Render(i18n.T("artifact.dev.stop")))
 		return nil
 	},
 }
@@ -290,21 +330,28 @@ var artifactPackCmd = &cobra.Command{
 			return err
 		}
 
-		if !artifactNoBuild {
-			if _, err := artifactdev.Build(artifactdev.BuildOptions{ModuleDir: moduleDir}, func(message string) {
-				fmt.Println(message)
-			}); err != nil {
-				return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
+		var logs []string
+		result, err := tui.RunWithSpinner(i18n.T("pack.spinner"), func() (*module.PackResult, error) {
+			if !artifactNoBuild {
+				if _, err := artifactdev.Build(artifactdev.BuildOptions{ModuleDir: moduleDir}, func(message string) {
+					logs = append(logs, styleArtifactLine(message))
+				}); err != nil {
+					return nil, err
+				}
 			}
-		}
-
-		packer := &module.Packer{Root: root, Out: strings.TrimSpace(artifactOut)}
-		result, err := packer.PackPath(moduleDir)
+			packer := &module.Packer{Root: root, Out: strings.TrimSpace(artifactOut)}
+			return packer.PackPath(moduleDir)
+		})
 		if err != nil {
+			printArtifactLogs(logs)
+			if _, ok := err.(*pkg.Error); ok {
+				return err
+			}
 			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 		}
 
 		s := tui.NewStyles()
+		fmt.Println()
 		fmt.Println(s.SummaryCard(
 			s.Success.Render(i18n.T("pack.success")),
 			s.KeyValue(i18n.T("label.module"), result.Module+" v"+result.Version),
@@ -312,8 +359,10 @@ var artifactPackCmd = &cobra.Command{
 			s.KeyValue(i18n.T("label.size"), humanSize(result.Size)),
 			s.KeyValue(i18n.T("label.checksum"), s.Value.Render(shortDigest(result.Checksum))),
 		))
+		printArtifactLogs(logs)
 		fmt.Println()
 		fmt.Println(s.Info.Render(i18n.T("artifact.pack.sign_hint")))
+		fmt.Println()
 		return nil
 	},
 }
@@ -330,11 +379,22 @@ var artifactTypecheckCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := module.RunTypecheck(moduleDir); err != nil {
+		_, err = tui.RunWithSpinner(i18n.T("artifact.typecheck.spinner"), func() (struct{}, error) {
+			return struct{}{}, module.RunTypecheck(moduleDir)
+		})
+		if err != nil {
+			if _, ok := err.(*pkg.Error); ok {
+				return err
+			}
 			return pkg.NewError(i18n.T("cat.pack"), err.Error(), pkg.ExitBuild)
 		}
 		s := tui.NewStyles()
-		fmt.Println(s.Success.Render(i18n.T("artifact.typecheck.done")))
+		fmt.Println()
+		fmt.Println(s.SummaryCard(
+			s.Success.Render(i18n.T("artifact.typecheck.done")),
+			s.KeyValue(i18n.T("label.module"), s.Info.Render(moduleDir)),
+		))
+		fmt.Println()
 		return nil
 	},
 }
@@ -370,6 +430,13 @@ var artifactTestCmd = &cobra.Command{
 			}
 			return pkg.NewError(i18n.T("cat.test"), err.Error(), pkg.ExitError)
 		}
+		s := tui.NewStyles()
+		fmt.Println()
+		fmt.Println(s.SummaryCard(
+			s.Success.Render(i18n.T("artifact.test.done")),
+			s.KeyValue(i18n.T("label.module"), s.Info.Render(moduleDir)),
+		))
+		fmt.Println()
 		return nil
 	},
 }
@@ -417,38 +484,59 @@ func runArtifactSocleBind(args []string, bind bool) error {
 		return err
 	}
 
+	var logs []string
 	options := artifactbind.Options{SocleDir: socleDir, ModuleDir: moduleDir, Log: func(message string) {
-		fmt.Println(message)
+		logs = append(logs, styleArtifactLine(message))
 	}}
 	s := tui.NewStyles()
 	if bind {
 		result, err := artifactbind.Bind(options)
 		if err != nil {
+			printArtifactLogs(logs)
+			if _, ok := err.(*pkg.Error); ok {
+				return err
+			}
 			return pkg.NewError(i18n.T("cat.link"), err.Error(), pkg.ExitError)
 		}
+		fmt.Println()
 		fmt.Println(s.SummaryCard(
 			s.Success.Render(i18n.T("artifact.bind.done")),
 			s.KeyValue(i18n.T("label.module"), result.Identifier+" v"+result.Version),
 			s.KeyValue(i18n.T("label.mode"), string(result.Mode)),
 			s.KeyValue(i18n.T("label.dev_url"), s.Info.Render(result.DevURL)),
 			s.KeyValue(i18n.T("label.env"), s.Info.Render(result.EnvPath)),
+			s.KeyValue(i18n.T("label.registry"), s.Info.Render(result.ModuleDevPath)),
 		))
+		printArtifactLogs(logs)
 		fmt.Println()
 		fmt.Println(s.StepsList(i18n.T("artifact.bind.next"),
-			s.Info.Render("liora artifact dev"),
+			s.Info.Render("liora socle dev "+displayPath(cwd, result.SocleDir)),
 			s.Info.Render("liora doctor --socle "+displayPath(cwd, result.SocleDir)),
 		))
+		fmt.Println()
 		return nil
 	}
 	result, err := artifactbind.Unbind(options)
 	if err != nil {
+		printArtifactLogs(logs)
+		if _, ok := err.(*pkg.Error); ok {
+			return err
+		}
 		return pkg.NewError(i18n.T("cat.link"), err.Error(), pkg.ExitError)
 	}
+	fmt.Println()
 	fmt.Println(s.SummaryCard(
 		s.Success.Render(i18n.T("artifact.unbind.done")),
 		s.KeyValue(i18n.T("label.module"), result.Identifier),
 		s.KeyValue(i18n.T("label.removed"), map[bool]string{true: result.RemovedDir, false: "—"}[result.RemovedDir != ""]),
 	))
+	if result.ModuleDevRemoved {
+		printArtifactLogs([]string{styleArtifactLine(fmt.Sprintf(
+			"%s retiré de %s", result.Identifier, socle.ModuleDevPath(result.SocleDir)))})
+	} else {
+		printArtifactLogs(logs)
+	}
+	fmt.Println()
 	return nil
 }
 
@@ -503,34 +591,42 @@ func absoluteModuleDir(root, reference string) string {
 	return dir
 }
 
-// startSocleDev démarre le script `dev` du socle dans son propre groupe de
-// processus : `bun run dev` lance next dev ET le serveur de bibliothèque —
-// les deux terminaux socle de la boucle tiennent dans celui-ci.
-func startSocleDev(socleDir string) (*exec.Cmd, error) {
+// startSocleApp démarre l'application du socle dans son propre groupe de
+// processus : `dev:app` d'abord (l'ancien `dev` — next dev ET serveur de
+// bibliothèque), sinon `dev:socle`, sinon `dev`. Un script qui délègue à
+// `liora socle` est écarté : la commande qui l'invoque exécute déjà le
+// serveur central, le relancerait en boucle.
+func startSocleApp(socleDir string) (*exec.Cmd, string, error) {
 	socleDir, err := filepath.Abs(socleDir)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !socle.IsSocle(socleDir) {
-		return nil, pkg.NewError(i18n.T("cat.toolchain"),
+		return nil, "", pkg.NewError(i18n.T("cat.toolchain"),
 			i18n.Tf("artifact.error.socle_invalid", socleDir), pkg.ExitError)
 	}
 	pm := pkg.DetectPackageManager()
 	if pm == "" {
-		return nil, pkg.NewError(i18n.T("cat.toolchain"), i18n.T("artifact.error.pm_missing"), pkg.ExitError)
+		return nil, "", pkg.NewError(i18n.T("cat.toolchain"), i18n.T("artifact.error.pm_missing"), pkg.ExitError)
 	}
-	socleProcess := exec.Command(pm, "run", "dev")
+	script := socle.AppScriptName(socle.PackageScripts(socleDir))
+	if script == "" {
+		return nil, "", pkg.NewErrorWithFix(i18n.T("cat.toolchain"),
+			i18n.Tf("socle.dev.no_app", socleDir),
+			i18n.T("socle.dev.no_app.fix"), pkg.ExitError)
+	}
+	socleProcess := exec.Command(pm, "run", script)
 	socleProcess.Dir = socleDir
 	socleProcess.Stdout = os.Stdout
 	socleProcess.Stderr = os.Stderr
 	socleProcess.Stdin = os.Stdin
 	if err := runner.Spawn(socleProcess); err != nil {
-		return nil, pkg.NewError(i18n.T("cat.toolchain"),
+		return nil, "", pkg.NewError(i18n.T("cat.toolchain"),
 			i18n.Tf("artifact.error.socle_start", err.Error()), pkg.ExitError)
 	}
 	s := tui.NewStyles()
-	fmt.Println(s.Info.Render(i18n.Tf("artifact.socle.started", socleDir, pm)))
-	return socleProcess, nil
+	fmt.Println(s.Info.Render(i18n.Tf("artifact.socle.started", socleDir, pm, script)))
+	return socleProcess, script, nil
 }
 
 // stopProcessGroup attend la fin du processus du socle après l'interruption,

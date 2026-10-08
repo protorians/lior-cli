@@ -35,6 +35,10 @@ type MultiOptions struct {
 	ModuleDirs []string
 	// Dev porte les réglages partagés du serveur (port, hôte, TLS, strict).
 	Dev DevOptions
+	// SocleDir est le socle hébergeant le lot, quand il est connu
+	// (`liora socle dev`) : son `.env.local` est alors câblé directement,
+	// même si un module du lot n'a pas de lien de développement.
+	SocleDir string
 }
 
 // MultiModuleInfo décrit un module hébergé — affiché au démarrage.
@@ -186,6 +190,29 @@ func StartMulti(options MultiOptions, log func(string)) (*MultiDevServer, error)
 	}
 	if len(options.ModuleDirs) == 0 {
 		return nil, fmt.Errorf("artifact: aucun module à héberger")
+	}
+
+	// Normalisation de lot : `StartMulti` est aussi appelé directement
+	// (`liora socle dev`) sans repasser par `Resolve`, qui aligne pourtant
+	// port et hôte. Un port 0 atteindrait `listenWithFallback` et ferait
+	// échouer le démarrage du serveur central.
+	if options.Dev.Port <= 0 {
+		options.Dev.Port = envPort()
+	}
+	if options.Dev.Port <= 0 {
+		options.Dev.Port = DefaultDevPort
+	}
+	if strings.TrimSpace(options.Dev.Host) == "" {
+		options.Dev.Host = strings.TrimSpace(os.Getenv("LIORIAN_DEV_HOST"))
+		if options.Dev.Host == "" {
+			options.Dev.Host = "localhost"
+		}
+	}
+	if options.Dev.Cert == "" {
+		options.Dev.Cert = os.Getenv("LIORIAN_DEV_TLS_CERT")
+	}
+	if options.Dev.Key == "" {
+		options.Dev.Key = os.Getenv("LIORIAN_DEV_TLS_KEY")
 	}
 
 	tenants, registry, err := resolveTenants(options.ModuleDirs, options.Dev, log)
@@ -355,27 +382,55 @@ func StartMulti(options MultiOptions, log func(string)) (*MultiDevServer, error)
 	// Câblage du socle : chaque module déjà lié (devlink) voit son `.env.local`
 	// mis au niveau du lot — URL unique, lot d'identifiants, mode multi. C'est
 	// ce qui rend le lot visible du socle sans repasser par `bind:socle`.
+	//
+	// Le socle hébergeant (`liora socle dev`) est câblé en premier : son URL
+	// et sa liste de modules sont réalignées sur le serveur réellement en
+	// écoute, même si aucun module du lot n'a de lien de développement.
+	wired := map[string]bool{}
+	if dir := strings.TrimSpace(options.SocleDir); dir != "" {
+		wired[filepath.Clean(dir)] = true
+		identifiers := make([]string, 0, len(tenants))
+		for _, t := range tenants {
+			identifiers = append(identifiers, t.identifier)
+		}
+		if changed, err := socle.AlignDevModulesURL(dir, server.URL); err != nil {
+			log(fmt.Sprintf("artifact: %s — %v", socle.KeyDevModulesURL, err))
+		} else if changed {
+			log(fmt.Sprintf("artifact: %s = %s (%s)", socle.KeyDevModulesURL, server.URL, filepath.Join(dir, socle.EnvLocalFile)))
+		}
+		if changed, err := socle.AlignDevModulesMulti(dir, identifiers); err != nil {
+			log(fmt.Sprintf("artifact: %s — %v", socle.KeyDevModules, err))
+		} else if changed {
+			log(fmt.Sprintf("artifact: %s = %s (%s)",
+				socle.KeyDevModules, strings.Join(identifiers, ","), filepath.Join(dir, socle.EnvLocalFile)))
+		}
+	}
 	for _, t := range tenants {
 		link, ok := devlink.Read(t.cfg.ModuleDir)
 		if !ok {
 			continue
+		}
+		if wired[filepath.Clean(link.SocleDir)] {
+			// Déjà câblé par le socle hébergeant : seule l'alignement du port
+			// dans le lien de développement reste à faire.
+		} else {
+			for _, change := range []struct{ key, value string }{
+				{socle.KeyDevModulesURL, server.URL},
+				{socle.KeyDevModulesMulti, "1"},
+			} {
+				if changed, err := socle.EnsureEnvLocalKey(link.SocleDir, change.key, change.value); err == nil && changed {
+					log(fmt.Sprintf("artifact: %s mis à jour dans %s", change.key, filepath.Join(link.SocleDir, socle.EnvLocalFile)))
+				}
+			}
+			if changed, err := socle.EnsureEnvLocalDevModules(link.SocleDir, t.identifier); err == nil && changed {
+				log(fmt.Sprintf("artifact: NEXT_PUBLIC_DEV_MODULES inclut désormais %s", t.identifier))
+			}
 		}
 		if link.DevPort != port {
 			link.DevPort = port
 			if _, err := devlink.Write(t.cfg.ModuleDir, link); err == nil {
 				log(fmt.Sprintf("artifact: %s réaligné sur le port %d (%s)", devlink.File, port, t.identifier))
 			}
-		}
-		for _, change := range []struct{ key, value string }{
-			{socle.KeyDevModulesURL, server.URL},
-			{socle.KeyDevModulesMulti, "1"},
-		} {
-			if changed, err := socle.EnsureEnvLocalKey(link.SocleDir, change.key, change.value); err == nil && changed {
-				log(fmt.Sprintf("artifact: %s mis à jour dans %s", change.key, filepath.Join(link.SocleDir, socle.EnvLocalFile)))
-			}
-		}
-		if changed, err := socle.EnsureEnvLocalDevModules(link.SocleDir, t.identifier); err == nil && changed {
-			log(fmt.Sprintf("artifact: NEXT_PUBLIC_DEV_MODULES inclut désormais %s", t.identifier))
 		}
 	}
 

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -86,6 +87,121 @@ func EnsureEnvLocalDevModules(socleDir, identifier string) (bool, error) {
 	// préserve toute valeur existante, ce qui convient aux URL de transport mais
 	// pas ici, où la nouvelle valeur **inclut** l'ancienne.
 	return writeEnvLines(envPath, upsertEnvLine(splitEnvLines(string(data)), KeyDevModules, strings.Join(ids, ",")))
+}
+
+// AlignDevModulesURL réécrit `NEXT_PUBLIC_DEV_MODULES_URL` avec l'URL
+// effective du serveur central — contrairement à `EnsureEnvLocalKey`, la
+// valeur est écrasée quand elle est absente ou loopback : un serveur central
+// redémarré sur un autre port (bascule EADDRINUSE) laisserait sinon le socle
+// charger une iframe muette. Un hôte non-loopback (reverse proxy, docker, IP
+// LAN) est préservé : c'est un choix d'infrastructure, jamais réécrit.
+func AlignDevModulesURL(socleDir, url string) (bool, error) {
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return false, nil
+	}
+	envPath := filepath.Join(socleDir, EnvLocalFile)
+	data, err := os.ReadFile(envPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	current := strings.TrimSpace(parseEnv(string(data))[KeyDevModulesURL])
+	if current == url {
+		return false, nil
+	}
+	if current != "" && !isLoopbackURL(current) {
+		return false, nil
+	}
+	return writeEnvLines(envPath, upsertEnvLine(splitEnvLines(string(data)), KeyDevModulesURL, url))
+}
+
+// isLoopbackURL signale une URL de dev pointer vers la machine locale
+// (`localhost`, `127.0.0.1`, `[::1]`) : la CLI en est l'auteur, elle peut
+// donc la réécrire. Une valeur vide ou sans schéma http(s) compte comme
+// réécrivable — ce n'est pas un réglage d'infrastructure lisible.
+func isLoopbackURL(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "http://") && !strings.HasPrefix(trimmed, "https://") {
+		return true
+	}
+	rest := trimmed[strings.Index(trimmed, "://")+3:]
+	if slash := strings.IndexAny(rest, "/?#"); slash >= 0 {
+		rest = rest[:slash]
+	}
+	if colon := strings.LastIndex(rest, ":"); colon >= 0 && !strings.Contains(rest, "]") {
+		rest = rest[:colon]
+	}
+	host := strings.Trim(rest, "[]")
+	host = strings.TrimSuffix(host, "]")
+	switch {
+	case host == "":
+		return true
+	case strings.EqualFold(host, "localhost"):
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
+}
+
+// AlignDevModulesMulti pose le drapeau de mode multi-modules du serveur
+// central et réécrit la liste des identifiants hébergés — la liste reflète
+// l'état du registre, elle n'est pas seulement complétée (un module retiré du
+// registre disparaît). `*` reste `*`.
+func AlignDevModulesMulti(socleDir string, identifiers []string) (bool, error) {
+	envPath := filepath.Join(socleDir, EnvLocalFile)
+	data, err := os.ReadFile(envPath)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	existing := parseEnv(string(data))
+	lines := splitEnvLines(string(data))
+	changed := false
+
+	if strings.TrimSpace(existing[KeyDevModulesMulti]) != "1" {
+		lines = upsertEnvLine(lines, KeyDevModulesMulti, "1")
+		changed = true
+	}
+
+	ids := SplitDevModules(existing[KeyDevModules])
+	if !contains(ids, "*") {
+		want := make([]string, 0, len(identifiers))
+		seen := map[string]bool{}
+		for _, identifier := range identifiers {
+			identifier = strings.TrimSpace(identifier)
+			if identifier == "" || seen[identifier] {
+				continue
+			}
+			seen[identifier] = true
+			want = append(want, identifier)
+		}
+		sort.Strings(want)
+		if !equalStrings(ids, want) {
+			if len(want) == 0 {
+				lines = filterEnvLines(lines, func(key string) bool { return key == KeyDevModules })
+			} else {
+				lines = upsertEnvLine(lines, KeyDevModules, strings.Join(want, ","))
+			}
+			changed = true
+		}
+	}
+	if !changed {
+		return false, nil
+	}
+	return writeEnvLines(envPath, lines)
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // SplitDevModules parse a comma-separated list of allowed module identifiers.

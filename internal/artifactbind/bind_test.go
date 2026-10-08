@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/protorians/lior-cli/internal/devlink"
+	"github.com/protorians/lior-cli/internal/socle"
 )
 
 // writeModule écrit un module minimal (manifest.json + .liorian/artifact/) et
@@ -150,6 +151,60 @@ func TestUnbindRemovesOnlyOwnedBinding(t *testing.T) {
 	}
 	if _, err := os.Stat(realInstall); err != nil {
 		t.Fatalf("real install must survive unbind: %v", err)
+	}
+}
+
+func TestBindRegistersModuleDevRegistry(t *testing.T) {
+	moduleDir, socleDir := writeModule(t)
+
+	result, err := Bind(Options{SocleDir: socleDir, ModuleDir: moduleDir})
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+
+	// Le registre des modules en dev est tenu à jour, chemin absolu à l'appui.
+	if result.ModuleDevPath != filepath.Join(socleDir, ".liorian", "module.dev.json") {
+		t.Fatalf("ModuleDevPath = %q", result.ModuleDevPath)
+	}
+	entries, err := socle.ReadModuleDev(socleDir)
+	if err != nil {
+		t.Fatalf("read registry: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("entries = %v, want exactly one", entries)
+	}
+	if entries[0].Identifier != "hello-world" {
+		t.Fatalf("identifier = %q", entries[0].Identifier)
+	}
+	abs, err := filepath.Abs(moduleDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[0].Dir != abs {
+		t.Fatalf("dir = %q, want %q", entries[0].Dir, abs)
+	}
+
+	// Re-bind : une seule entrée (idempotent).
+	if _, err := Bind(Options{SocleDir: socleDir, ModuleDir: moduleDir}); err != nil {
+		t.Fatalf("rebind: %v", err)
+	}
+	if entries, err = socle.ReadModuleDev(socleDir); err != nil || len(entries) != 1 {
+		t.Fatalf("entries after rebind = %v (%v), want exactly one", entries, err)
+	}
+
+	// Unbind retire l'entrée du registre.
+	unbound, err := Unbind(Options{SocleDir: socleDir, ModuleDir: moduleDir})
+	if err != nil {
+		t.Fatalf("unbind: %v", err)
+	}
+	if !unbound.ModuleDevRemoved {
+		t.Fatal("ModuleDevRemoved should be true")
+	}
+	if entries, err = socle.ReadModuleDev(socleDir); err != nil {
+		t.Fatalf("read registry: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("entries = %v, want empty registry", entries)
 	}
 }
 
