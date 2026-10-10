@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.38.0] - 2026-10-10
+
+### Added
+- **Aide assistée — `module.helpers.json`** — la CLI reconnaît le fichier d'aide optionnel
+  standardisé par le socle (`assistive-help`) : présent à la racine du module (ou sous `src/`
+  dans un arbre installé), il est validé **fail-closed** (version 1, balises et visites
+  complètes, `content` borné à 2000 caractères, `trigger`/`side`/`align` dans leurs enums,
+  identifiants kebab-case uniques) — un fichier invalide bloque `audit`/`pack`/`publish` au
+  lieu de laisser le socle l'ignorer. Le packer l'embarque déjà sous `src/module.helpers.json`.
+- **Aide assistée scaffoldée dans les mockups** — `liora create module` embarque désormais un
+  `module.helpers.json` conforme pour les types qui portent la surface d'aide (`CONFIGURATION`,
+  `WIDGET`, `WEB_APP_REMOTE`, `WEB_APP_LOCAL`, `SYSTEM`) : une ancre sur le lanceur du module et
+  une visite guidée de découverte. Le renommage réécrit la référence
+  `data-help="module:<domaine>"` sur le domaine du nouveau module, y compris pour un mockup
+  personnalisé, et le README généré documente le fichier (jamais scaffoldé pour `SERVICE` ni
+  `THEME`, qui n'injectent aucune aide).
+
+### Changed
+- **Porte déclarative `access` — `<Role>:<Niveau>`** — la validation d'audit accepte désormais
+  les entrées `<Role>:<Niveau>` (`Root:80`, `Manager:70`) au même titre que les noms de rôle
+  nus (`Admin`), alignées sur le schéma canonique du workspace (`module.schema.json`, §6.5) et
+  sur `DECLARED_ACCESS_LEVEL_PATTERN` du runtime.
+
 ## [v0.36.0] - 2026-10-06
 
 ### Added

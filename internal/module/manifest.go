@@ -1092,10 +1092,25 @@ func ValidateUserScopeEntry(scope string) error {
 	return errors.New(i18n.Tf("module.error.user_scope", scope))
 }
 
-// ValidateAccessEntry checks one `access` entry: a bare PascalCase role name
-// (`Admin`, `Root`…), the same shape as a permission domain (§6.5).
+// declaredAccessEntryRE matches an `access` entry: a role name, optionally
+// followed by a numeric level — `<Role>` or `<Role>:<Niveau>` (`Admin`,
+// `Root:80`, `Manager:70`). The role name is a bare PascalCase name (the same
+// shape as a permission domain, §6.5); the level is 0–99 with up to two
+// decimals (`RoleInterface.level`, 0.00–99.99). This mirrors the canonical
+// schema pattern (`module.schema.json`, §6.5) and
+// `DECLARED_ACCESS_LEVEL_PATTERN` of the runtime.
+var declaredAccessEntryRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*(?::\d{1,2}(?:\.\d{1,2})?)?$`)
+
+// IsDeclaredAccessEntry reports whether s is a canonical `access` entry — a
+// bare role name or a `<Role>:<Niveau>` couple (§6.5).
+func IsDeclaredAccessEntry(s string) bool {
+	return declaredAccessEntryRE.MatchString(strings.TrimSpace(s))
+}
+
+// ValidateAccessEntry checks one `access` entry: a role name (`Admin`, `Root`…)
+// or a `<Role>:<Niveau>` couple (`Admin:80`) — the declarative gate of §6.5.
 func ValidateAccessEntry(role string) error {
-	if IsPermissionDomain(role) {
+	if IsDeclaredAccessEntry(role) {
 		return nil
 	}
 	return errors.New(i18n.Tf("module.error.access", role))

@@ -137,7 +137,7 @@ func scaffoldFromMockup(mockup, moduleDir string, spec ModuleSpec) error {
 		return fmt.Errorf("failed to copy module mockup: %w", err)
 	}
 
-	repls := mockupReplacements(mockupSampleID(filepath.Join(mockup, config.ManifestFileName)), spec.ID)
+	repls := mockupReplacements(mockupSampleOf(filepath.Join(mockup, config.ManifestFileName)), spec)
 	if err := renameAndRewriteTree(moduleDir, repls); err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func scaffoldFromMockup(mockup, moduleDir string, spec ModuleSpec) error {
 // spec and forcing the new module identity onto the metadata files.
 func scaffoldEmbeddedModule(moduleDir string, spec ModuleSpec) error {
 	prefix := embeddedMockupPrefix(spec.EffectiveType())
-	repls := mockupReplacements(embeddedSampleID(prefix), spec.ID)
+	repls := mockupReplacements(embeddedSample(prefix), spec)
 	if err := fs.WalkDir(embeddedTemplates, prefix, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -218,47 +218,58 @@ func sampleSpellings(id string) []string {
 	}
 }
 
-// mockupSampleID extracts the sample module identifier a mockup is written
-// with — the `id` of its manifest.json. Every mockup (embedded or custom)
+// mockupSample is the sample identity a mockup is written with: the `id` of
+// its manifest.json (drives the component/identifier renames) and its
+// `domain` (drives the module references of the assistive-help file, e.g.
+// `data-help="module:<domain>"`).
+type mockupSample struct {
+	ID     string
+	Domain string
+}
+
+// mockupSampleOf extracts the sample identity a mockup is written with — the
+// `id` and `domain` of its manifest.json. Every mockup (embedded or custom)
 // carries one: the rename machinery maps its spellings onto the new module
-// identifier, so a mockup may be written with any sample name. An unreadable
+// spec, so a mockup may be written with any sample name. An unreadable
 // manifest falls back to the reference "hello-world" (the original mockup).
-func mockupSampleID(manifestPath string) string {
-	return sampleIDFromManifest(func() ([]byte, error) {
+func mockupSampleOf(manifestPath string) mockupSample {
+	return sampleFromManifest(func() ([]byte, error) {
 		return os.ReadFile(manifestPath)
 	})
 }
 
-// embeddedSampleID extracts the sample module identifier of an embedded
-// mockup prefix.
-func embeddedSampleID(prefix string) string {
-	return sampleIDFromManifest(func() ([]byte, error) {
+// embeddedSample extracts the sample identity of an embedded mockup prefix.
+func embeddedSample(prefix string) mockupSample {
+	return sampleFromManifest(func() ([]byte, error) {
 		return embeddedTemplates.ReadFile(prefix + "/" + config.ManifestFileName)
 	})
 }
 
-// sampleIDFromManifest decodes a manifest.json payload and returns its `id`.
-func sampleIDFromManifest(read func() ([]byte, error)) string {
+// sampleFromManifest decodes a manifest.json payload into its sample identity
+// (`id` and `domain`).
+func sampleFromManifest(read func() ([]byte, error)) mockupSample {
+	fallback := mockupSample{ID: "hello-world", Domain: "mod.liorian.hello-world"}
 	data, err := read()
 	if err != nil {
-		return "hello-world"
+		return fallback
 	}
 	var manifest struct {
-		ID string `json:"id"`
+		ID     string `json:"id"`
+		Domain string `json:"domain"`
 	}
 	if err := json.Unmarshal(data, &manifest); err != nil || manifest.ID == "" {
-		return "hello-world"
+		return fallback
 	}
-	return manifest.ID
+	return mockupSample{ID: manifest.ID, Domain: manifest.Domain}
 }
 
-// mockupReplacements maps every spelling of the sample module name a mockup
-// was written with onto its counterpart for `id` (the kebab-case module
-// identifier). The longest, most specific spellings go first so a
+// mockupReplacements maps every spelling of the sample module name and the
+// sample module domain a mockup was written with onto its counterpart for the
+// module spec. The longest, most specific spellings go first so a
 // case-sensitive token is never partially rewritten by a shorter one.
-func mockupReplacements(sampleID, id string) []moduleRepl {
-	sources := sampleSpellings(sampleID)
-	targets := sampleSpellings(id)
+func mockupReplacements(sample mockupSample, spec ModuleSpec) []moduleRepl {
+	sources := sampleSpellings(sample.ID)
+	targets := sampleSpellings(spec.ID)
 	// A single-word sample produces identical spellings for several kinds
 	// ("acme" is at once its kebab, camel and lower form). Keep one target per
 	// source spelling, preferring the kinds a module visibly carries: file
@@ -266,7 +277,7 @@ func mockupReplacements(sampleID, id string) []moduleRepl {
 	// keys (UPPER_SNAKE). Display names are re-patched afterwards by
 	// finishScaffold from the spec.
 	var priority = [6]int{3, 1, 4, 2, 0, 5}
-	repls := make([]moduleRepl, 0, len(sources))
+	repls := make([]moduleRepl, 0, len(sources)+1)
 	seen := map[string]bool{}
 	for _, kind := range priority {
 		if sources[kind] == targets[kind] || seen[sources[kind]] {
@@ -274,6 +285,14 @@ func mockupReplacements(sampleID, id string) []moduleRepl {
 		}
 		seen[sources[kind]] = true
 		repls = append(repls, moduleRepl{old: sources[kind], new: targets[kind]})
+	}
+	// The module domain is a first-class token: the assistive-help file anchors
+	// its `data-help="module:<domain>"` targets on it, and the declaration
+	// carries it as `identifier`. Rename it alongside the identifier spellings
+	// — the domain is longer than the bare identifier (it contains it), so the
+	// longest-first sort below rewrites it before any spelling could split it.
+	if domain := strings.TrimSpace(sample.Domain); domain != "" && domain != spec.Domain {
+		repls = append(repls, moduleRepl{old: domain, new: spec.Domain})
 	}
 	// Longest first: "Hello World" (Title) must be rewritten before "Hello"
 	// could split it, and a camelCase token must never match inside the lower
@@ -527,7 +546,7 @@ func scaffoldEmbeddedPage(root, moduleDir string, spec ModuleSpec) string {
 // reference hello-world sample naming — the page template is common to every
 // module type — and is renamed onto the module spec like any other mockup.
 func rewritePageBody(body string, spec ModuleSpec) string {
-	body = applyReplacements(body, mockupReplacements(embeddedPageSampleID, spec.ID))
+	body = applyReplacements(body, mockupReplacements(mockupSample{ID: embeddedPageSampleID}, spec))
 	return strings.ReplaceAll(body, config.ExternalModulesDir+"/"+spec.ID+"/", config.ExternalModulesDir+"/"+spec.Domain+"/")
 }
 
@@ -648,6 +667,11 @@ func moduleTypeReadmeSection(moduleType string) string {
 // mockupReadmeStructure lists the directories the scaffolded module carries,
 // per module type.
 func mockupReadmeStructure(moduleType string) []string {
+	// The assistive-help file is scaffolded for every type that owns a helpers
+	// injection surface (spec `assistive-help` §4): CONFIGURATION, WIDGET,
+	// WEB_APP_REMOTE, WEB_APP_LOCAL, SYSTEM — never SERVICE (no UI) nor THEME
+	// (tokens only).
+	const helpersLine = "- `module.helpers.json` — aide assistée (balises + visites guidées)"
 	common := []string{"- `application/` — service layer", "- `domain/` — interfaces and enums"}
 	switch strings.ToUpper(strings.TrimSpace(moduleType)) {
 	case "CONFIGURATION":
@@ -655,6 +679,7 @@ func mockupReadmeStructure(moduleType string) []string {
 			"- `settings.tsx` — paramètres spécifiques du module (contrat first-party)",
 			"- `application/` — service layer",
 			"- `presentation/settings/` — composants de paramètres",
+			helpersLine,
 		}
 	case "SERVICE":
 		return []string{
@@ -667,6 +692,7 @@ func mockupReadmeStructure(moduleType string) []string {
 			"- `application/` — service layer",
 			"- `domain/` — interfaces",
 			"- `presentation/widgets/` — widgets du tableau de bord",
+			helpersLine,
 		}
 	case "THEME":
 		return []string{
@@ -675,13 +701,18 @@ func mockupReadmeStructure(moduleType string) []string {
 	case "WEB_APP_REMOTE":
 		return []string{
 			"- `manifest.json` — déclare la section `remote` (origine, backends, scopes)",
+			helpersLine,
 		}
 	case "SYSTEM":
-		return append(common, "- `presentation/` — views and components (accès administrateur, Tauri only)")
+		return append(common,
+			"- `presentation/` — views and components (accès administrateur, Tauri only)",
+			helpersLine,
+		)
 	default:
 		return append(common,
 			"- `infrastructure/` — routines",
 			"- `presentation/` — views, widgets, components, providers",
+			helpersLine,
 		)
 	}
 }

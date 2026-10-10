@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "decouvrir",
+      "target": "[data-help=\"module:system.liorian.system-console\"]",
+      "title": "Console système",
+      "content": "Console d'administration, disponible uniquement sous Tauri.",
+      "trigger": "hover",
+      "side": "bottom"
+    }
+  ],
+  "tours": [
+    {
+      "id": "decouverte",
+      "title": "Découvrir System Console",
+      "description": "Console d'administration first-party.",
+      "steps": [
+        {
+          "target": "[data-help=\"module:system.liorian.system-console\"]",
+          "title": "Accès",
+          "content": "Ouvrez la console depuis ce lanceur."
+        }
+      ]
+    }
+  ]
+}

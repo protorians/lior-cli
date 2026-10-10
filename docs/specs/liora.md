@@ -248,8 +248,9 @@ lior-cli/
 │   ├── module/                    # Logique module
 │   │   ├── creator.go             # Création de module
 │   │   ├── view.go                # Création d'une vue de présentation (ViewCreator)
-│   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence)
-│   │   ├── mockups/               # hello-world/ + page.tsx + view.tsx (mockups embarqués)
+│   │   ├── scaffold.go            # Scaffolding depuis le mockup embarqué (renommage arborescence + domaine)
+│   │   ├── helpers.go             # Fichier d'aide assistée module.helpers.json (validation fail-closed)
+│   │   ├── mockups/               # mockup par type de module + page.tsx + view.tsx (embarqués)
 │   │   ├── manifest.go            # Manipulation manifest.json
 │   │   ├── packer.go              # Compression .LiorArtifactPackage (limite 50 MB, quotas, manifest racine)
 │   │   ├── linker.go              # Liaison local ↔ distant + état .liorian/links.json
@@ -522,6 +523,9 @@ externe requis. Le manifeste produit respecte le contrat canonique du workspace
      l'**identifiant** (`Hello World` → affichable, `HelloWorld` → PascalCase,
      `helloWorld` → camelCase, `hello-world` → kebab-case, `HELLO_WORLD` → UPPER_SNAKE,
      `helloworld` → minuscules)
+   - Le **domaine** d'exemple du mockup est réécrit sur celui du nouveau module
+     (`manifest.json` → `domain`, `index.tsx` → `identifier`, et l'ancrage
+     `data-help="module:<domaine>"` de `module.helpers.json`)
    - Le contenu des fichiers textes est réécrit en conséquence (renommage des fichiers inclus)
 5. **Vérifier les requirements** : chaque module du champ `requirements` du `manifest.json` doit
    exister localement — dans `library/modules/` **ou** dans `src/modules/` (modules internes
@@ -561,6 +565,7 @@ library/modules/<domain>/
 ├── index.tsx                   # déclaration (identifier, widgets, service, routines, uri)
 ├── package.json                # dépendances du mockup
 ├── README.md
+├── module.helpers.json         # aide assistée (balises + visites), ancrée sur le domaine
 ├── application/
 │   └── service/                # <id>-api-service.ts (service de données)
 ├── domain/
@@ -697,6 +702,10 @@ export default function <PascalId>Page() {
   (jamais dans `index.tsx`) ; les dépendances npm vivent dans le `package.json` du module
 - `--mockup` / `--page-mockup` (et `LIORIAN_MODULE_MOCKUP` / `LIORIAN_PAGE_MOCKUP`) permettent
   de remplacer les mockups (tests, templates d'équipe) — voir `internal/module/scaffold.go`
+- Le fichier d'aide assistée `module.helpers.json` est scaffoldé pour les seuls types qui
+  portent la surface d'aide (`CONFIGURATION`, `WIDGET`, `WEB_APP_REMOTE`, `WEB_APP_LOCAL`,
+  `SYSTEM`) : son ancre `data-help="module:<domaine>"` est réécrite sur le domaine du nouveau
+  module et il est validé **fail-closed** comme tout module (voir la matrice d'audit ci-dessous)
 
 #### Sortie TUI
 
@@ -1262,13 +1271,14 @@ Auditer la conformité d'un ou tous les modules par rapport aux règles du syst�
 | **manifest.json** | Le `domain` correspond au dossier du module (`library/modules/<domain>`) | WARNING |
 | **manifest.json** | `permissions` est un tableau (inspection JSON brut) | WARNING |
 | **manifest.json** | `permissions` n'expose que des **domaines nus PascalCase** (§6.5 : le serveur compose `KEY:Domaine` lui-même) — les couples `<Rôle>:<Verbe>` et les codes pointus `<id>.<action>` sont legacy et migrent en WARNING | WARNING |
-| **manifest.json** | Sections déclaratives du schéma conformes quand elles sont présentes : `access` (rôles nus), `themes` (id + carte de tokens, scheme `light`/`dark`), `admin` (rôles/scope), `remote` (origine HTTPS de domaine), `settings.entries` (label), `routines` (nom de singleton ou descripteur `{id, job: {kind: "api", path, intervalMs 30 s–1 h}}`), `declarative.widgets` (`resource` requis hors bloc `interactive` ; `title` + `entry` sûr + `minHeight` 120–1200 sinon) et `capabilities` (identifiants Tauri `core:*`) ; `admin`/`remote`/`settings` déclarés sur un autre type que `SYSTEM`/`WEB_APP_REMOTE`/`CONFIGURATION` = WARNING | WARNING |
+| **manifest.json** | Sections déclaratives du schéma conformes quand elles sont présentes : `access` (entrées `<Role>` ou `<Role>:<Niveau>`, ex. `Admin`, `Root:80`), `themes` (id + carte de tokens, scheme `light`/`dark`), `admin` (rôles/scope), `remote` (origine HTTPS de domaine), `settings.entries` (label), `routines` (nom de singleton ou descripteur `{id, job: {kind: "api", path, intervalMs 30 s–1 h}}`), `declarative.widgets` (`resource` requis hors bloc `interactive` ; `title` + `entry` sûr + `minHeight` 120–1200 sinon) et `capabilities` (identifiants Tauri `core:*`) ; `admin`/`remote`/`settings` déclarés sur un autre type que `SYSTEM`/`WEB_APP_REMOTE`/`CONFIGURATION` = WARNING | WARNING |
 | **manifest.json** | `optionalRequirements` est présent (objet, `{}` admis) | WARNING |
 | **manifest.json** | `platforms` est présent et `modes` est déclaré pour chaque plateforme `supported: true` | WARNING |
 | **manifest.json** | `managerCompatibility` / `apiCompatibility` présents, plage `max` complète (`0.17.x`, pas `0.17.0`) | WARNING |
 | **manifest.json** | `capabilities` est présent | WARNING |
 | **manifest.json** | `category` appartient à l'enum `ModuleCategory` (si présent) | WARNING |
 | **manifest.json** | `publisher` est présent (`id` + `name`) | WARNING |
+| **module.helpers.json** | Fichier d'aide assistée **optionnel** : quand il est présent, il est conforme au standard `assistive-help` (`version: 1`, balises/visites complètes, `content` borné, `side`/`align`/`trigger` dans leurs enums, identifiants kebab-case uniques) — fail-closed, l'archive est refusée sinon | ERROR |
 | **index.tsx** | Fichier existe et exporte une valeur par défaut | ERROR |
 | **index.tsx** | Déclaration module présente (`identifier` + `widgets`) — déclaration déclarative, l'ancien `render` async n'existe plus | ERROR |
 | **Clean Architecture** | Les composants n'importent pas directement les services (`../services`, `application/service`) | ERROR |

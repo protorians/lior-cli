@@ -278,6 +278,88 @@ func TestValidateUserScopeEntries(t *testing.T) {
 	}
 }
 
+// The `access` gate accepts a bare role name and the `<Role>:<Niveau>` couple
+// (§6.5), with a numeric level bounded to 0–99.99.
+func TestValidateAccessEntries(t *testing.T) {
+	for _, ok := range []string{"Admin", "Root", "Root:80", "Manager:70", "Admin:99.99", "Editor:60"} {
+		if err := ValidateAccessEntry(ok); err != nil {
+			t.Errorf("ValidateAccessEntry(%q) = %v, want nil", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "1Admin", "Admin:Wizzard", "Admin:", ":80", "Admin:100", "Admin:1.234", "Admin::80"} {
+		if err := ValidateAccessEntry(bad); err == nil {
+			t.Errorf("ValidateAccessEntry(%q) = nil, want une erreur", bad)
+		}
+	}
+}
+
+// The assistive-help standard (`module.helpers.json`) is validated fail-closed:
+// a valid file passes, a malformed one reports every problem.
+func TestValidateModuleHelpersFile(t *testing.T) {
+	valid := &ModuleHelpersFile{
+		Version: 1,
+		Anchors: []ModuleHelpersAnchor{{ID: "creer", Target: "[data-help=\"x\"]", Content: "Ouvre le formulaire."}},
+		Tours:   []ModuleHelpersTour{{ID: "decouverte", Title: "Tour", Steps: []ModuleHelpersStep{{Content: "Étape"}}}},
+	}
+	if errs := ValidateModuleHelpersFile(valid); len(errs) != 0 {
+		t.Fatalf("fichier d'aide valide rejeté : %v", errs)
+	}
+
+	broken := &ModuleHelpersFile{
+		Version: 2,
+		Anchors: []ModuleHelpersAnchor{{ID: "Bad Id", Content: ""}},
+		Tours: []ModuleHelpersTour{
+			{ID: "tour", Steps: []ModuleHelpersStep{}},                             // title missing, steps empty
+			{ID: "tour", Title: "dup", Steps: []ModuleHelpersStep{{Content: "x"}}}, // duplicate id
+		},
+	}
+	if errs := ValidateModuleHelpersFile(broken); len(errs) == 0 {
+		t.Fatal("fichier d'aide invalide accepté")
+	}
+}
+
+// A malformed module.helpers.json blocks the pack — the socle would render it
+// silently otherwise.
+func TestValidateModernRefusesInvalidHelpers(t *testing.T) {
+	root := t.TempDir()
+	dir := writeModernModule(t, root, "crm")
+	patchModernModule(t, dir, ModuleHelpersFileName,
+		`{"version":1,"anchors":[{"id":"Bad Id","target":"","content":""}]}`)
+
+	res, err := (&Validator{}).ValidateModuleDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.HasErrors() {
+		t.Fatal("un module.helpers.json invalide doit être refusé (fail-closed)")
+	}
+}
+
+// The optional module.helpers.json is embedded under `src/module.helpers.json`
+// (spec `assistive-help` §2), like artifact.config.json.
+func TestPackModernEmbedsModuleHelpers(t *testing.T) {
+	root := t.TempDir()
+	dir := writeModernModule(t, root, "crm")
+	patchModernModule(t, dir, ModuleHelpersFileName,
+		`{"version":1,"anchors":[{"id":"creer","target":"[data-help=\"x\"]","content":"Ouvre le formulaire."}]}`)
+
+	res, err := (&Packer{Root: root}).Pack("crm")
+	if err != nil {
+		t.Fatalf("Pack: %v", err)
+	}
+	zr, err := zip.OpenReader(res.Path)
+	if err != nil {
+		t.Fatalf("ouverture de l'archive: %v", err)
+	}
+	defer zr.Close()
+	for _, f := range zr.File {
+		if f.Name == "src/"+ModuleHelpersFileName {
+			return
+		}
+	}
+	t.Errorf("l'archive doit embarquer src/%s", ModuleHelpersFileName)
+}
+
 func TestModernPackPrefersWorkspaceOverLegacy(t *testing.T) {
 	root := t.TempDir()
 	writeModernModule(t, root, "blog-manager")

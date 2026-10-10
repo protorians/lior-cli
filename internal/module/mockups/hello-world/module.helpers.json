@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "decouvrir",
+      "target": "[data-help=\"module:mod.liorian.hello-world\"]",
+      "title": "Hello World",
+      "content": "Module d'exemple pour l'onboarding des développeurs.",
+      "trigger": "hover",
+      "side": "bottom"
+    }
+  ],
+  "tours": [
+    {
+      "id": "decouverte",
+      "title": "Découvrir Hello World",
+      "description": "Module d'exemple de l'écosystème.",
+      "steps": [
+        {
+          "target": "[data-help=\"module:mod.liorian.hello-world\"]",
+          "title": "Accès",
+          "content": "Ouvrez « Hello World » depuis ce lanceur."
+        }
+      ]
+    }
+  ]
+}

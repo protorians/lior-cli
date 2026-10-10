@@ -202,9 +202,10 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 		addLevel(res, "manifest.json", "permissions", false,
 			"permissions must use bare permission domains (malformed entries)", LevelWarning)
 	}
-	// access (§6.5): optional role floor — bare PascalCase role names.
+	// access (§6.5): optional declarative gate — `<Role>` or `<Role>:<Niveau>`
+	// entries (the module only shows/opens when one entry is satisfied).
 	addLevel(res, "manifest.json", "access", accessEntriesValid(manifest.Access),
-		"access entries are PascalCase role names", LevelWarning)
+		"access entries are `<Role>` or `<Role>:<Niveau>`", LevelWarning)
 	// themes (§6.10): token palettes of a THEME module — tokens only, the
 	// whitelist (MODULE_THEME_TOKENS) and the contrast checks are enforced
 	// server-side.
@@ -323,6 +324,33 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	// boolean-object flags (needsNetwork…) surface as non-conforming ids.
 	addLevel(res, "manifest.json", "capabilities", capabilityIDsValid(manifest.Capabilities),
 		"capabilities use Tauri permission ids", LevelWarning)
+
+	// Aide assistée (`module.helpers.json`, spec `assistive-help`): optional
+	// file at the module root, auto-discovered by the socle and embedded under
+	// `src/module.helpers.json`. When present it must be compliant — a half-valid
+	// help is misleading, so the whole file is refused (fail-closed, the same
+	// verdict as the workspace `check:module-manifests`).
+	if helpersPath := ModuleHelpersPath(moduleDir); helpersPath != "" {
+		file, err := LoadModuleHelpersFile(helpersPath)
+		switch {
+		case err != nil:
+			res.Findings = append(res.Findings, Finding{
+				Category: ModuleHelpersFileName, Rule: "compliant",
+				Severity: LevelError, Message: err.Error(),
+			})
+		default:
+			if helpersErrs := ValidateModuleHelpersFile(file); len(helpersErrs) > 0 {
+				res.Findings = append(res.Findings, Finding{
+					Category: ModuleHelpersFileName, Rule: "compliant",
+					Severity: LevelError,
+					Message:  i18n.Tf("module.helpers.invalid", strings.Join(helpersErrs, " ; ")),
+				})
+			} else {
+				add(res, ModuleHelpersFileName, "compliant", true,
+					"module.helpers.json valid (assistive help)")
+			}
+		}
+	}
 
 	// CONFIGURATION modules carry their UI in the manifest itself
 	// (`entry: index.json` + `dataModel`/`declarative`): no React entry needed.
@@ -742,11 +770,11 @@ func allPermissionCodes(permissions []string) bool {
 	return len(permissions) > 0
 }
 
-// accessEntriesValid reports whether every `access` entry is a PascalCase
-// role name.
+// accessEntriesValid reports whether every `access` entry is a bare role name
+// or a `<Role>:<Niveau>` couple (§6.5).
 func accessEntriesValid(access []string) bool {
-	for _, role := range access {
-		if !IsPermissionDomain(role) {
+	for _, entry := range access {
+		if !IsDeclaredAccessEntry(entry) {
 			return false
 		}
 	}

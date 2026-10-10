@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "decouvrir",
+      "target": "[data-help=\"module:widget.liorian.acme-widgets\"]",
+      "title": "Widgets",
+      "content": "Widgets du tableau de bord fournis par le module.",
+      "trigger": "hover",
+      "side": "bottom"
+    }
+  ],
+  "tours": [
+    {
+      "id": "decouverte",
+      "title": "Découvrir Acme Widgets",
+      "description": "Widgets ajoutés au tableau de bord.",
+      "steps": [
+        {
+          "target": "[data-help=\"module:widget.liorian.acme-widgets\"]",
+          "title": "Accès",
+          "content": "Ajoutez les widgets depuis ce lanceur."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "decouvrir",
+      "target": "[data-help=\"module:config.liorian.acme-settings\"]",
+      "title": "Paramètres",
+      "content": "Entrées de configuration du module, injectées dans le menu du compte et le hub /settings.",
+      "trigger": "hover",
+      "side": "bottom"
+    }
+  ],
+  "tours": [
+    {
+      "id": "decouverte",
+      "title": "Découvrir Acme Settings",
+      "description": "Paramétrage du module.",
+      "steps": [
+        {
+          "target": "[data-help=\"module:config.liorian.acme-settings\"]",
+          "title": "Accès",
+          "content": "Ouvrez les paramètres depuis ce lanceur."
+        }
+      ]
+    }
+  ]
+}

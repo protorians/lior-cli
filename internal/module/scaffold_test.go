@@ -96,6 +96,21 @@ export function HelloWorldWidget() {
 }
 `)
 
+	mustWrite(filepath.Join(mockupDir, ModuleHelpersFileName), `{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "decouvrir",
+      "target": "[data-help=\"module:mod.liorian.helloworld\"]",
+      "title": "Hello World",
+      "content": "Module d'exemple.",
+      "trigger": "hover",
+      "side": "bottom"
+    }
+  ]
+}
+`)
+
 	mustWrite(pageMockup, `import {HelloWorldView} from "@/library/modules/hello-world/presentation/views/hello-world.view";
 
 export default function HelloWorldPage() {
@@ -207,6 +222,18 @@ func TestCreateFromMockupRenamesComponents(t *testing.T) {
 		`"permissions": ["blog-manager.read", "blog-manager.write"]`,
 		`"routines": ["blogManagerAnalyticsRoutine"]`,
 	)
+
+	// The assistive-help file follows the module identity: its launcher anchor
+	// must target the new domain, never the mockup one.
+	helpersPath := filepath.Join(moduleDir, ModuleHelpersFileName)
+	assertFileContains(t, helpersPath,
+		"module:com.example.blog-manager",
+	)
+	if helpers, err := os.ReadFile(helpersPath); err != nil {
+		t.Fatalf("lecture %s: %v", helpersPath, err)
+	} else if strings.Contains(string(helpers), "mod.liorian.helloworld") {
+		t.Errorf("le domaine du mockup ne doit pas subsister dans %s:\n%s", ModuleHelpersFileName, helpers)
+	}
 
 	// Page content renamed.
 	assertFileContains(t, wantPage,
@@ -937,6 +964,66 @@ export default function AcmeNotesPage() {
 	assertFileContains(t, filepath.Join(moduleDir, "manifest.json"),
 		`"key": "BLOG_MANAGER"`,
 	)
+}
+
+// Le fichier d'aide assistée est scaffoldé pour les seuls types qui portent
+// une surface `helpers` (spec `assistive-help` §4) : il est conforme au
+// standard et son ancre `data-help="module:<domaine>"` cible le domaine du
+// nouveau module, jamais celui du mockup.
+func TestCreateScaffoldsCompliantModuleHelpers(t *testing.T) {
+	cases := []struct {
+		moduleType string
+		domain     string
+		helpers    bool
+	}{
+		{"WEB_APP_LOCAL", "mod.example.blog-manager", true},
+		{"CONFIGURATION", "config.example.blog-manager", true},
+		{"WIDGET", "widget.example.blog-manager", true},
+		{"WEB_APP_REMOTE", "mod.example.blog-manager", true},
+		{"SYSTEM", "system.example.blog-manager", true},
+		{"SERVICE", "service.example.blog-manager", false},
+		{"THEME", "theme.example.blog-manager", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.moduleType, func(t *testing.T) {
+			root := t.TempDir()
+			creator := &Creator{Root: root}
+			if _, err := creator.Create(ModuleSpec{Domain: tc.domain, ID: "blog-manager", Type: tc.moduleType}); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+
+			moduleDir := filepath.Join(root, config.ExternalModulesDir, tc.domain)
+			helpersPath := filepath.Join(moduleDir, ModuleHelpersFileName)
+			if !tc.helpers {
+				if pkg.PathExists(helpersPath) {
+					t.Errorf("le type %s ne injecte aucune aide : %s ne doit pas être scaffoldé", tc.moduleType, ModuleHelpersFileName)
+				}
+				return
+			}
+			if !pkg.FileExists(helpersPath) {
+				t.Fatalf("le type %s doit scaffolder %s", tc.moduleType, ModuleHelpersFileName)
+			}
+			data, err := os.ReadFile(helpersPath)
+			if err != nil {
+				t.Fatalf("lecture %s: %v", helpersPath, err)
+			}
+			if !strings.Contains(string(data), "module:"+tc.domain) {
+				t.Errorf("l'ancre d'aide doit cibler le domaine %q:\n%s", tc.domain, data)
+			}
+			if strings.Contains(string(data), ".liorian.") {
+				t.Errorf("le domaine du mockup ne doit pas subsister:\n%s", data)
+			}
+			file, err := LoadModuleHelpersFile(helpersPath)
+			if err != nil {
+				t.Fatalf("LoadModuleHelpersFile: %v", err)
+			}
+			if errs := ValidateModuleHelpersFile(file); len(errs) != 0 {
+				t.Errorf("%s scaffoldé non conforme: %v", ModuleHelpersFileName, errs)
+			}
+			assertFileContains(t, filepath.Join(moduleDir, "README.md"), ModuleHelpersFileName)
+		})
+	}
 }
 
 func assertFileContains(t *testing.T, path string, fragments ...string) {

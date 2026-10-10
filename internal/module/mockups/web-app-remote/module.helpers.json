@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "anchors": [
+    {
+      "id": "decouvrir",
+      "target": "[data-help=\"module:mod.liorian.acme-remote\"]",
+      "title": "Acme Remote",
+      "content": "Application web hébergée à distance, chargée en iframe sandboxée.",
+      "trigger": "hover",
+      "side": "bottom"
+    }
+  ],
+  "tours": [
+    {
+      "id": "decouverte",
+      "title": "Découvrir Acme Remote",
+      "description": "Application distante de l'écosystème.",
+      "steps": [
+        {
+          "target": "[data-help=\"module:mod.liorian.acme-remote\"]",
+          "title": "Accès",
+          "content": "Ouvrez « Acme Remote » depuis ce lanceur."
+        }
+      ]
+    }
+  ]
+}
