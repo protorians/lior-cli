@@ -1,6 +1,6 @@
 {
   "name": "@liorian/cli",
-  "version": "0.38.0",
+  "version": "0.39.0",
   "description": "Liora CLI - Create, maintain, and publish modules in the Liora ecosystem",
   "license": "MIT",
   "repository": {

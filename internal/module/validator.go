@@ -291,8 +291,24 @@ func (v *Validator) validateModuleAt(moduleDir, name string) (*Result, error) {
 	// legal (D16, §6.11): optional — a module without it has no gate — but a
 	// declaration that exists must be complete, or the server would refuse the
 	// publication and lock the first user out of the module.
-	add(res, "manifest.json", "legal", ValidateLegalDocuments(manifest.Legal) == nil,
-		"legal declarations compliant (key, kind, version, content; TERMS and PRIVACY together)")
+	// The documents may live in dedicated files (`module.terms.json`,
+	// `module.privacy.json`) at the module root or under `src/`; `manifest.legal`
+	// remains the fallback during the migration to files.
+	legalDocs, legalErrs := CollectLegalDocumentsFromFiles(moduleDir)
+	if len(legalErrs) > 0 {
+		for _, err := range legalErrs {
+			res.Findings = append(res.Findings, Finding{
+				Category: "manifest.json", Rule: "legal",
+				Severity: LevelError, Message: err,
+			})
+		}
+	} else if len(legalDocs) > 0 {
+		add(res, "manifest.json", "legal", ValidateLegalDocuments(legalDocs) == nil,
+			"legal declarations compliant (key, kind, version, content; TERMS and PRIVACY together)")
+	} else {
+		add(res, "manifest.json", "legal", ValidateLegalDocuments(manifest.Legal) == nil,
+			"legal declarations compliant (key, kind, version, content; TERMS and PRIVACY together)")
+	}
 	// routines (§6.10): a compiled module names its `Routine` singletons; a
 	// third-party SERVICE module declares descriptors executed by the socle
 	// through ctx.api (job.kind "api", period bounded 30 s–1 h).

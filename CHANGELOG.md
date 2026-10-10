@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.39.0] - 2026-10-10
+
+### Added
+- **Documents légaux en fichiers dédiés (D16, §6.11)** — l'audit reconnaît désormais des
+  documents légaux portés par des fichiers séparés à la racine du module
+  (`module.terms.json`, `module.privacy.json`) ou sous `src/` dans un arbre installé, comme
+  alternative à `manifest.legal` (conservé en repli pendant la migration). Chaque fichier est
+  validé **fail-closed** sur son enveloppe (clé kebab-case, `kind` TERMS/PRIVACY/LICENSE,
+  `version` SemVer, `required: false` réservé à `LICENSE`, `content` non vide) ; un fichier
+  illisible ou non conforme produit une trouvaille `ERROR` d'audit — donc bloque
+  `pack`/`publish` — et la règle TERMS + PRIVACY ensemble reste appliquée. Le packer embarque
+  déjà ces fichiers sous `src/`.
+
 ## [v0.38.0] - 2026-10-10
 
 ### Added
