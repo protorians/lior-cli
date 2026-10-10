@@ -258,7 +258,6 @@
   "label.socle": "Socle",
   "label.modules": "Modules",
   "label.registry": "Registry",
-  "label.path": "Path",
   "label.query": "Query",
   "cmd.pack.short": "Build a module archive (.LiorArtifactPackage)",
   "cmd.pack.long": "Builds a module and creates a compressed .LiorArtifactPackage archive\n(moved to .liorian/build/).\n\nThe version can be given with an '@' separator (e.g. blog-manager@1.2.0),\nwith --version, or defaults to the manifest version. --out writes the\narchive to a custom path.\n\nWithout an argument, a selector lets you choose the module.",

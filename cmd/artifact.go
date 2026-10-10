@@ -510,8 +510,8 @@ func runArtifactSocleBind(args []string, bind bool) error {
 		printArtifactLogs(logs)
 		fmt.Println()
 		fmt.Println(s.StepsList(i18n.T("artifact.bind.next"),
-			s.Info.Render("liora socle dev "+displayPath(cwd, result.SocleDir)),
-			s.Info.Render("liora doctor --socle "+displayPath(cwd, result.SocleDir)),
+			s.Info.Render("liora socle dev <socle>/*"),
+			s.Info.Render("liora doctor --socle <socle>/*"),
 		))
 		fmt.Println()
 		return nil

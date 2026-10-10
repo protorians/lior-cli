@@ -122,5 +122,5 @@ func resolveSocleDirArg(args []string) (string, error) {
 // serveur central du socle : un seul serveur héberge les modules liés.
 func printCentralDelegation(socleDir string) {
 	s := tui.NewStyles()
-	fmt.Println(s.Info.Render(i18n.Tf("artifact.dev.delegated", socleDir)))
+	fmt.Println(s.Info.Render(i18n.Tf("artifact.dev.delegated", "<socle>/*")))
 }

@@ -301,8 +301,7 @@ func centralPanelRows(s *tui.Styles, socleDir, registryPath string, server *arti
 	case server != nil:
 		rows = append(rows, s.KeyValue(i18n.T("socle.dev.row.server"), s.Info.Render(server.URL)))
 		for _, hosted := range server.Modules {
-			rows = append(rows, s.KeyValue(hosted.Identifier, s.Info.Render(server.URL+"/"+hosted.Slug+"/")))
-			rows = append(rows, s.KeyValue("  "+i18n.T("label.path"), s.Info.Render("<module>")))
+			rows = append(rows, s.KeyValue(hosted.Identifier, s.Info.Render("<module>/*")))
 		}
 	case len(entries) == 0:
 		rows = append(rows, s.KeyValue(i18n.T("label.modules"), s.Muted.Render(i18n.T("socle.dev.modules_none"))))
@@ -310,7 +309,7 @@ func centralPanelRows(s *tui.Styles, socleDir, registryPath string, server *arti
 	if appScript != "" {
 		rows = append(rows, s.KeyValue(i18n.T("socle.dev.row.app"), s.Value.Render(pm+" run "+appScript)))
 	}
-	rows = append(rows, s.KeyValue(i18n.T("label.registry"), s.Info.Render("<socle>")))
+	rows = append(rows, s.KeyValue(i18n.T("label.registry"), s.Info.Render("<socle>/*")))
 	return rows
 }
 

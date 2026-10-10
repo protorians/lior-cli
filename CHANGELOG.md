@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **Panneau de développement central — les chemins deviennent des placeholders** — le
+  récapitulatif TUI du socle dédié n'affiche plus de chemins machine : chaque module
+  hébergé est listé par son identifiant avec l'URL `/<slug>/` remplacée par `<module>/*`,
+  et le registre par `<socle>/*`. L'étiquette `label.path` (`Chemin` / `Path`) et la ligne
+  dédiée sont retirées des catalogues i18n, le panneau ne servant plus à révéler un chemin
+  absolu déjà caché par le reste de l'interface. Les messages de délégation
+  (`liora socle dev`, `liora doctor --socle`) et l'adresse d'exemple de la liaison
+  (`liora socle dev <socle>/*`) suivent la même convention de placeholder.
+
 ## [v0.40.0] - 2026-10-10
 
 ### Added
