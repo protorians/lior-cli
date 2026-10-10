@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [v0.40.0] - 2026-10-10
+
+### Added
+- **Panneau du serveur de développement central — affichage du chemin de chaque module** — le
+  récapitulatif TUI du socle dédié liste désormais, sous chaque module hébergé, l'étiquette
+  `label.path` (`<module>`) et remplace l'affichage du chemin absolu du registre par `<socle>`,
+  afin de ne pas exposer de chemins machine dans le panneau. La clé i18n `label.path` est ajoutée
+  en `fr-FR` (`Chemin`) et `en-US` (`Path`).
+
 ## [v0.39.0] - 2026-10-10
 
 ### Added

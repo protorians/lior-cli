@@ -258,6 +258,7 @@
   "label.socle": "Socle",
   "label.modules": "Modules",
   "label.registry": "Registre",
+  "label.path": "Chemin",
   "label.query": "Requête",
   "cmd.pack.short": "Construire une archive de module (.LiorArtifactPackage)",
   "cmd.pack.long": "Construit un module et crée une archive .LiorArtifactPackage compressée\n(déplacée vers .liorian/build/).\n\nLa version peut être donnée avec un séparateur '@' (ex. blog-manager@1.2.0),\navec --version, ou reprend la version du manifeste. --out écrit l'archive\nvers un chemin personnalisé.\n\nSans argument, un sélecteur permet de choisir le module.",
