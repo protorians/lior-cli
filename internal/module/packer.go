@@ -58,6 +58,11 @@ type PackResult struct {
 	Checksum         string // SHA-256 hex of the archive bytes (FR-004)
 	ManifestChecksum string // SHA-256 hex of the canonical manifest
 	FileCount        int
+	// WebhooksActionCount is the number of webhook actions of the
+	// `module.webhooks.json` declaration carried by the artefact (0 when the
+	// module declares none — spec module-webhooks § feature
+	// module-declaration).
+	WebhooksActionCount int
 }
 
 // Pack builds and moves the archive of `name` into `.liorian/build/` (or `Out`
@@ -123,6 +128,21 @@ func (p *Packer) packModern(name, moduleSrc string) (*PackResult, error) {
 		return nil, err
 	}
 
+	// Déclaration des webhooks (spec module-webhooks § feature
+	// module-declaration) : présente, elle est chargée puis validée
+	// (G-01..G-07) AVANT la création d'archive — une déclaration invalide est
+	// bloquante au pack ; un module sans déclaration passe inchangé (G-07 :
+	// le packer n'exige rien).
+	webhooks, err := LoadWebhooksDeclaration(moduleSrc)
+	if err != nil {
+		return nil, err
+	}
+	if webhooks != nil {
+		if err := ValidateWebhooksDeclaration(webhooks, m.ID); err != nil {
+			return nil, fmt.Errorf("%s : %w", config.WebhooksFileName, err)
+		}
+	}
+
 	version := p.Version
 	if version == "" {
 		version = m.Version
@@ -160,10 +180,17 @@ func (p *Packer) packModern(name, moduleSrc string) (*PackResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.createModernArchive(archivePath, moduleSrc, m); err != nil {
+	if err := p.createModernArchive(archivePath, moduleSrc, m, webhooks); err != nil {
 		return nil, err
 	}
-	return p.finalizeArchive(archivePath, name, version, manifestChecksum)
+	result, err := p.finalizeArchive(archivePath, name, version, manifestChecksum)
+	if err != nil {
+		return nil, err
+	}
+	if webhooks != nil {
+		result.WebhooksActionCount = len(webhooks.Actions)
+	}
+	return result, nil
 }
 
 // packLegacy is the pre-isolated-runtime pack flow: the module tree, its page
@@ -391,8 +418,11 @@ func archiveDigest(archivePath string) (string, int, error) {
 // createModernArchive zips an isolated-runtime module into `dest`
 // (spec §4.4): the manifest at the archive root, the module sources under
 // `src/` (D4) and the built payload under `artifact/`. Build tooling state
-// (`node_modules`, dependency caches, VCS dirs) is never packed.
-func (p *Packer) createModernArchive(dest, moduleSrc string, m *Manifest) error {
+// (`node_modules`, dependency caches, VCS dirs) is never packed. When the
+// module declares webhooks, the `module.webhooks.json` document travels at the
+// archive root too — verbatim, exactly like the manifest (spec module-webhooks
+// § feature module-declaration §1), never a Go projection.
+func (p *Packer) createModernArchive(dest, moduleSrc string, m *Manifest, webhooks *WebhooksDeclaration) error {
 	f, err := os.Create(dest)
 	if err != nil {
 		return fmt.Errorf("failed to create archive %s: %w", dest, err)
@@ -411,7 +441,10 @@ func (p *Packer) createModernArchive(dest, moduleSrc string, m *Manifest) error 
 	// The manifest travels at the archive root only; it is not module
 	// source (D4).
 	if err := counter.addTree(moduleSrc, "src", func(name string) bool {
-		return name == config.ManifestFileName || excludedSourceDirs[name] ||
+		return name == config.ManifestFileName ||
+			// Même traitement que le manifeste : la déclaration des webhooks
+			// voyage à la racine de l'archive, jamais comme source.
+			name == config.WebhooksFileName || excludedSourceDirs[name] ||
 			// Fichiers et dossiers cachés (`.env`, `.gitignore`, `.DS_Store`) :
 			// le socle refuse tout segment caché (§5.2), ils ne voyagent pas.
 			(strings.HasPrefix(name, ".") && name != "." && name != filepath.Base(moduleSrc))
@@ -421,7 +454,16 @@ func (p *Packer) createModernArchive(dest, moduleSrc string, m *Manifest) error 
 	// Development layout (`.liorian/artifact/`, D7) resolved on disk; the
 	// distribution prefix stays `artifact/`.
 	artifactDir := filepath.Join(moduleSrc, m.SourceArtifactDir(moduleSrc))
-	return counter.addTree(artifactDir, config.ModuleArtifactDir, nil)
+	if err := counter.addTree(artifactDir, config.ModuleArtifactDir, nil); err != nil {
+		return err
+	}
+
+	// The webhooks declaration at the archive root, verbatim (AC-13): the
+	// document as authored, never the projection the packer validated with.
+	if webhooks != nil {
+		return counter.addFile(WebhooksDeclarationPath(moduleSrc), config.WebhooksFileName)
+	}
+	return nil
 }
 
 // zipCounter writes archive entries while enforcing the shared archive

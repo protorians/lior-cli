@@ -24,6 +24,12 @@ const (
 	LorianDir          = ".liorian"
 	LorianBuildsDir    = ".liorian/build"
 	ManifestFileName   = "manifest.json"
+	// WebhooksFileName is the webhooks declaration file of a module, at the
+	// root of the module directory next to the manifest (spec
+	// docs/specs/modules/module-webhooks/features/module-declaration.md §1).
+	// It travels at the root of the built archive, verbatim, like
+	// `manifest.json`.
+	WebhooksFileName = "module.webhooks.json"
 	// ModuleEntryFileName is the canonical TypeScript entry of a module
 	// (spec docs/specs/applications/module-isolated-runtime.md, D6). The
 	// legacy names are still read: `entry.tsx` (first isolated-runtime

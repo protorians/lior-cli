@@ -242,6 +242,27 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Déclaration des webhooks (spec module-webhooks, chemin 3 « à la
+	// publication ») : présente au moduleDir résolu, elle est chargée puis
+	// validée — invalide = bloquant (AC-10 : aucun call réseau) — puis
+	// relayée à l'upload multipart (`webhooks`). Absente → comportement
+	// inchangé (G-07 : le packer n'exige rien).
+	moduleDir := config.ResolveModuleDir(root, name)
+	var webhooks *module.WebhooksDeclaration
+	if moduleDir != "" {
+		declaration, derr := module.LoadWebhooksDeclaration(moduleDir)
+		if derr != nil {
+			return pkg.NewError(i18n.T("cat.manifest"), derr.Error(), pkg.ExitManifest)
+		}
+		if declaration != nil {
+			if verr := module.ValidateWebhooksDeclaration(declaration, manifest.ID); verr != nil {
+				return pkg.NewError(i18n.T("cat.manifest"),
+					fmt.Sprintf("%s : %v", config.WebhooksFileName, verr), pkg.ExitManifest)
+			}
+			webhooks = declaration
+		}
+	}
+
 	// Sign the canonical publication payload before publishing (spec §7.1 /
 	// ADR-010): the signature is mandatory — the server refuses unsigned
 	// artefacts. `--allow-unsigned` keeps an explicit escape hatch (dev/mock).
@@ -296,7 +317,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	var pubResult *store.PublishResponse
 	for attempt := 0; attempt < maxPublishAttempts; attempt++ {
 		pubResult, err = tui.RunWithSpinner(i18n.T("publish.spinner.publish"), func() (*store.PublishResponse, error) {
-			return client.Publish(context.Background(), packResult.Path, manifest)
+			return client.Publish(context.Background(), packResult.Path, manifest, webhooks)
 		})
 		if err == nil {
 			break

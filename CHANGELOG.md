@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Registre des webhooks (spec `module-webhooks`)** — la CLI reconnaît la déclaration
+  optionnelle `module.webhooks.json` à la racine du module : les `actions` émises (clé
+  canonique `module:tache.nom-action`, schéma de payload ≤ 8 Ko) et les `subscriptions`
+  aux actions d'autres modules. Validée **fail-closed** avant tout appel réseau (grammaire
+  et unicité des clés, anti-usurpation — un module ne déclare que ses propres actions et ne
+  s'abonne jamais aux siennes — quotas et longueurs bornés), une déclaration invalide
+  bloque `pack` et `publish` ; absente, le comportement est inchangé. Le packer l'embarque
+  à la racine de l'archive, **verbatim** comme le manifeste, et `liora publish` la relaie à
+  l'upload (§ `webhooks` du multipart).
+- **`liora module webhook push|list`** — le cycle de vie du module expose un sous-ensemble
+  `webhook` : `push` charge, valide et enregistre la déclaration dans le registre (upsert
+  idempotent `(moduleKey, version, action)`, résumé créées · mises à jour · désactivées),
+  `list` affiche les actions inscrites (`action · version · actif/inactif`, filtre
+  `--version`). Après une connexion réussie, `liora connect` relaie best-effort les
+  déclarations du workspace — jamais bloquant en cas d'erreur.
+
 ### Changed
 - **Panneau de développement central — les chemins deviennent des placeholders** — le
   récapitulatif TUI du socle dédié n'affiche plus de chemins machine : chaque module

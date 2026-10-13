@@ -138,6 +138,12 @@ func doConnect() error {
 	slug := ensureConnectOrganizationSlug()
 
 	printConnectSummary(session, slug)
+
+	// Path 2 of the webhooks feature (spec module-webhooks,
+	// cli-connect-push §5): once connected, the project in the cwd may carry
+	// `module.webhooks.json` declarations — they are relayed to the registry
+	// best-effort. An error never fails the connect.
+	pushModuleWebhooksBestEffort()
 	return nil
 }
 

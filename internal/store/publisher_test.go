@@ -284,7 +284,7 @@ func TestPublishCreatesProductThenVersionThenArtifact(t *testing.T) {
 
 	manifest := module.NewManifest("test-module", "A test")
 	manifest.Token = ""
-	resp, err := client.Publish(t.Context(), archivePath, &manifest)
+	resp, err := client.Publish(t.Context(), archivePath, &manifest, nil)
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestPublishReusesLinkedProduct(t *testing.T) {
 	client := testClient(server.URL)
 	manifest := module.NewManifest("linked", "")
 	manifest.Token = "linked-id"
-	resp, err := client.Publish(t.Context(), archivePath, &manifest)
+	resp, err := client.Publish(t.Context(), archivePath, &manifest, nil)
 	if err != nil {
 		t.Fatalf("Publish: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestPublishMissingArchive(t *testing.T) {
 	client := testClient(server.URL)
 	manifest := module.NewManifest("mod", "")
 	manifest.Token = ""
-	_, err := client.Publish(t.Context(), "/nonexistent/archive.LiorArtifactPackage", &manifest)
+	_, err := client.Publish(t.Context(), "/nonexistent/archive.LiorArtifactPackage", &manifest, nil)
 	if err == nil {
 		t.Error("Publish doit échouer avec un fichier inexistant")
 	}
@@ -373,7 +373,7 @@ func TestPublishServerError(t *testing.T) {
 	client.SetToken("tok")
 	manifest := module.NewManifest("mod", "")
 	manifest.Token = ""
-	_, err := client.Publish(t.Context(), archivePath, &manifest)
+	_, err := client.Publish(t.Context(), archivePath, &manifest, nil)
 	if err == nil {
 		t.Error("Publish doit échouer sur conflit de version")
 	}
@@ -398,7 +398,7 @@ func TestPublishMissingStoreRoute(t *testing.T) {
 	client := testClient(server.URL)
 	manifest := module.NewManifest("mod", "")
 	manifest.Token = ""
-	_, err := client.Publish(t.Context(), filepath.Join(t.TempDir(), "mod.LiorArtifactPackage"), &manifest)
+	_, err := client.Publish(t.Context(), filepath.Join(t.TempDir(), "mod.LiorArtifactPackage"), &manifest, nil)
 	if err == nil {
 		t.Fatal("Publish doit échouer quand le developer store est absent")
 	}

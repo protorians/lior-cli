@@ -325,7 +325,11 @@ func (c *Client) UpdateModule(ctx context.Context, id string, m *module.Manifest
 
 // Publish registers the module product, creates its version and uploads the
 // archive artifact (spec connect §21): product → version → S3-backed artifact.
-func (c *Client) Publish(ctx context.Context, archivePath string, manifest *module.Manifest) (*PublishResponse, error) {
+// The optional `webhooks` declaration (already validated by the caller) is
+// relayed to the artifact upload as the `webhooks` multipart field — the
+// "path 3" of the webhooks feature (`liora publish`, spec
+// cli-connect-push § table, chemin 3).
+func (c *Client) Publish(ctx context.Context, archivePath string, manifest *module.Manifest, webhooks *module.WebhooksDeclaration) (*PublishResponse, error) {
 	// 1. Resolve (or create) the remote product behind the manifest token.
 	productID, err := c.resolveProduct(ctx, manifest)
 	if err != nil {
@@ -340,7 +344,7 @@ func (c *Client) Publish(ctx context.Context, archivePath string, manifest *modu
 
 	// 3. Upload the archive binary. The API writes it to the configured storage
 	// driver (S3 in production) before persisting its metadata.
-	artifact, err := c.uploadArtifact(ctx, productID, version.ID, archivePath, manifest)
+	artifact, err := c.uploadArtifact(ctx, productID, version.ID, archivePath, manifest, webhooks)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +422,7 @@ func (c *Client) createVersion(ctx context.Context, productID string, m *module.
 	return &out, nil
 }
 
-func (c *Client) uploadArtifact(ctx context.Context, productID, versionID, archivePath string, m *module.Manifest) (*Artifact, error) {
+func (c *Client) uploadArtifact(ctx context.Context, productID, versionID, archivePath string, m *module.Manifest, webhooks *module.WebhooksDeclaration) (*Artifact, error) {
 	data, err := os.ReadFile(archivePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read the archive: %w", err)
@@ -433,6 +437,17 @@ func (c *Client) uploadArtifact(ctx context.Context, productID, versionID, archi
 		"manifest":  string(manifestJSON),
 		"checksum":  hex.EncodeToString(checksum[:]),
 		"signature": signature,
+	}
+	// The webhooks declaration is relayed as JSON in the `webhooks` field
+	// when the module declares one (spec cli-connect-push §3: absent → no
+	// field). The controller side declares the artefact with it and triggers
+	// the same registry use-case as a direct push.
+	if webhooks != nil {
+		webhooksJSON, werr := json.Marshal(webhooks)
+		if werr != nil {
+			return nil, fmt.Errorf("failed to serialize the webhooks declaration: %w", werr)
+		}
+		fields["webhooks"] = string(webhooksJSON)
 	}
 	var out Artifact
 	if err := c.http().DoMultipart(ctx,
@@ -620,6 +635,106 @@ type declareArtifactRequest struct {
 	Signature        string          `json:"signature"`
 	SignatureKeyID   string          `json:"signatureKeyId,omitempty"`
 	SizeBytes        int64           `json:"size"`
+}
+
+// --- Webhooks registry (spec docs/specs/modules/module-webhooks) -----------
+
+// RegisterWebhooksRequest is the body of the registry synchronization:
+// `POST /api/developer-store/modules/:id/webhooks` (spec
+// features/cli-connect-push.md §3). The store relays it to the webhooks
+// registry (`SyncRegistryDto` contract).
+type RegisterWebhooksRequest struct {
+	ModuleKey     string                        `json:"moduleKey"`
+	ModuleToken   string                        `json:"moduleToken"`
+	Version       string                        `json:"version"`
+	Actions       []WebhooksActionPayload       `json:"actions"`
+	Subscriptions []WebhooksSubscriptionPayload `json:"subscriptions,omitempty"`
+}
+
+// WebhooksActionPayload transports one declared action (action, task, name,
+// description, payload schema).
+type WebhooksActionPayload struct {
+	Action      string          `json:"action"`
+	Task        string          `json:"task,omitempty"`
+	Name        string          `json:"name,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+}
+
+// WebhooksSubscriptionPayload transports one declared subscription.
+type WebhooksSubscriptionPayload struct {
+	Action      string `json:"action"`
+	Description string `json:"description,omitempty"`
+}
+
+// StoreModuleWebhooksSummary is the registry answer `{created, updated,
+// deactivated, total}` returned by a push (idempotent upsert per
+// `(moduleKey, version, action)`).
+type StoreModuleWebhooksSummary struct {
+	Created     int `json:"created"`
+	Updated     int `json:"updated"`
+	Deactivated int `json:"deactivated"`
+	Total       int `json:"total"`
+}
+
+// StoreModuleWebhookEntry is one registry row surfaced by
+// `GET /api/developer-store/modules/:id/webhooks` — `isActive: false` marks an
+// action retired by a re-push of a version.
+type StoreModuleWebhookEntry struct {
+	Action      string `json:"action"`
+	Version     string `json:"version"`
+	Task        string `json:"task"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	IsActive    bool   `json:"isActive"`
+}
+
+// PushWebhooks registers the webhooks declaration of a module in the registry
+// via the Developer Store (`POST /api/developer-store/modules/:id/webhooks`).
+// `productID` is the store product token (ownership resolved server-side by
+// `DeveloperAuthMiddleware`) and `manifestID` is the module identifier the
+// declaration prefix must match (G-02).
+func (c *Client) PushWebhooks(ctx context.Context, productID string, decl *module.WebhooksDeclaration, manifestID string) (*StoreModuleWebhooksSummary, error) {
+	body := RegisterWebhooksRequest{
+		ModuleKey:   strings.TrimSpace(manifestID),
+		ModuleToken: strings.TrimSpace(productID),
+		Version:     strings.TrimSpace(decl.Version),
+	}
+	for _, action := range decl.Actions {
+		body.Actions = append(body.Actions, WebhooksActionPayload{
+			Action:      action.Action,
+			Task:        action.Task,
+			Name:        action.Name,
+			Description: action.Description,
+			Payload:     action.Payload,
+		})
+	}
+	for _, subscription := range decl.Subscriptions {
+		body.Subscriptions = append(body.Subscriptions, WebhooksSubscriptionPayload{
+			Action:      subscription.Action,
+			Description: subscription.Description,
+		})
+	}
+	var out StoreModuleWebhooksSummary
+	if err := c.http().Do(ctx, "POST", modulesPath+"/"+url.PathEscape(productID)+"/webhooks", body, &out); err != nil {
+		return nil, fmt.Errorf("failed to register the webhooks: %w", err)
+	}
+	return &out, nil
+}
+
+// ListWebhooks returns the registry rows of a module
+// (`GET /api/developer-store/modules/:id/webhooks`). A non-empty `version`
+// narrows the list to one declared version; empty returns every active version.
+func (c *Client) ListWebhooks(ctx context.Context, productID, version string) ([]StoreModuleWebhookEntry, error) {
+	path := modulesPath + "/" + url.PathEscape(productID) + "/webhooks"
+	if v := strings.TrimSpace(version); v != "" {
+		path += "?version=" + url.QueryEscape(v)
+	}
+	var out []StoreModuleWebhookEntry
+	if err := c.http().Do(ctx, "GET", path, nil, &out); err != nil {
+		return nil, fmt.Errorf("failed to list the webhooks: %w", err)
+	}
+	return out, nil
 }
 
 // ProductSlug derives the product slug from the manifest id (kebab-case), a

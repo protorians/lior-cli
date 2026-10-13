@@ -18,7 +18,7 @@ import (
 // moduleCmd groups the Developer Store "module lifecycle" commands (Expo-like
 // sections served by liorian-api-connect): knowledge, workflows, channels,
 // platforms, requirements, signing keys, accreditations, environment variables,
-// GitHub and observability.
+// webhooks, GitHub and observability.
 var moduleCmd = &cobra.Command{
 	Use:   "module",
 	Short: "Inspect a module's lifecycle on Liora Connect",
@@ -45,6 +45,7 @@ func init() {
 		moduleSigningKeysCmd,
 		moduleAccreditationsCmd,
 		moduleVariablesCmd,
+		moduleWebhookCmd,
 		moduleGithubCmd,
 		moduleObserverCmd,
 		moduleUsageCmd,
