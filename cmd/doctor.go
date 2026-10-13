@@ -791,11 +791,15 @@ func printDoctorReport(report *doctorReport) {
 	s := tui.NewStyles()
 	fmt.Println()
 
+	// Les chemins machine restent dans le JSON (`--output json`, intégration
+	// CI) ; le rapport écran applique la convention `<socle>` / `<module>`.
+	masked := func(text string) string { return maskPathTexts(text, report.SocleDir, report.ModuleDir) }
+
 	title := i18n.T("doctor.header.socle")
 	if report.ModuleDir != "" {
 		title = i18n.T("doctor.header.module")
 	}
-	fmt.Println(s.ReportHeading(fmt.Sprintf("%s — %s", title, report.SocleDir), "", tui.StatusSuccess))
+	fmt.Println(s.ReportHeading(masked(fmt.Sprintf("%s — %s", title, report.SocleDir)), "", tui.StatusSuccess))
 
 	table := tui.NewTable([]string{
 		i18n.T("label.check"),
@@ -803,11 +807,11 @@ func printDoctorReport(report *doctorReport) {
 		i18n.T("label.detail"),
 	})
 	for _, check := range report.Checks {
-		detail := check.Detail
+		detail := masked(check.Detail)
 		// Un `--fix` qui n'a pas abouti doit rester lisible : sans l'erreur,
 		// le rapport afficherait la même ligne qu'avant la tentative.
 		if check.FixError != "" {
-			detail = fmt.Sprintf("%s — %s: %s", detail, i18n.T("doctor.detail.fix_failed"), check.FixError)
+			detail = fmt.Sprintf("%s — %s: %s", detail, i18n.T("doctor.detail.fix_failed"), masked(check.FixError))
 		}
 		table.AddRow(check.Label, checkStatusText(s, check.Status), detail)
 	}
@@ -818,7 +822,7 @@ func printDoctorReport(report *doctorReport) {
 		fmt.Println(s.ReportHeading(i18n.T("doctor.header.fixes"), "", tui.StatusWarning))
 		steps := make([]string, 0, len(fixes))
 		for _, fix := range fixes {
-			steps = append(steps, s.Warning.Render(fix))
+			steps = append(steps, s.Warning.Render(masked(fix)))
 		}
 		fmt.Println()
 		fmt.Println(s.StepsList(i18n.T("doctor.header.commands"), steps...))

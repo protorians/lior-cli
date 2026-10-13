@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Panneaux TUI — la convention `<socle>` / `<module>` masque les chemins au lieu
+  de les écraser** — v0.41.0 affichait les jetons littéralement (`<socle>/*`,
+  `<module>/*`), perdant toute information de chemin. La bonne lecture de la
+  convention : dans un chemin absolu affiché, **seule la racine machine est
+  substituée**, la suite du chemin reste lisible. Le panneau du serveur central
+  affiche donc `Socle: <socle>`, `Registre: <socle>/.liorian/module.dev.json` et
+  chaque module hébergé sous `<module>/.liorian/artifact/…` ; la carte `bind:socle`
+  masque l'env (`<socle>/.env.local`) et le registre, et ses étapes suivantes
+  affichent `liora socle dev <socle>` / `liora doctor --socle <socle>` ; les cartes
+  `build` / `typecheck` / `test` masquent les artefacts du module
+  (`<module>/.liorian/artifact/…`), `unbind` le dossier retiré (`<socle>/library/…`)
+  et le rapport `doctor` masque socle et module à l'écran — le JSON (`--output json`)
+  garde les chemins bruts pour l'intégration CI. Exception : un affichage qui
+  **est** exactement la racine machine (le socle du panneau « Central server »,
+  le message de délégation `artifact dev`, les cartes `typecheck` / `test`, le
+  message du socle démarré) reste en chemin absolu — `<socle>` ou `<module>`
+  seul ne dit rien de l'emplacement machine. Masquage centralisé dans `cmd/pathmask.go` (`maskSoclePath`, `maskModulePath`, `maskPathTexts`),
+  testé.
+
 ### Added
 - **Registre des webhooks (spec `module-webhooks`)** — la CLI reconnaît la déclaration
   optionnelle `module.webhooks.json` à la racine du module : les `actions` émises (clé

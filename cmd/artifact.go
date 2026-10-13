@@ -127,9 +127,9 @@ var artifactBuildCmd = &cobra.Command{
 		fmt.Println()
 		fmt.Println(s.SummaryCard(
 			s.Success.Render(i18n.T("artifact.build.done")),
-			s.KeyValue(i18n.T("label.bundle"), s.Info.Render(result.BundlePath)+
+			s.KeyValue(i18n.T("label.bundle"), s.Info.Render(maskModulePath("", moduleDir, result.BundlePath))+
 				fmt.Sprintf(" (%.0f Ko)", float64(result.BundleBytes)/1024)),
-			s.KeyValue(i18n.T("label.document"), s.Info.Render(result.DocumentPath)),
+			s.KeyValue(i18n.T("label.document"), s.Info.Render(maskModulePath("", moduleDir, result.DocumentPath))),
 		))
 		printArtifactLogs(logs)
 		fmt.Println()
@@ -504,14 +504,14 @@ func runArtifactSocleBind(args []string, bind bool) error {
 			s.KeyValue(i18n.T("label.module"), result.Identifier+" v"+result.Version),
 			s.KeyValue(i18n.T("label.mode"), string(result.Mode)),
 			s.KeyValue(i18n.T("label.dev_url"), s.Info.Render(result.DevURL)),
-			s.KeyValue(i18n.T("label.env"), s.Info.Render(result.EnvPath)),
-			s.KeyValue(i18n.T("label.registry"), s.Info.Render(result.ModuleDevPath)),
+			s.KeyValue(i18n.T("label.env"), s.Info.Render(maskSoclePath(socleDir, result.EnvPath))),
+			s.KeyValue(i18n.T("label.registry"), s.Info.Render(maskSoclePath(socleDir, result.ModuleDevPath))),
 		))
 		printArtifactLogs(logs)
 		fmt.Println()
 		fmt.Println(s.StepsList(i18n.T("artifact.bind.next"),
-			s.Info.Render("liora socle dev <socle>/*"),
-			s.Info.Render("liora doctor --socle <socle>/*"),
+			s.Info.Render("liora socle dev <socle>"),
+			s.Info.Render("liora doctor --socle <socle>"),
 		))
 		fmt.Println()
 		return nil
@@ -524,15 +524,19 @@ func runArtifactSocleBind(args []string, bind bool) error {
 		}
 		return pkg.NewError(i18n.T("cat.link"), err.Error(), pkg.ExitError)
 	}
+	removed := "—"
+	if result.RemovedDir != "" {
+		removed = maskSoclePath(result.SocleDir, result.RemovedDir)
+	}
 	fmt.Println()
 	fmt.Println(s.SummaryCard(
 		s.Success.Render(i18n.T("artifact.unbind.done")),
 		s.KeyValue(i18n.T("label.module"), result.Identifier),
-		s.KeyValue(i18n.T("label.removed"), map[bool]string{true: result.RemovedDir, false: "—"}[result.RemovedDir != ""]),
+		s.KeyValue(i18n.T("label.removed"), removed),
 	))
 	if result.ModuleDevRemoved {
 		printArtifactLogs([]string{styleArtifactLine(fmt.Sprintf(
-			"%s retiré de %s", result.Identifier, socle.ModuleDevPath(result.SocleDir)))})
+			"%s retiré de %s", result.Identifier, maskSoclePath(result.SocleDir, socle.ModuleDevPath(result.SocleDir))))})
 	} else {
 		printArtifactLogs(logs)
 	}
